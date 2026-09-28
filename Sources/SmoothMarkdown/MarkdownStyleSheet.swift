@@ -14,7 +14,11 @@ public struct MarkdownStyleSheet {
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     public var tableBorderColor: Color?
+    /// Background behind the header row, matching Flutter's tableHeaderDecoration color.
+    public var tableHeaderBackgroundColor: Color?
     public var ruleColor: Color?
+    /// Thickness of Markdown and HTML horizontal rules, in points.
+    public var horizontalRuleThickness: CGFloat
     public var footnoteColor: Color?
     public var highlightColor: Color?
     public var headingFonts: [Font]?
@@ -22,6 +26,9 @@ public struct MarkdownStyleSheet {
     public var codeFont: Font?
     public var tableHeaderFont: Font?
     public var tableCellFont: Font?
+    /// Font and color of ordered and unordered list markers.
+    public var listBulletFont: Font?
+    public var listBulletColor: Color?
     public var blockSpacing: CGFloat
     public var contentPadding: CGFloat
     public var quoteSpacing: CGFloat
@@ -44,7 +51,9 @@ public struct MarkdownStyleSheet {
         quoteBarColor: Color? = nil,
         quoteBackground: Color? = nil,
         tableBorderColor: Color? = nil,
+        tableHeaderBackgroundColor: Color? = nil,
         ruleColor: Color? = nil,
+        horizontalRuleThickness: CGFloat = 1,
         footnoteColor: Color? = nil,
         highlightColor: Color? = nil,
         headingFonts: [Font]? = nil,
@@ -52,6 +61,8 @@ public struct MarkdownStyleSheet {
         codeFont: Font? = nil,
         tableHeaderFont: Font? = nil,
         tableCellFont: Font? = nil,
+        listBulletFont: Font? = nil,
+        listBulletColor: Color? = nil,
         blockSpacing: CGFloat = 12,
         contentPadding: CGFloat = 16,
         quoteSpacing: CGFloat = 8,
@@ -72,7 +83,9 @@ public struct MarkdownStyleSheet {
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
         self.tableBorderColor = tableBorderColor
+        self.tableHeaderBackgroundColor = tableHeaderBackgroundColor
         self.ruleColor = ruleColor
+        self.horizontalRuleThickness = max(0, horizontalRuleThickness)
         self.footnoteColor = footnoteColor
         self.highlightColor = highlightColor
         self.headingFonts = headingFonts
@@ -80,6 +93,8 @@ public struct MarkdownStyleSheet {
         self.codeFont = codeFont
         self.tableHeaderFont = tableHeaderFont
         self.tableCellFont = tableCellFont
+        self.listBulletFont = listBulletFont
+        self.listBulletColor = listBulletColor
         self.blockSpacing = max(0, blockSpacing)
         self.contentPadding = max(0, contentPadding)
         self.quoteSpacing = max(0, quoteSpacing)
@@ -97,6 +112,7 @@ public struct MarkdownStyleSheet {
              linkColor: rgb(0x1976D2), codeBackground: rgb(0xF5F5F5), codeTextColor: rgb(0x212121),
              inlineCodeBackground: rgb(0xEEEEEE), inlineCodeTextColor: rgb(0xD32F2F),
              quoteBarColor: rgb(0xBDBDBD), tableBorderColor: rgb(0xE0E0E0),
+             tableHeaderBackgroundColor: rgb(0xEEEEEE),
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false)
@@ -107,6 +123,7 @@ public struct MarkdownStyleSheet {
              linkColor: rgb(0x64B5F6), codeBackground: rgb(0x212121), codeTextColor: rgb(0xB3B3B3),
              inlineCodeBackground: rgb(0x424242), inlineCodeTextColor: rgb(0xEF9A9A),
              quoteBarColor: rgb(0x757575), tableBorderColor: rgb(0x616161),
+             tableHeaderBackgroundColor: rgb(0x303030),
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true)

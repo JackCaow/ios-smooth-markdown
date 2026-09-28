@@ -237,7 +237,7 @@ public struct SmoothMarkdownView: View {
         } else if let table = node as? Markdown.Table {
             tableView(table)
         } else if node is ThematicBreak {
-            Divider().overlay(styleSheet.ruleColor ?? Color.clear).padding(.vertical, styleSheet.blockSpacing / 2)
+            horizontalRule()
         } else if let html = node as? HTMLBlock {
             htmlBlock(html, alignment: alignment)
         } else {
@@ -259,7 +259,7 @@ public struct SmoothMarkdownView: View {
         } else if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
             switch parsed {
             case .rule:
-                Divider().overlay(styleSheet.ruleColor ?? Color.clear).padding(.vertical, styleSheet.blockSpacing / 2)
+                horizontalRule()
             case let .container(name, content, declared, trailing):
                 let childAlignment: TextAlignment? = switch declared {
                 case "left": .leading
@@ -295,6 +295,8 @@ public struct SmoothMarkdownView: View {
                 if let item = child as? Markdown.ListItem {
                     HStack(alignment: .top, spacing: 8) {
                         SwiftUI.Text(listMarker(item, index: index, start: start))
+                            .font(styleSheet.listBulletFont)
+                            .foregroundColor(styleSheet.listBulletColor)
                             .frame(width: styleSheet.listIndent, alignment: .leading)
                         VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
                             ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
@@ -336,9 +338,18 @@ public struct SmoothMarkdownView: View {
                                     "Row \(rowIndex), column \(columnIndex + 1), \(headers.indices.contains(columnIndex) ? plainText(headers[columnIndex]) : "")")
                         }
                     }
+                    .background(rowIndex == 0 ? (styleSheet.tableHeaderBackgroundColor ?? Color.clear) : Color.clear)
                 }
             }
         }
+    }
+
+    private func horizontalRule() -> some View {
+        Rectangle()
+            .fill(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+            .frame(height: styleSheet.horizontalRuleThickness)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, styleSheet.blockSpacing / 2)
     }
 
     @ViewBuilder

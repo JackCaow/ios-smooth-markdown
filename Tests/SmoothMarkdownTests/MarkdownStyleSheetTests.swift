@@ -19,14 +19,25 @@ final class MarkdownStyleSheetTests: XCTestCase {
         custom.linkColor = .purple
         custom.blockSpacing = 20
         custom.paragraphFont = .system(size: 18)
+        custom.horizontalRuleThickness = 3
+        custom.tableHeaderBackgroundColor = .orange
+        custom.listBulletFont = .title3
+        custom.listBulletColor = .purple
         let reader = SmoothMarkdownView(markdown: "[link](https://example.com)", styleSheet: custom)
         XCTAssertEqual(reader.styleSheet.linkColor, .purple)
         XCTAssertEqual(reader.styleSheet.blockSpacing, 20)
+        XCTAssertEqual(reader.styleSheet.horizontalRuleThickness, 3)
+        XCTAssertEqual(reader.styleSheet.tableHeaderBackgroundColor, .orange)
+        XCTAssertEqual(reader.styleSheet.listBulletColor, .purple)
+        XCTAssertNotNil(reader.styleSheet.listBulletFont)
 
         let stream = StreamMarkdownView(chunks: AsyncStream<String> { continuation in continuation.finish() },
                                         styleSheet: custom)
         XCTAssertEqual(stream.styleSheet.blockSpacing, 20)
         XCTAssertEqual(stream.styleSheet.linkColor, .purple)
+        XCTAssertEqual(stream.styleSheet.horizontalRuleThickness, 3)
+        XCTAssertEqual(stream.styleSheet.tableHeaderBackgroundColor, .orange)
+        XCTAssertEqual(stream.styleSheet.listBulletColor, .purple)
     }
 
     func testDefaultInheritsHostAndNegativeSpacingClampsToZero() {
@@ -35,11 +46,23 @@ final class MarkdownStyleSheetTests: XCTestCase {
         XCTAssertNil(defaults.textColor)
         XCTAssertNil(defaults.darkCodeHighlighting)
         XCTAssertEqual(defaults.blockSpacing, 12)
+        XCTAssertEqual(defaults.horizontalRuleThickness, 1)
+        XCTAssertNil(defaults.tableHeaderBackgroundColor)
+        XCTAssertNil(defaults.listBulletColor)
 
-        let custom = MarkdownStyleSheet(blockSpacing: -1, contentPadding: -2, listIndent: -3)
+        let custom = MarkdownStyleSheet(horizontalRuleThickness: -1,
+                                        blockSpacing: -1, contentPadding: -2, listIndent: -3)
         XCTAssertEqual(custom.blockSpacing, 0)
+        XCTAssertEqual(custom.horizontalRuleThickness, 0)
         XCTAssertEqual(custom.contentPadding, 0)
         XCTAssertEqual(custom.listIndent, 0)
+    }
+
+    func testLightAndDarkTableHeadersMatchFlutterPresets() {
+        XCTAssertEqual(MarkdownStyleSheet.light().tableHeaderBackgroundColor, rgb(0xEEEEEE))
+        XCTAssertEqual(MarkdownStyleSheet.dark().tableHeaderBackgroundColor, rgb(0x303030))
+        XCTAssertEqual(MarkdownStyleSheet.light().horizontalRuleThickness, 1)
+        XCTAssertEqual(MarkdownStyleSheet.dark().horizontalRuleThickness, 1)
     }
 
     private func rgb(_ value: UInt32) -> Color {
