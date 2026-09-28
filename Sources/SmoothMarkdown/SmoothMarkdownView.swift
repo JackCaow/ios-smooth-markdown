@@ -11,6 +11,7 @@ public struct SmoothMarkdownView: View {
     public let enableHTML: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let onCodeCopy: ((String, String?) -> Void)?
+    public let styleSheet: MarkdownStyleSheet
 
     public init(
         markdown: String,
@@ -18,7 +19,8 @@ public struct SmoothMarkdownView: View {
         onImageTap: ((URL) -> Void)? = nil,
         enableHTML: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
-        onCodeCopy: ((String, String?) -> Void)? = nil
+        onCodeCopy: ((String, String?) -> Void)? = nil,
+        styleSheet: MarkdownStyleSheet = .default()
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
@@ -26,12 +28,13 @@ public struct SmoothMarkdownView: View {
         self.enableHTML = enableHTML
         self.codeBlockOptions = codeBlockOptions
         self.onCodeCopy = onCodeCopy
+        self.styleSheet = styleSheet
     }
 
     public var body: some View {
         let sections = DetailsSyntax.sections(markdown)
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
                 ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
                     switch section {
                     case let .markdown(source):
@@ -57,8 +60,10 @@ public struct SmoothMarkdownView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(styleSheet.contentPadding)
         }
+        .foregroundColor(styleSheet.textColor)
+        .background(styleSheet.backgroundColor ?? Color.clear)
         .environment(\.openURL, OpenURLAction { url in
             guard MarkdownSyntax.isSafeLink(url) else { return .discarded }
             if let onLinkTap {
@@ -77,9 +82,9 @@ public struct SmoothMarkdownView: View {
         let summary = MarkdownSyntax.parse(details.summary)
         let summaryNode = summary.child(at: 0)
         let summaryLabel = summaryNode.map(plainText).flatMap { $0.isEmpty ? nil : $0 } ?? "Details"
-        return DetailsBlockView(details: details, summaryLabel: summaryLabel, summary: AnyView(Group {
+        return DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
             if let summaryNode { inlineView(summaryNode) }
-        }), content: AnyView(VStack(alignment: .leading, spacing: 12) {
+        }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
             ForEach(Array(FootnoteSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
                 switch section {
                 case let .markdown(source):
@@ -101,7 +106,7 @@ public struct SmoothMarkdownView: View {
 
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
         HStack(alignment: .top, spacing: 0) {
-            SwiftUI.Text("[\(definition.label)]: ").bold().foregroundColor(.blue)
+            SwiftUI.Text("[\(definition.label)]: ").bold().foregroundColor(styleSheet.footnoteColor ?? .blue)
             if let content = MarkdownSyntax.parse(definition.content).child(at: 0) {
                 inlineView(content).frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -114,7 +119,10 @@ public struct SmoothMarkdownView: View {
     private func blockContent(_ node: Markup, alignment: TextAlignment? = nil) -> some View {
         if let heading = node as? Heading {
             inlineView(heading)
-                .font(.system(size: CGFloat(32 - (heading.level - 1) * 3), weight: .bold))
+                .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
+                      ? styleSheet.headingFonts![heading.level - 1]
+                      : .system(size: CGFloat(32 - (heading.level - 1) * 3), weight: .bold))
+                .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
                 .multilineTextAlignment(alignment ?? .leading)
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                 .textSelection(.enabled)
@@ -129,21 +137,22 @@ public struct SmoothMarkdownView: View {
             } else if enableHTML, let html = sole as? InlineHTML, let image = SafeHTML.imageTag(html.rawHTML) {
                 imageView(image)
             } else {
-                inlineView(paragraph).font(.body).multilineTextAlignment(alignment ?? .leading)
+                inlineView(paragraph).font(styleSheet.paragraphFont ?? .body).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
             }
         } else if let code = node as? CodeBlock {
             EnhancedCodeBlockView(code: code.code, language: code.language,
-                                  options: codeBlockOptions, onCopy: onCodeCopy)
+                                  options: codeBlockOptions, onCopy: onCodeCopy, styleSheet: styleSheet)
         } else if let quote = node as? BlockQuote {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in
                     block(child, alignment: alignment)
                 }
             }
             .padding(.leading, 14)
+            .background(styleSheet.quoteBackground ?? Color.clear)
             .overlay(alignment: .leading) {
-                Rectangle().fill(Color.accentColor).frame(width: 3)
+                Rectangle().fill(styleSheet.quoteBarColor ?? Color.accentColor).frame(width: 3)
             }
         } else if let ordered = node as? OrderedList {
             list(ordered, start: Int(ordered.startIndex))
@@ -152,7 +161,7 @@ public struct SmoothMarkdownView: View {
         } else if let table = node as? Markdown.Table {
             tableView(table)
         } else if node is ThematicBreak {
-            Divider().padding(.vertical, 8)
+            Divider().overlay(styleSheet.ruleColor ?? Color.clear).padding(.vertical, styleSheet.blockSpacing / 2)
         } else if let html = node as? HTMLBlock {
             htmlBlock(html, alignment: alignment)
         } else {
@@ -169,7 +178,7 @@ public struct SmoothMarkdownView: View {
         } else if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
             switch parsed {
             case .rule:
-                Divider().padding(.vertical, 8)
+                Divider().overlay(styleSheet.ruleColor ?? Color.clear).padding(.vertical, styleSheet.blockSpacing / 2)
             case let .container(name, content, declared, trailing):
                 let childAlignment: TextAlignment? = switch declared {
                 case "left": .leading
@@ -177,14 +186,15 @@ public struct SmoothMarkdownView: View {
                 case "right": .trailing
                 default: alignment
                 }
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
                     ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
                         block(child, alignment: childAlignment)
                     }
                 }
                 .padding(.leading, name == "blockquote" ? 14 : 0)
+                .background(name == "blockquote" ? (styleSheet.quoteBackground ?? Color.clear) : Color.clear)
                 .overlay(alignment: .leading) {
-                    if name == "blockquote" { Rectangle().fill(Color.accentColor).frame(width: 3) }
+                    if name == "blockquote" { Rectangle().fill(styleSheet.quoteBarColor ?? Color.accentColor).frame(width: 3) }
                 }
                 if !trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ForEach(Array(MarkdownSyntax.parse(trailing).children.enumerated()), id: \.offset) { _, child in
@@ -199,13 +209,13 @@ public struct SmoothMarkdownView: View {
 
     @ViewBuilder
     private func list(_ node: Markup, start: Int?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
             ForEach(Array(node.children.enumerated()), id: \.offset) { index, child in
                 if let item = child as? Markdown.ListItem {
                     HStack(alignment: .top, spacing: 8) {
                         SwiftUI.Text(listMarker(item, index: index, start: start))
-                            .frame(width: 32, alignment: .leading)
-                        VStack(alignment: .leading, spacing: 4) {
+                            .frame(width: styleSheet.listIndent, alignment: .leading)
+                        VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
                             ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
                                 block(blockNode)
                             }
@@ -232,10 +242,12 @@ public struct SmoothMarkdownView: View {
                     HStack(spacing: 0) {
                         ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
                             inlineView(cell)
+                                .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
+                                      : (styleSheet.tableCellFont ?? .body))
                                 .fontWeight(rowIndex == 0 ? .bold : .regular)
                                 .frame(width: 150, alignment: .leading)
-                                .padding(8)
-                                .border(.secondary.opacity(0.4), width: 0.5)
+                                .padding(styleSheet.tableCellPadding)
+                                .border(styleSheet.tableBorderColor ?? .secondary.opacity(0.4), width: 0.5)
                                 .textSelection(.enabled)
                         }
                     }
@@ -398,7 +410,8 @@ public struct SmoothMarkdownView: View {
     }
 
     private func footnoteReference(_ label: String) -> SwiftUI.Text {
-        SwiftUI.Text("[\(label)]").font(.system(size: 12)).baselineOffset(5).foregroundColor(.blue)
+        SwiftUI.Text("[\(label)]").font(.system(size: 12)).baselineOffset(5)
+            .foregroundColor(styleSheet.footnoteColor ?? .blue)
     }
 
     private func blockMath(_ latex: String) -> some View {
@@ -460,8 +473,8 @@ public struct SmoothMarkdownView: View {
         var underline = false
         var monospaced = code
         var baseline: CGFloat = 0
-        var foreground: Color?
-        var background: Color?
+        var foreground: Color? = code ? styleSheet.inlineCodeTextColor : nil
+        var background: Color? = code ? styleSheet.inlineCodeBackground : nil
         var fontSize: CGFloat?
         var link = style.link
         if enableHTML {
@@ -471,10 +484,13 @@ public struct SmoothMarkdownView: View {
                 case "i", "em": italic = true
                 case "s", "del", "strike": strike = true
                 case "u", "ins": underline = true
-                case "mark": background = .yellow.opacity(0.4)
+                case "mark": background = styleSheet.highlightColor ?? .yellow.opacity(0.4)
                 case "sub": baseline = -4
                 case "sup": baseline = 4
-                case "code", "kbd": monospaced = true
+                case "code", "kbd":
+                    monospaced = true
+                    background = styleSheet.inlineCodeBackground
+                    foreground = styleSheet.inlineCodeTextColor
                 case "a":
                     if let href = tag.attributes["href"], SafeHTML.isSafeLink(href) { link = URL(string: href) }
                 case "font", "span":
@@ -500,7 +516,7 @@ public struct SmoothMarkdownView: View {
         if baseline != 0 { result = result.baselineOffset(baseline) }
         if let fontSize { result = result.font(.system(size: fontSize)) }
         if let foreground { result = result.foregroundColor(foreground) }
-        else if link != nil { result = result.foregroundColor(.blue) }
+        else if link != nil { result = result.foregroundColor(styleSheet.linkColor ?? .blue) }
         return result
     }
 
@@ -531,13 +547,16 @@ public struct SmoothMarkdownView: View {
 private struct DetailsBlockView: View {
     let details: DetailsSyntax.Block
     let summaryLabel: String
+    let styleSheet: MarkdownStyleSheet
     let summary: AnyView
     let content: AnyView
     @State private var isExpanded: Bool
 
-    init(details: DetailsSyntax.Block, summaryLabel: String, summary: AnyView, content: AnyView) {
+    init(details: DetailsSyntax.Block, summaryLabel: String, styleSheet: MarkdownStyleSheet,
+         summary: AnyView, content: AnyView) {
         self.details = details
         self.summaryLabel = summaryLabel
+        self.styleSheet = styleSheet
         self.summary = summary
         self.content = content
         _isExpanded = State(initialValue: details.isOpen)
@@ -558,11 +577,11 @@ private struct DetailsBlockView: View {
             .accessibilityLabel(summaryLabel)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
             if isExpanded && !details.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider()
+                Divider().overlay(styleSheet.ruleColor ?? Color.clear)
                 content.padding(.horizontal, 12).padding(.bottom, 12)
             }
         }
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.35)))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(styleSheet.tableBorderColor ?? Color.gray.opacity(0.35)))
         .padding(.vertical, 8)
     }
 }

@@ -78,6 +78,12 @@ private struct DemoContentView: View {
     @StateObject private var controller = MarkdownEditorController(text: demoMarkdown)
     @State private var showEditor = false
     @State private var enableHTML = false
+    @State private var themeIndex = 0
+    private let themes: [(String, MarkdownStyleSheet)] = [
+        ("System", .default()), ("Light", .light()), ("Dark", .dark()),
+        ("GitHub", .github()), ("GitHub dark", .github(dark: true)),
+        ("VS Code", .vscode()), ("VS Code dark", .vscode(dark: true)),
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,6 +91,11 @@ private struct DemoContentView: View {
                 Button(showEditor ? "Read" : "Open editor") { showEditor.toggle() }
                 if !showEditor {
                     Button(enableHTML ? "HTML on" : "Enable HTML") { enableHTML.toggle() }
+                    Menu("Theme: \(themes[themeIndex].0)") {
+                        ForEach(themes.indices, id: \.self) { index in
+                            Button(themes[index].0) { themeIndex = index }
+                        }
+                    }
                 }
                 Spacer()
             }
@@ -93,7 +104,8 @@ private struct DemoContentView: View {
             if showEditor {
                 SmoothMarkdownEditor(controller: controller)
             } else {
-                SmoothMarkdownView(markdown: controller.text, enableHTML: enableHTML)
+                SmoothMarkdownView(markdown: controller.text, enableHTML: enableHTML,
+                                   styleSheet: themes[themeIndex].1)
             }
         }
     }

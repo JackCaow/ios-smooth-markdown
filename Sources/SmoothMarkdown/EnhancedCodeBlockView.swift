@@ -10,6 +10,7 @@ struct EnhancedCodeBlockView: View {
     let language: String?
     let options: CodeBlockOptions
     let onCopy: ((String, String?) -> Void)?
+    let styleSheet: MarkdownStyleSheet
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
@@ -22,10 +23,10 @@ struct EnhancedCodeBlockView: View {
                     if options.showLanguageTag, let language, !language.isEmpty {
                         Text(language.uppercased())
                             .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(styleSheet.linkColor ?? Color.accentColor)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                            .background((styleSheet.linkColor ?? Color.accentColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
                     }
                     Spacer(minLength: 0)
                     if options.showCopyButton {
@@ -47,16 +48,17 @@ struct EnhancedCodeBlockView: View {
             }
             ScrollView(.horizontal) {
                 Text(CodeSyntaxHighlighter.attributed(code, language: language,
-                                                      dark: colorScheme == .dark,
+                                                      dark: styleSheet.darkCodeHighlighting ?? (colorScheme == .dark),
                                                       enabled: options.enableSyntaxHighlighting))
-                    .font(.system(.body, design: .monospaced))
+                    .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
+                    .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
                     .fixedSize(horizontal: true, vertical: false)
                     .textSelection(.enabled)
-                    .padding(12)
+                    .padding(styleSheet.codePadding)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(styleSheet.codeBackground ?? Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
         .onDisappear { resetTask?.cancel() }
     }
 
