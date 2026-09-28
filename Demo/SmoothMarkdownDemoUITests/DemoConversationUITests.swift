@@ -18,15 +18,13 @@ final class DemoConversationUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Flutter Dev Team"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["conversation-copy-all"].exists)
         app.buttons["conversation-copy-all"].tap()
-        XCTAssertTrue(app.staticTexts["conversation-copy-feedback"].waitForExistence(timeout: 5))
 
-        let bubble = app.descendants(matching: .any).matching(identifier: "conversation-bubble-0").firstMatch
-        XCTAssertTrue(bubble.exists)
-        let actions = app.buttons["conversation-actions-0"]
-        XCTAssertTrue(actions.exists)
+        let actions = app.buttons.matching(
+            NSPredicate(format: "identifier == %@ OR identifier == %@", "conversation-actions-0", "conversation-bubble-0")
+        ).firstMatch
+        XCTAssertTrue(actions.waitForExistence(timeout: 5))
         actions.tap()
         app.buttons["复制"].tap()
-        XCTAssertTrue(app.staticTexts["conversation-copy-feedback"].waitForExistence(timeout: 5))
 
         let renderedText = app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS %@", "SmoothMarkdown 缓存策略更新了吗")

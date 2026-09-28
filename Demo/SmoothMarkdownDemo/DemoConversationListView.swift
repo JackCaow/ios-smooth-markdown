@@ -216,7 +216,6 @@ private struct DemoConversationDetailView: View {
             .background(message.isMe ? Color(red: 0, green: 0.48, blue: 1) :
                         (isDark ? Color(uiColor: .secondarySystemBackground) : .white),
                         in: RoundedRectangle(cornerRadius: 16))
-            .accessibilityIdentifier("conversation-bubble-\(index)")
             if !message.isMe { Spacer(minLength: 28) }
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
         }
