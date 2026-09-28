@@ -61,7 +61,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var subtitle: String? {
         switch self {
-        case .aiChat: "Interactive mock chat with Flutter's six prompts"
+        case .aiChat: "Flutter's six prompts with mock or live Qwen streaming"
         case .chatList: "Interactive local chat"
         case .conversationList: "12 conversations from Flutter example"
         case .performance: "68 KB reader fixture"

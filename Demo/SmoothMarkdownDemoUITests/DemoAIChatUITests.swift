@@ -1,8 +1,31 @@
 import XCTest
 
 final class DemoAIChatUITests: XCTestCase {
+    func testQwenSettingsExposeRuntimeKeyModelAndMockSwitch() {
+        let app = XCUIApplication()
+        app.launchEnvironment["QWEN_API_KEY"] = ""
+        app.launch()
+        app.buttons["open-examples"].tap()
+        let entry = app.buttons["feature-aiChat"]
+        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        app.buttons["ai-chat-settings"].tap()
+
+        XCTAssertTrue(app.secureTextFields["ai-chat-api-key"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["ai-chat-model"].exists)
+        XCTAssertTrue(app.switches["ai-chat-thinking"].exists)
+        let realAPI = app.switches["ai-chat-real-api"]
+        for _ in 0..<4 where !realAPI.isHittable { app.swipeUp() }
+        XCTAssertTrue(realAPI.exists)
+        realAPI.tap()
+        app.buttons["关闭"].tap()
+        XCTAssertEqual(app.staticTexts["ai-chat-status"].label, "模拟模式")
+    }
+
     func testFlutterMockPromptStreamsWithThinkingPluginAndNewChatResets() {
         let app = XCUIApplication()
+        app.launchEnvironment["QWEN_API_KEY"] = ""
         app.launch()
         app.buttons["open-examples"].tap()
         let entry = app.buttons["feature-aiChat"]

@@ -41,6 +41,20 @@ targets:
         CODE_SIGNING_ALLOWED: NO
     dependencies:
       - target: SmoothMarkdownDemo
+  SmoothMarkdownDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - SmoothMarkdownDemoTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.tests
+        SWIFT_VERSION: '5.9'
+        CODE_SIGNING_ALLOWED: NO
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SmoothMarkdownDemo.app/SmoothMarkdownDemo"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: SmoothMarkdownDemo
   SmoothMarkdownPerformanceUITests:
     type: bundle.ui-testing
     platform: iOS

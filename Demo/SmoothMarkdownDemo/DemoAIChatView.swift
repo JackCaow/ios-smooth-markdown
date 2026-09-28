@@ -63,7 +63,7 @@ private struct AIChatSource: Identifiable {
     let markdown: String
 }
 
-/// Local counterpart of Flutter's AI Chat demo. The mock path needs no API key.
+/// Counterpart of Flutter's AI Chat demo, with local mock and live Qwen streams.
 struct DemoAIChatView: View {
     let parentIsDark: Bool
 
@@ -76,12 +76,28 @@ struct DemoAIChatView: View {
     @State private var scrollRevision = 0
     @State private var showSettings = false
     @State private var source: AIChatSource?
+    @State private var apiKey = ProcessInfo.processInfo.environment["QWEN_API_KEY"] ?? ""
+    @State private var selectedModel = "qwen3-235b-a22b"
+    @State private var enableThinking = true
+    @State private var useRealAPI = true
     @FocusState private var inputFocused: Bool
 
     private let fixture = AIChatFixture.load()
     private let plugins = ParserPluginRegistry.builtIns()
+    private let models: [(id: String, name: String)] = [
+        ("qwen3-235b-a22b", "Qwen3 Max (思考模式)"),
+        ("qwen-max", "Qwen Max"),
+        ("qwen-plus", "Qwen Plus"),
+        ("qwen-turbo", "Qwen Turbo"),
+    ]
 
     private var isDark: Bool { darkOverride ?? parentIsDark }
+    private var liveAPIAvailable: Bool { useRealAPI && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var modeStatus: String {
+        if isStreaming { return "正在输入..." }
+        guard liveAPIAvailable else { return "模拟模式" }
+        return enableThinking && selectedModel.hasPrefix("qwen3") ? "\(selectedModel) (思考)" : selectedModel
+    }
     private var backgroundColor: Color {
         isDark ? Color(red: 0.11, green: 0.11, blue: 0.118) : Color(red: 0.949, green: 0.949, blue: 0.969)
     }
@@ -142,9 +158,9 @@ struct DemoAIChatView: View {
                             in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI Chat Demo").font(.headline)
-                Text(isStreaming ? "正在输入..." : "模拟模式")
+                Text(modeStatus)
                     .font(.caption)
-                    .foregroundStyle(isStreaming ? .blue : .orange)
+                    .foregroundStyle(isStreaming ? .blue : liveAPIAvailable ? .green : .orange)
                     .accessibilityIdentifier("ai-chat-status")
             }
             Spacer()
@@ -291,13 +307,26 @@ struct DemoAIChatView: View {
     private var settingsSheet: some View {
         NavigationStack {
             Form {
-                Section("响应模式") {
-                    Label("模拟模式", systemImage: "checkmark.circle.fill")
-                    Text("本地示例可测试 Thinking、Artifact 和 Tool Call 解析。")
-                        .foregroundStyle(.secondary)
-                }
                 Section("Qwen API") {
-                    Text("真实 Qwen 请求尚未接入 iOS Demo。当前对话仅使用 Flutter 示例中的模拟响应，不会发送网络请求。")
+                    SecureField("Qwen API Key", text: $apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("ai-chat-api-key")
+                    Picker("选择模型", selection: $selectedModel) {
+                        ForEach(models.indices, id: \.self) { index in
+                            Text(models[index].name).tag(models[index].id)
+                        }
+                    }
+                    .accessibilityIdentifier("ai-chat-model")
+                    Toggle("启用思考模式", isOn: $enableThinking)
+                        .disabled(!selectedModel.hasPrefix("qwen3"))
+                        .accessibilityIdentifier("ai-chat-thinking")
+                    Text(selectedModel.hasPrefix("qwen3") ? "显示 AI 的推理过程" : "仅 Qwen3 系列模型支持")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Toggle("使用真实 API", isOn: $useRealAPI)
+                        .accessibilityIdentifier("ai-chat-real-api")
+                    Text("关闭或未填写 API Key 时使用模拟响应。密钥只保留在本次页面会话中。")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -308,7 +337,7 @@ struct DemoAIChatView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func sourceSheet(_ markdown: String) -> some View {
@@ -336,8 +365,9 @@ struct DemoAIChatView: View {
         messages.append(.init(content: text, isUser: true))
         messages.append(.init(content: "", isUser: false, isStreaming: true))
         let messageID = messages[messages.count - 1].id
-        let response = fixture.response(for: text)
-        let units = Array(response.utf16)
+        let liveConfiguration = liveAPIAvailable ? QwenChatRequest(apiKey: apiKey,
+                                                                    model: selectedModel,
+                                                                    enableThinking: enableThinking) : nil
         input = ""
         inputFocused = false
         isStreaming = true
@@ -345,6 +375,32 @@ struct DemoAIChatView: View {
         runID = UUID()
         let currentRunID = runID
         streamTask = Task { @MainActor in
+            if let liveConfiguration {
+                do {
+                    try await QwenChatClient().stream(prompt: text, configuration: liveConfiguration) { fragment in
+                        guard runID == currentRunID,
+                              let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+                        messages[index].content += fragment
+                        scrollRevision += 1
+                    }
+                    guard !Task.isCancelled, runID == currentRunID,
+                          let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    messages[index].isStreaming = false
+                    isStreaming = false
+                    streamTask = nil
+                } catch {
+                    guard !Task.isCancelled, runID == currentRunID,
+                          let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    messages[index].content = "⚠️ **错误**: \(error.localizedDescription)\n\n请检查 API Key 配置或网络连接。"
+                    messages[index].isStreaming = false
+                    isStreaming = false
+                    streamTask = nil
+                    scrollRevision += 1
+                }
+                return
+            }
+            let response = fixture.response(for: text)
+            let units = Array(response.utf16)
             var end = 0
             while end < units.count {
                 guard !Task.isCancelled, runID == currentRunID,
