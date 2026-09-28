@@ -266,21 +266,111 @@ private struct FormattedBlocksView: View {
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
 
-    var body: some View {
+    private enum Row: Identifiable {
+        case block(MarkdownDocumentBlock)
+        case pendingParagraph
+
+        var id: String {
+            switch self {
+            case let .block(block): "block-\(block.id)"
+            case .pendingParagraph: "pending-list-paragraph"
+            }
+        }
+    }
+
+    private var rows: [Row] {
         let document = controller.semanticDocument
+        guard let pending = controller.pendingListParagraph else {
+            return document.blocks.map(Row.block)
+        }
+        var result: [Row] = []
+        var insertedPending = false
+        for block in document.blocks {
+            let start = document.sourceRange(of: block.id)?.location ?? Int.max
+            if !insertedPending && pending.sourceOffset <= start {
+                result.append(.pendingParagraph)
+                insertedPending = true
+            }
+            if !pending.draft.isEmpty, start == pending.sourceOffset {
+                continue // The focused field owns this source-backed block until it resigns focus.
+            }
+            result.append(.block(block))
+        }
+        if !insertedPending { result.append(.pendingParagraph) }
+        return result
+    }
+
+    var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                ForEach(document.blocks) { block in
-                    FormattedBlockRow(controller: controller, block: block,
-                                      enableWikilinks: enableWikilinks,
-                                      wikilinkSuggestions: wikilinkSuggestions)
+                ForEach(rows) { row in
+                    switch row {
+                    case let .block(block):
+                        FormattedBlockRow(controller: controller, block: block,
+                                          enableWikilinks: enableWikilinks,
+                                          wikilinkSuggestions: wikilinkSuggestions)
+                    case .pendingParagraph:
+                        PendingListParagraphField(controller: controller)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
+        }
+    }
+}
+
+/// The field has a stable row identity while its first keystroke becomes a parsed paragraph.
+@available(iOS 17.0, *)
+private struct PendingListParagraphField: UIViewRepresentable {
+    @ObservedObject var controller: MarkdownEditorController
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        field.font = .preferredFont(forTextStyle: .body)
+        field.placeholder = "Paragraph"
+        field.accessibilityIdentifier = "list-exit-paragraph"
+        field.text = controller.pendingListParagraph?.draft
+        field.borderStyle = .roundedRect
+        let controller = controller
+        DispatchQueue.main.async { [weak field] in
+            guard controller.pendingListParagraph != nil else { return }
+            field?.becomeFirstResponder()
+        }
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        let draft = controller.pendingListParagraph?.draft ?? ""
+        if field.text != draft { field.text = draft }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: PendingListParagraphField
+        init(parent: PendingListParagraphField) { self.parent = parent }
+
+        @objc func textChanged(_ field: UITextField) {
+            guard parent.controller.updatePendingListParagraph(field.text ?? "") else {
+                field.text = parent.controller.pendingListParagraph?.draft ?? ""
+                return
+            }
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            textField.resignFirstResponder()
+            return false
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            parent.controller.finishPendingListParagraph()
         }
     }
 }

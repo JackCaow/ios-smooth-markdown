@@ -149,10 +149,67 @@ final class SourceListEditorTests: XCTestCase {
     }
 
     @MainActor
-    func testIndentedRootItemIsNotTreatedAsNestedOnReturn() {
+    func testIndentedRootItemExitsListOnReturn() {
         let controller = MarkdownEditorController(text: "  - \n")
         XCTAssertTrue(controller.submitSemanticListItem(id: "block-0", at: 0))
-        XCTAssertEqual(controller.text, "  - \n  - \n")
+        XCTAssertEqual(controller.text, "")
+        XCTAssertEqual(controller.pendingListParagraph?.sourceOffset, 0)
+        XCTAssertTrue(controller.updatePendingListParagraph("Paragraph"))
+        XCTAssertEqual(controller.text, "Paragraph")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "")
+        XCTAssertEqual(controller.pendingListParagraph?.draft, "")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "  - \n")
+        XCTAssertNil(controller.pendingListParagraph)
+    }
+
+    @MainActor
+    func testEmptyRootReturnSplitsListAndKeepsParagraphEditableThroughUndoRedo() {
+        let source = "# Title\r\n\r\n- Before\r\n- \r\n- After\r\n\r\nTail\r\n"
+        let exited = "# Title\r\n\r\n- Before\r\n\r\n- After\r\n\r\nTail\r\n"
+        let typed = "# Title\r\n\r\n- Before\r\n\r\nBody 🐱\r\n- After\r\n\r\nTail\r\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-1", at: 1))
+        XCTAssertEqual(controller.text, exited)
+        XCTAssertEqual(controller.pendingListParagraph?.draft, "")
+        XCTAssertTrue(controller.updatePendingListParagraph("Body 🐱"))
+        XCTAssertEqual(controller.text, typed)
+        XCTAssertEqual(controller.semanticDocument.blocks.map(\.plainText), ["Title", "Before", "Body 🐱", "After", "Tail"])
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, exited)
+        XCTAssertEqual(controller.pendingListParagraph?.draft, "")
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, typed)
+        XCTAssertEqual(controller.pendingListParagraph?.draft, "Body 🐱")
+        controller.finishPendingListParagraph()
+        XCTAssertNil(controller.pendingListParagraph)
+        XCTAssertEqual(controller.text, typed)
+    }
+
+    @MainActor
+    func testEmptyFirstAndLastRootItemsProduceParagraphAtCorrectPosition() {
+        let first = MarkdownEditorController(text: "- \n- Next\n")
+        XCTAssertTrue(first.submitSemanticListItem(id: "block-0", at: 0))
+        XCTAssertEqual(first.text, "- Next\n")
+        XCTAssertEqual(first.pendingListParagraph?.sourceOffset, 0)
+        XCTAssertTrue(first.updatePendingListParagraph("Intro"))
+        XCTAssertEqual(first.text, "Intro\n- Next\n")
+
+        let last = MarkdownEditorController(text: "- Before\n- ")
+        XCTAssertTrue(last.submitSemanticListItem(id: "block-0", at: 1))
+        XCTAssertEqual(last.text, "- Before\n\n")
+        XCTAssertEqual(last.pendingListParagraph?.sourceOffset, (last.text as NSString).length)
+        XCTAssertTrue(last.updatePendingListParagraph("Outro"))
+        XCTAssertEqual(last.text, "- Before\n\nOutro")
+    }
+
+    @MainActor
+    func testEmptyRootWithNestedChildDoesNotExitList() {
+        let controller = MarkdownEditorController(text: "- \n  - Child\n")
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-0", at: 0))
+        XCTAssertEqual(controller.text, "- \n  - Child\n- \n")
+        XCTAssertNil(controller.pendingListParagraph)
     }
 
     #if canImport(UIKit)

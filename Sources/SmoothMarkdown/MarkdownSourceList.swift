@@ -167,6 +167,12 @@ public struct MarkdownSourceList: Equatable {
         return (0..<index).reversed().contains { Self.indentationWidth(items[$0].indent) < currentWidth }
     }
 
+    /// An empty item with child items still owns content and must not exit its list.
+    func hasNestedItems(at index: Int) -> Bool {
+        guard items.indices.contains(index), items.indices.contains(index + 1) else { return false }
+        return Self.indentationWidth(items[index + 1].indent) > Self.indentationWidth(items[index].indent)
+    }
+
     private func shiftingSubtree(at index: Int, by columns: Int) -> Self? {
         guard columns != 0 else { return nil }
         let baseWidth = Self.indentationWidth(items[index].indent)

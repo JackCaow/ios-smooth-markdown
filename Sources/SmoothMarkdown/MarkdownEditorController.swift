@@ -1,6 +1,14 @@
 import Combine
 import Foundation
 
+/// The focused empty paragraph created when Return exits a root list item.
+/// Its draft is also written to `text`; this state only keeps the Blocks field alive while typing.
+struct PendingListParagraph: Equatable {
+    let sourceOffset: Int
+    let draft: String
+    let insertedTerminator: String
+}
+
 /// Source-backed editing commands. Offsets use UTF-16, matching UITextView selections.
 @MainActor
 public final class MarkdownEditorController: ObservableObject {
@@ -8,10 +16,12 @@ public final class MarkdownEditorController: ObservableObject {
     @Published public private(set) var selection: NSRange
     @Published public private(set) var savedText: String
     @Published public var mode: MarkdownEditorMode = .source
+    @Published private(set) var pendingListParagraph: PendingListParagraph?
 
     private struct Snapshot {
         let text: String
         let selection: NSRange
+        let pendingListParagraph: PendingListParagraph?
     }
     private let historyLimit: Int
     private var undoStack: [Snapshot] = []
@@ -90,10 +100,29 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
-    /// Return outdents an empty nested item; other items continue as siblings.
+    /// Return outdents an empty nested item, exits an empty root item, or adds a sibling.
     @discardableResult
     func submitSemanticListItem(id: String, at index: Int) -> Bool {
-        updateSemanticList(id: id) { list in
+        let document = semanticDocument
+        guard let block = document.blockById(id), case let .list(list) = block.kind,
+              list.items.indices.contains(index) else { return false }
+        let item = list.items[index]
+        if item.content.isEmpty && item.continuations.isEmpty && !list.hasNestedItems(at: index),
+           !list.isNestedItem(at: index) {
+            guard let blockRange = document.sourceRange(of: id) else { return false }
+            let itemOffset = list.items[..<index].reduce(0) { $0 + ($1.source as NSString).length }
+            let itemRange = NSRange(location: blockRange.location + itemOffset,
+                                    length: (item.source as NSString).length)
+            let newline = text.contains("\r\n") ? "\r\n" : "\n"
+            // With preceding siblings, a blank line separates the list and the new paragraph.
+            // The first item has no preceding list to separate, so remove its whole source line.
+            let replacement = index == 0 ? "" : (item.lineEnding.isEmpty ? newline : item.lineEnding)
+            replaceRange(itemRange, with: replacement)
+            pendingListParagraph = .init(sourceOffset: itemRange.location + (replacement as NSString).length,
+                                         draft: "", insertedTerminator: "")
+            return true
+        }
+        return updateSemanticList(id: id) { list in
             guard list.items.indices.contains(index) else { return nil }
             if list.items[index].content.isEmpty, list.isNestedItem(at: index),
                let outdented = list.outdentingItem(at: index) {
@@ -101,6 +130,37 @@ public final class MarkdownEditorController: ObservableObject {
             }
             return list.insertingEmptyItem(after: index)
         }
+    }
+
+    /// Updates the focused paragraph without dropping its UIKit text field as soon as it parses as a block.
+    @discardableResult
+    func updatePendingListParagraph(_ draft: String) -> Bool {
+        guard let pendingListParagraph, !draft.contains("\n"), !draft.contains("\r"),
+              pendingListParagraph.sourceOffset <= (text as NSString).length else { return false }
+        let oldLength = (pendingListParagraph.draft as NSString).length
+            + (pendingListParagraph.insertedTerminator as NSString).length
+        let range = NSRange(location: pendingListParagraph.sourceOffset, length: oldLength)
+        guard NSMaxRange(range) <= (text as NSString).length else { return false }
+        let nextTerminator: String
+        if draft.isEmpty || NSMaxRange(range) == (text as NSString).length {
+            nextTerminator = ""
+        } else {
+            nextTerminator = text.contains("\r\n") ? "\r\n" : "\n"
+        }
+        let replacement = draft + nextTerminator
+        guard draft != pendingListParagraph.draft || nextTerminator != pendingListParagraph.insertedTerminator else {
+            return true
+        }
+        replaceRange(range, with: replacement,
+                     selectedRange: NSRange(location: (draft as NSString).length, length: 0))
+        self.pendingListParagraph = .init(sourceOffset: range.location, draft: draft,
+                                          insertedTerminator: nextTerminator)
+        return true
+    }
+
+    func finishPendingListParagraph() {
+        // The codec treats an empty paragraph as trivia. Keep its field available after blur.
+        if pendingListParagraph?.draft.isEmpty == false { pendingListParagraph = nil }
     }
 
     /// Keeps a Source-mode selection anchored when a Blocks edit changes text before it.
@@ -153,9 +213,11 @@ public final class MarkdownEditorController: ObservableObject {
     public func clearHistory() { undoStack.removeAll(); redoStack.removeAll() }
 
     public func updateFromInput(text nextText: String, selection nextSelection: NSRange) {
-        if nextText != text { recordUndo(Snapshot(text: text, selection: selection)) }
+        let changed = nextText != text
+        if changed { recordUndo(snapshot()) }
         text = nextText
         selection = clamped(nextSelection, in: nextText)
+        if changed { pendingListParagraph = nil }
     }
 
     public func setSelection(_ range: NSRange) { selection = clamped(range, in: text) }
@@ -163,23 +225,25 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func undo() -> Bool {
         guard let previous = undoStack.popLast() else { return false }
-        redoStack.append(Snapshot(text: text, selection: selection))
+        redoStack.append(snapshot())
         text = previous.text
         selection = previous.selection
+        pendingListParagraph = previous.pendingListParagraph
         return true
     }
 
     @discardableResult
     public func redo() -> Bool {
         guard let next = redoStack.popLast() else { return false }
-        pushUndo(Snapshot(text: text, selection: selection))
+        pushUndo(snapshot())
         text = next.text
         selection = next.selection
+        pendingListParagraph = next.pendingListParagraph
         return true
     }
 
     public func transaction<T>(_ body: () throws -> T) rethrows -> T {
-        if transactionDepth == 0 { transactionBefore = Snapshot(text: text, selection: selection) }
+        if transactionDepth == 0 { transactionBefore = snapshot() }
         transactionDepth += 1
         defer {
             transactionDepth -= 1
@@ -465,9 +529,14 @@ public final class MarkdownEditorController: ObservableObject {
     }
 
     private func updateValue(_ next: String, selection nextSelection: NSRange) {
-        if next != text { recordUndo(Snapshot(text: text, selection: selection)) }
+        if next != text { recordUndo(snapshot()) }
         text = next
         selection = nextSelection
+        pendingListParagraph = nil
+    }
+
+    private func snapshot() -> Snapshot {
+        .init(text: text, selection: selection, pendingListParagraph: pendingListParagraph)
     }
 
     private func recordUndo(_ previous: Snapshot) {
