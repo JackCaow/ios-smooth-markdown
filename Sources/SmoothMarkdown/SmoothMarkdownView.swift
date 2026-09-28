@@ -5,6 +5,12 @@ import SwiftUIMath
 
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
 public struct SmoothMarkdownView: View {
+    /// Statistics for the document parse cache used by reader views.
+    public static var cacheStatistics: MarkdownCacheStatistics { MarkdownParseCache.shared.statistics }
+
+    /// Drops parsed documents so subsequent renders parse their source again.
+    public static func clearCache() { MarkdownParseCache.shared.clear() }
+
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?

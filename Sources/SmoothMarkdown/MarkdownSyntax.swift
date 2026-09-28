@@ -3,7 +3,7 @@ import Markdown
 
 enum MarkdownSyntax {
     static func parse(_ source: String) -> Document {
-        Document(parsing: source)
+        MarkdownParseCache.shared.parse(source)
     }
 
     static func isSafeLink(_ url: URL) -> Bool {

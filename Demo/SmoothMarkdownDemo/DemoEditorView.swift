@@ -26,11 +26,16 @@ struct DemoEditorView: View {
                 onExportMarkdown: { markdown in
                     lastExport = markdown
                 },
+                onExportPDF: { markdown, _ in
+                    lastExport = "PDF export requested for \(markdown.utf16.count) characters"
+                    hostMessage = "PDF export callback requested"
+                },
                 onHostIOEvent: { event in
                     switch (event.operation, event.status) {
                     case (.imagePick, .completed): hostMessage = "Image picker callback requested"
                     case (.markdownImport, .completed): hostMessage = "Markdown import callback requested"
                     case (.markdownExport, .completed): hostMessage = "Markdown export requested"
+                    case (.pdfExport, .completed): hostMessage = "PDF export callback requested"
                     case (_, .failed): hostMessage = event.errorDescription ?? "Editor action failed"
                     case (_, .cancelled): hostMessage = "Editor action cancelled"
                     default: break

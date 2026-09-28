@@ -20,6 +20,7 @@ public struct SmoothMarkdownEditor: View {
                 onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
                 onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil,
                 onExportMarkdown: MarkdownEditorHostIO.MarkdownExporter? = nil,
+                onExportPDF: MarkdownEditorHostIO.PDFExporter? = nil,
                 onHostIOEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil,
                 enableWikilinks: Bool = true,
                 wikilinkSuggestions: [String] = [],
@@ -33,6 +34,7 @@ public struct SmoothMarkdownEditor: View {
         self.onTapWikilink = onTapWikilink
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
+                                           onExportPDF: onExportPDF,
                                            onImagePickEvent: onImagePickEvent, onEvent: onHostIOEvent)
     }
 
@@ -53,6 +55,7 @@ public struct SmoothMarkdownEditor: View {
                         Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
                     }
                     Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
+                    Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
                 }
                 .disabled(hostIOBusy)
                 if let onSave {

@@ -18,6 +18,12 @@ final class DemoEditorUITests: XCTestCase {
         XCTAssertFalse(export.label.contains("Last export: 0 characters"))
 
         fileMenu.tap()
+        app.buttons["Export PDF"].tap()
+        XCTAssertTrue(app.staticTexts["editor-host-message"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.staticTexts["editor-host-message"].label, "PDF export callback requested")
+        XCTAssertFalse(export.label.contains("Last export: 0 characters"))
+
+        fileMenu.tap()
         app.buttons["Import Markdown"].tap()
         app.segmentedControls.buttons["Source"].tap()
         let source = app.textViews["markdown-source"]

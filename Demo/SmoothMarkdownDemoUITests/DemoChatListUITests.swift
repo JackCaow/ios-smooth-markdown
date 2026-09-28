@@ -1,7 +1,7 @@
 import XCTest
 
 final class DemoChatListUITests: XCTestCase {
-    func testFlutterChatWelcomeSendStreamThemeAndCacheExplanation() {
+    func testFlutterChatWelcomeSendStreamThemeAndCacheControl() {
         let app = XCUIApplication()
         app.launch()
         app.buttons["open-examples"].tap()
@@ -33,7 +33,13 @@ final class DemoChatListUITests: XCTestCase {
         app.buttons["chat-toggle-theme"].tap()
         XCTAssertTrue(app.buttons["chat-toggle-theme"].exists)
         app.buttons["chat-cache-statistics"].tap()
-        XCTAssertTrue(app.alerts["Cache Statistics Unavailable"].waitForExistence(timeout: 5))
-        app.alerts.buttons["Close"].tap()
+        let cache = app.alerts["Cache Statistics"]
+        XCTAssertTrue(cache.waitForExistence(timeout: 5))
+        let values = app.staticTexts["chat-cache-values"]
+        XCTAssertTrue(values.label.contains("Cached Entries:"))
+        XCTAssertTrue(values.label.contains("Max Capacity: 200"))
+        XCTAssertTrue(values.label.contains("Utilization:"))
+        cache.buttons["Clear Cache"].tap()
+        XCTAssertTrue(app.staticTexts["chat-cache-cleared"].waitForExistence(timeout: 5))
     }
 }

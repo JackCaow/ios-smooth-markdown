@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)
@@ -18,7 +19,7 @@ public struct MarkdownEditorImageSelection: Equatable {
     }
 }
 
-public enum MarkdownEditorHostIOOperation: Equatable { case imagePick, markdownImport, markdownExport }
+public enum MarkdownEditorHostIOOperation: Equatable { case imagePick, markdownImport, markdownExport, pdfExport }
 public enum MarkdownEditorHostIOStatus: Equatable { case started, completed, cancelled, failed }
 
 public enum MarkdownEditorImagePickStatus: Equatable { case picking, inserted, cancelled, failed }
@@ -58,11 +59,14 @@ public final class MarkdownEditorHostIO {
     public typealias ImagePicker = () async throws -> MarkdownEditorImageSelection?
     public typealias MarkdownImporter = () async throws -> String?
     public typealias MarkdownExporter = (String) async throws -> Void
+    /// Receives the exact Markdown source and an HTML fragment for host-owned PDF or print export.
+    public typealias PDFExporter = (String, String) async throws -> Void
 
     private let controller: MarkdownEditorController
     private let onPickImage: ImagePicker?
     private let onImportMarkdown: MarkdownImporter?
     private let onExportMarkdown: MarkdownExporter?
+    private let onExportPDF: PDFExporter?
     private let onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)?
     private let onEvent: ((MarkdownEditorHostIOEvent) -> Void)?
 
@@ -70,12 +74,14 @@ public final class MarkdownEditorHostIO {
                 onPickImage: ImagePicker? = nil,
                 onImportMarkdown: MarkdownImporter? = nil,
                 onExportMarkdown: MarkdownExporter? = nil,
+                onExportPDF: PDFExporter? = nil,
                 onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
                 onEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil) {
         self.controller = controller
         self.onPickImage = onPickImage
         self.onImportMarkdown = onImportMarkdown
         self.onExportMarkdown = onExportMarkdown
+        self.onExportPDF = onExportPDF
         self.onImagePickEvent = onImagePickEvent
         self.onEvent = onEvent
     }
@@ -158,6 +164,33 @@ public final class MarkdownEditorHostIO {
             return false
         } catch {
             emit(.markdownExport, .failed, error: String(describing: error))
+            return false
+        }
+    }
+
+    @discardableResult
+    public func exportPDF() async -> Bool {
+        let source = controller.text
+        let html = HTMLFormatter.format(MarkdownSyntax.parse(source))
+        emit(.pdfExport, .started)
+        do {
+            if let onExportPDF {
+                try await onExportPDF(source, html)
+            } else {
+                #if canImport(UIKit)
+                UIPasteboard.general.string = html
+                #elseif canImport(AppKit)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(html, forType: .string)
+                #endif
+            }
+            emit(.pdfExport, .completed)
+            return true
+        } catch is CancellationError {
+            emit(.pdfExport, .cancelled)
+            return false
+        } catch {
+            emit(.pdfExport, .failed, error: String(describing: error))
             return false
         }
     }

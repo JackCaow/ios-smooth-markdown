@@ -94,4 +94,43 @@ final class EditorHostIOTests: XCTestCase {
         XCTAssertFalse(controller.insertHostedMarkdownBlock("# New", at: NSRange(location: 0, length: 0), ifTextIs: "😀 text"))
         XCTAssertEqual(controller.text, "😀 text later")
     }
+
+    @MainActor
+    func testPDFExportProvidesSourceAndHTMLWithoutEditingDocument() async {
+        let source = "# Hello\n\nA **bold** word."
+        let controller = MarkdownEditorController(text: source)
+        var exportedMarkdown = ""
+        var exportedHTML = ""
+        var events: [MarkdownEditorHostIOEvent] = []
+        let io = MarkdownEditorHostIO(controller: controller,
+                                      onExportPDF: { markdown, html in
+                                          exportedMarkdown = markdown
+                                          exportedHTML = html
+                                      },
+                                      onEvent: { events.append($0) })
+
+        let exported = await io.exportPDF()
+        XCTAssertTrue(exported)
+        XCTAssertEqual(exportedMarkdown, source)
+        XCTAssertTrue(exportedHTML.contains("<h1>Hello</h1>"))
+        XCTAssertTrue(exportedHTML.contains("<strong>bold</strong>"))
+        XCTAssertEqual(controller.text, source)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertEqual(events.map(\.operation), [.pdfExport, .pdfExport])
+        XCTAssertEqual(events.map(\.status), [.started, .completed])
+    }
+
+    @MainActor
+    func testFailedPDFCallbackReportsFailureAndPreservesSource() async {
+        let controller = MarkdownEditorController(text: "Original")
+        var events: [MarkdownEditorHostIOEvent] = []
+        let io = MarkdownEditorHostIO(controller: controller,
+                                      onExportPDF: { _, _ in throw FixtureError.failed },
+                                      onEvent: { events.append($0) })
+        let exported = await io.exportPDF()
+        XCTAssertFalse(exported)
+        XCTAssertEqual(controller.text, "Original")
+        XCTAssertEqual(events.map(\.status), [.started, .failed])
+        XCTAssertNotNil(events.last?.errorDescription)
+    }
 }

@@ -63,7 +63,9 @@ struct DemoChatListView: View {
     @State private var isStreaming = false
     @State private var replyTask: Task<Void, Never>?
     @State private var scrollRevision = 0
-    @State private var showCacheExplanation = false
+    @State private var showCacheStatistics = false
+    @State private var cacheStatistics = SmoothMarkdownView.cacheStatistics
+    @State private var cacheCleared = false
     @FocusState private var inputFocused: Bool
 
     private let fixture = ChatListFixture.load()
@@ -107,10 +109,29 @@ struct DemoChatListView: View {
                     isWaiting = false
                     isStreaming = false
                 }
-                .alert("Cache Statistics Unavailable", isPresented: $showCacheExplanation) {
+                .overlay(alignment: .bottom) {
+                    if cacheCleared {
+                        Text("Cache cleared successfully")
+                            .padding(12)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(.bottom, 12)
+                            .accessibilityIdentifier("chat-cache-cleared")
+                    }
+                }
+                .alert("Cache Statistics", isPresented: $showCacheStatistics) {
+                    Button("Clear Cache") {
+                        SmoothMarkdownView.clearCache()
+                        cacheStatistics = SmoothMarkdownView.cacheStatistics
+                        cacheCleared = true
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .seconds(2))
+                            cacheCleared = false
+                        }
+                    }
                     Button("Close", role: .cancel) {}
                 } message: {
-                    Text("The native iOS library does not expose cache statistics or a clear-cache API. The numbers shown in the Flutter example do not measure this app.")
+                    Text("Cached Entries: \(cacheStatistics.size)\nMax Capacity: \(cacheStatistics.maxSize)\nUtilization: \(cacheStatistics.utilization.formatted(.percent.precision(.fractionLength(1))))")
+                        .accessibilityIdentifier("chat-cache-values")
                 }
             } else {
                 ContentUnavailableView("Chat demo unavailable", systemImage: "doc.questionmark",
@@ -143,7 +164,8 @@ struct DemoChatListView: View {
             .accessibilityLabel("Toggle theme")
             .accessibilityIdentifier("chat-toggle-theme")
             Button {
-                showCacheExplanation = true
+                cacheStatistics = SmoothMarkdownView.cacheStatistics
+                showCacheStatistics = true
             } label: {
                 Image(systemName: "chart.bar")
             }
