@@ -23,6 +23,8 @@ enum MermaidLayout {
         case .timeline: timeline(diagram)
         case .gantt: gantt(diagram)
         case .kanban: kanban(diagram)
+        case .radar: radar(diagram)
+        case .xyChart: xyChart(diagram)
         }
     }
 
@@ -68,6 +70,26 @@ enum MermaidLayout {
         return diagram.kanbanColumns.indices.map { index in
             CGRect(x: 24 + CGFloat(index) * 216, y: 50, width: 200, height: height)
         }
+    }
+
+    private static func radar(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        let legend = diagram.radarShowLegend ? CGFloat(diagram.radarCurves.count) * 22 : 0
+        return .init(size: CGSize(width: 420, height: 390 + legend), nodes: [:], edges: [])
+    }
+
+    static func radarPoint(index: Int, count: Int, radius: CGFloat) -> CGPoint {
+        let angle = 2 * CGFloat.pi * CGFloat(index) / CGFloat(max(1, count)) - .pi / 2
+        return CGPoint(x: 210 + cos(angle) * radius, y: 200 + sin(angle) * radius)
+    }
+
+    private static func xyChart(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        let count = max(diagram.xyCategories.count, diagram.xySeries.map { $0.values.count }.max() ?? 0)
+        return .init(size: CGSize(width: max(380, CGFloat(count) * 66 + 90), height: 330), nodes: [:], edges: [])
+    }
+
+    static func xyPlotFrame(_ diagram: MermaidDiagram) -> CGRect {
+        let size = xyChart(diagram).size
+        return CGRect(x: 56, y: 54, width: size.width - 86, height: 220)
     }
 
     private static func flowchart(_ diagram: MermaidDiagram) -> MermaidLayoutResult {

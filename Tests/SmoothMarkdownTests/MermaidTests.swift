@@ -164,6 +164,61 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidParser.parse("erDiagram\nA ||--o{ B : owns"))
     }
 
+    func testRadarFixturesChineseLabelsOptionsAndFallback() {
+        let diagram = MermaidParser.parse("""
+        radar-beta
+          title 技能评估
+          axis 编程["Programming"], 设计, 沟通
+          curve 张三["Alice"]{编程:5, 设计:3, 沟通:4}
+          curve 李四{3, 5, 2}
+          showLegend false
+          max 10
+          min 0
+          graticule circle
+          ticks 4
+        """)!
+        XCTAssertEqual(diagram.kind, .radar)
+        XCTAssertEqual(diagram.title, "技能评估")
+        XCTAssertEqual(diagram.radarAxes.map(\.label), ["Programming", "设计", "沟通"])
+        XCTAssertEqual(diagram.radarCurves.map(\.label), ["Alice", "李四"])
+        XCTAssertEqual(diagram.radarCurves[0].values, [5, 3, 4])
+        XCTAssertFalse(diagram.radarShowLegend)
+        XCTAssertEqual(diagram.radarMaximum, 10)
+        XCTAssertEqual(diagram.radarMinimum, 0)
+        XCTAssertEqual(diagram.radarGraticule, .circle)
+        XCTAssertEqual(diagram.radarTicks, 4)
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.width, 0)
+        XCTAssertNotEqual(MermaidLayout.radarPoint(index: 0, count: 3, radius: 100),
+                          MermaidLayout.radarPoint(index: 1, count: 3, radius: 100))
+        XCTAssertNil(MermaidParser.parse("radar-beta\ncurve c1{1,2,3}"))
+        XCTAssertNil(MermaidParser.parse("radar-beta\naxis A, B, C"))
+    }
+
+    func testXYChartFixturesMixedSeriesOrientationAndFallback() {
+        let diagram = MermaidParser.parse("""
+        xychart-beta
+          title "Sales Revenue"
+          x-axis ["Q1 2024", "Q2 2024", "Q3 2024"]
+          y-axis "Revenue" -10 --> 100
+          bar [23, 45, 67]
+          line [20, -3.4, .98]
+        """)!
+        XCTAssertEqual(diagram.kind, .xyChart)
+        XCTAssertEqual(diagram.title, "Sales Revenue")
+        XCTAssertEqual(diagram.xyCategories, ["Q1 2024", "Q2 2024", "Q3 2024"])
+        XCTAssertEqual(diagram.xyYAxisTitle, "Revenue")
+        XCTAssertEqual(diagram.xyYAxisMinimum, -10)
+        XCTAssertEqual(diagram.xyYAxisMaximum, 100)
+        XCTAssertEqual(diagram.xySeries.map(\.type), [.bar, .line])
+        XCTAssertEqual(diagram.xySeries[1].values, [20, -3.4, 0.98])
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.height, 0)
+        XCTAssertGreaterThan(MermaidLayout.xyPlotFrame(diagram).width, 0)
+        let horizontal = MermaidParser.parse("xychart horizontal\nx-axis [A, B]\nbar [10, 20]")!
+        XCTAssertEqual(horizontal.xyOrientation, .horizontal)
+        XCTAssertNil(MermaidParser.parse("xychart-beta\nx-axis [A, B]"))
+        XCTAssertNil(MermaidParser.parse("erDiagram\nA ||--o{ B : owns"))
+    }
+
     func testMermaidFencePluginAndOrdinaryFenceFallback() throws {
         let registry = ParserPluginRegistry.builtIns()
         let source = """

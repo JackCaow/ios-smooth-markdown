@@ -7,6 +7,25 @@ private let demoMarkdown = """
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
 ```mermaid
+xychart-beta
+  title "Native metrics"
+  x-axis [Jan, Feb, Mar]
+  y-axis "Score" 0 --> 100
+  bar [35, 58, 77]
+  line [28, 50, 83]
+```
+
+```mermaid
+radar-beta
+  title Native skills
+  axis Parser, Canvas, Tests, Docs
+  curve iOS["iOS"]{8, 7, 9, 6}
+  curve Flutter["Flutter"]{9, 8, 9, 8}
+  max 10
+  ticks 4
+```
+
+```mermaid
 gantt
   title Release plan
   dateFormat YYYY-MM-DD

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban }
+public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
 public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder }
 public enum MermaidLine: Equatable { case solid, dotted, thick }
@@ -73,18 +73,48 @@ public struct MermaidDiagram: Equatable {
     public let ganttTodayMarker: Bool
     public let kanbanColumns: [MermaidKanbanColumn]
     public let kanbanTicketBaseURL: String?
+    public let radarAxes: [MermaidRadarAxis]
+    public let radarCurves: [MermaidRadarCurve]
+    public let radarShowLegend: Bool
+    public let radarMinimum: Double?
+    public let radarMaximum: Double?
+    public let radarGraticule: MermaidRadarGraticule
+    public let radarTicks: Int
+    public let xySeries: [MermaidXYSeries]
+    public let xyOrientation: MermaidXYOrientation
+    public let xyCategories: [String]
+    public let xyXAxisTitle: String?
+    public let xyYAxisTitle: String?
+    public let xyXAxisMinimum: Double?
+    public let xyXAxisMaximum: Double?
+    public let xyYAxisMinimum: Double?
+    public let xyYAxisMaximum: Double?
 
     public init(kind: MermaidKind, direction: MermaidDirection, nodes: [MermaidNode] = [], edges: [MermaidEdge] = [],
                 title: String? = nil, showData: Bool = false, pieSlices: [MermaidPieSlice] = [],
                 timelineSections: [MermaidTimelineSection] = [], ganttTasks: [MermaidGanttTask] = [],
                 ganttDateFormat: String = "YYYY-MM-DD", ganttAxisFormat: String? = nil,
                 ganttExcludes: String? = nil, ganttTodayMarker: Bool = true,
-                kanbanColumns: [MermaidKanbanColumn] = [], kanbanTicketBaseURL: String? = nil) {
+                kanbanColumns: [MermaidKanbanColumn] = [], kanbanTicketBaseURL: String? = nil,
+                radarAxes: [MermaidRadarAxis] = [], radarCurves: [MermaidRadarCurve] = [],
+                radarShowLegend: Bool = true, radarMinimum: Double? = nil, radarMaximum: Double? = nil,
+                radarGraticule: MermaidRadarGraticule = .polygon, radarTicks: Int = 5,
+                xySeries: [MermaidXYSeries] = [], xyOrientation: MermaidXYOrientation = .vertical,
+                xyCategories: [String] = [], xyXAxisTitle: String? = nil, xyYAxisTitle: String? = nil,
+                xyXAxisMinimum: Double? = nil, xyXAxisMaximum: Double? = nil,
+                xyYAxisMinimum: Double? = nil, xyYAxisMaximum: Double? = nil) {
         self.kind = kind; self.direction = direction; self.nodes = nodes; self.edges = edges
         self.title = title; self.showData = showData; self.pieSlices = pieSlices; self.timelineSections = timelineSections
         self.ganttTasks = ganttTasks; self.ganttDateFormat = ganttDateFormat; self.ganttAxisFormat = ganttAxisFormat
         self.ganttExcludes = ganttExcludes; self.ganttTodayMarker = ganttTodayMarker
         self.kanbanColumns = kanbanColumns; self.kanbanTicketBaseURL = kanbanTicketBaseURL
+        self.radarAxes = radarAxes; self.radarCurves = radarCurves; self.radarShowLegend = radarShowLegend
+        self.radarMinimum = radarMinimum; self.radarMaximum = radarMaximum
+        self.radarGraticule = radarGraticule; self.radarTicks = radarTicks
+        self.xySeries = xySeries; self.xyOrientation = xyOrientation; self.xyCategories = xyCategories
+        self.xyXAxisTitle = xyXAxisTitle; self.xyYAxisTitle = xyYAxisTitle
+        self.xyXAxisMinimum = xyXAxisMinimum; self.xyXAxisMaximum = xyXAxisMaximum
+        self.xyYAxisMinimum = xyYAxisMinimum; self.xyYAxisMaximum = xyYAxisMaximum
     }
 
     public func node(_ id: String) -> MermaidNode? { nodes.first { $0.id == id } }
@@ -115,6 +145,8 @@ public enum MermaidParser {
         if header.lowercased() == "timeline" { return timeline(Array(lines.dropFirst())) }
         if header.lowercased() == "gantt" { return MermaidExtendedParser.gantt(lines) }
         if header.lowercased() == "kanban" { return MermaidExtendedParser.kanban(rawLines) }
+        if header.lowercased() == "radar-beta" { return MermaidPlotParser.radar(lines) }
+        if header.lowercased().hasPrefix("xychart") { return MermaidPlotParser.xyChart(lines) }
         return nil
     }
 

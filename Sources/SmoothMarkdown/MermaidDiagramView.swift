@@ -29,6 +29,14 @@ public struct MermaidDiagramView: View {
                     drawKanban(in: context, diagram: diagram, size: layout.size, ink: ink)
                     return
                 }
+                if diagram.kind == .radar {
+                    drawRadar(in: context, diagram: diagram, ink: ink)
+                    return
+                }
+                if diagram.kind == .xyChart {
+                    drawXYChart(in: context, diagram: diagram, ink: ink)
+                    return
+                }
                 if diagram.kind == .sequence {
                     for node in diagram.nodes {
                         guard let frame = layout.nodes[node.id] else { continue }
@@ -71,6 +79,8 @@ public struct MermaidDiagramView: View {
         case .timeline: "Timeline with \(diagram.timelineSections.count) periods"
         case .gantt: "Gantt chart with \(diagram.ganttTasks.count) tasks"
         case .kanban: "Kanban board with \(diagram.kanbanColumns.count) columns"
+        case .radar: "Radar chart with \(diagram.radarAxes.count) axes and \(diagram.radarCurves.count) curves"
+        case .xyChart: "XY chart with \(diagram.xySeries.count) series"
         }
     }
 
@@ -210,6 +220,143 @@ public struct MermaidDiagramView: View {
                                  at: CGPoint(x: card.minX + 14, y: card.minY + 51), anchor: .leading)
                 }
             }
+        }
+    }
+
+    private func drawRadar(in context: GraphicsContext, diagram: MermaidDiagram, ink: Color) {
+        let count = diagram.radarAxes.count
+        guard count > 0 else { return }
+        if let title = diagram.title {
+            context.draw(Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(ink),
+                         at: CGPoint(x: 210, y: 24))
+        }
+        let minimum = diagram.radarMinimum ?? 0
+        let observed = diagram.radarCurves.flatMap(\.values).max() ?? 1
+        let maximum = max(minimum + 1, diagram.radarMaximum ?? observed)
+        let radius: CGFloat = 116
+        for tick in 1...max(1, diagram.radarTicks) {
+            let r = radius * CGFloat(tick) / CGFloat(max(1, diagram.radarTicks))
+            if diagram.radarGraticule == .circle {
+                context.stroke(Path(ellipseIn: CGRect(x: 210 - r, y: 200 - r, width: 2 * r, height: 2 * r)),
+                               with: .color(ink.opacity(0.20)), lineWidth: 1)
+            } else {
+                var ring = Path()
+                for index in 0..<count {
+                    let point = MermaidLayout.radarPoint(index: index, count: count, radius: r)
+                    if index == 0 { ring.move(to: point) } else { ring.addLine(to: point) }
+                }
+                ring.closeSubpath()
+                context.stroke(ring, with: .color(ink.opacity(0.20)), lineWidth: 1)
+            }
+        }
+        for (index, axis) in diagram.radarAxes.enumerated() {
+            let end = MermaidLayout.radarPoint(index: index, count: count, radius: radius)
+            var spoke = Path()
+            spoke.move(to: CGPoint(x: 210, y: 200)); spoke.addLine(to: end)
+            context.stroke(spoke, with: .color(ink.opacity(0.35)), lineWidth: 1)
+            let label = MermaidLayout.radarPoint(index: index, count: count, radius: radius + 25)
+            context.draw(Text(String(axis.label.prefix(14))).font(.system(size: 11)).foregroundColor(ink), at: label)
+        }
+        for (curveIndex, curve) in diagram.radarCurves.enumerated() {
+            let color = pieColor(curveIndex)
+            var shape = Path()
+            for index in 0..<count {
+                let value = index < curve.values.count ? curve.values[index] : minimum
+                let fraction = min(1, max(0, CGFloat((value - minimum) / (maximum - minimum))))
+                let point = MermaidLayout.radarPoint(index: index, count: count, radius: radius * fraction)
+                if index == 0 { shape.move(to: point) } else { shape.addLine(to: point) }
+            }
+            shape.closeSubpath()
+            context.fill(shape, with: .color(color.opacity(0.18)))
+            context.stroke(shape, with: .color(color), lineWidth: 2)
+            if diagram.radarShowLegend {
+                let y = CGFloat(370 + curveIndex * 22)
+                context.fill(Path(ellipseIn: CGRect(x: 86, y: y - 5, width: 10, height: 10)), with: .color(color))
+                context.draw(Text(String(curve.label.prefix(25))).font(.system(size: 11)).foregroundColor(ink),
+                             at: CGPoint(x: 104, y: y), anchor: .leading)
+            }
+        }
+    }
+
+    private func drawXYChart(in context: GraphicsContext, diagram: MermaidDiagram, ink: Color) {
+        let plot = MermaidLayout.xyPlotFrame(diagram)
+        let count = max(diagram.xyCategories.count, diagram.xySeries.map { $0.values.count }.max() ?? 0)
+        guard count > 0 else { return }
+        let horizontal = diagram.xyOrientation == .horizontal
+        if let title = diagram.title {
+            context.draw(Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(ink),
+                         at: CGPoint(x: min(plot.midX, 200), y: 24))
+        }
+        if let yTitle = diagram.xyYAxisTitle, !horizontal {
+            context.draw(Text(yTitle).font(.system(size: 11)).foregroundColor(ink.opacity(0.8)),
+                         at: CGPoint(x: plot.minX, y: 42), anchor: .leading)
+        }
+        let values = diagram.xySeries.flatMap(\.values)
+        let minimum = min(diagram.xyYAxisMinimum ?? 0, values.min() ?? 0)
+        let maximum = max(diagram.xyYAxisMaximum ?? 1, values.max() ?? 1, minimum + 1)
+        let span = maximum - minimum
+        var axes = Path()
+        axes.move(to: CGPoint(x: plot.minX, y: plot.minY))
+        axes.addLine(to: CGPoint(x: plot.minX, y: plot.maxY))
+        axes.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
+        context.stroke(axes, with: .color(ink.opacity(0.8)), lineWidth: 1.5)
+        for tick in 0...4 {
+            let fraction = CGFloat(tick) / 4
+            let point = horizontal ? CGPoint(x: plot.minX + plot.width * fraction, y: plot.maxY)
+                : CGPoint(x: plot.minX, y: plot.maxY - plot.height * fraction)
+            var grid = Path()
+            if horizontal {
+                grid.move(to: CGPoint(x: point.x, y: plot.minY)); grid.addLine(to: CGPoint(x: point.x, y: plot.maxY))
+            } else {
+                grid.move(to: CGPoint(x: plot.minX, y: point.y)); grid.addLine(to: CGPoint(x: plot.maxX, y: point.y))
+            }
+            context.stroke(grid, with: .color(ink.opacity(0.12)), lineWidth: 1)
+            context.draw(Text((minimum + span * Double(fraction)).formatted(.number.precision(.fractionLength(0)))).font(.system(size: 10)).foregroundColor(ink),
+                         at: horizontal ? CGPoint(x: point.x, y: plot.maxY + 14) : CGPoint(x: plot.minX - 10, y: point.y),
+                         anchor: horizontal ? .center : .trailing)
+        }
+        let barSeries = diagram.xySeries.filter { $0.type == .bar }
+        for (seriesIndex, series) in diagram.xySeries.enumerated() {
+            let color = pieColor(seriesIndex)
+            var line = Path()
+            for (index, value) in series.values.enumerated() {
+                let slot = CGFloat(index) + 0.5
+                let valueFraction = CGFloat((value - minimum) / span)
+                let zeroFraction = min(1, max(0, CGFloat((0 - minimum) / span)))
+                let point = horizontal
+                    ? CGPoint(x: plot.minX + valueFraction * plot.width, y: plot.minY + slot / CGFloat(count) * plot.height)
+                    : CGPoint(x: plot.minX + slot / CGFloat(count) * plot.width, y: plot.maxY - valueFraction * plot.height)
+                if series.type == .bar {
+                    let barIndex = diagram.xySeries.prefix(seriesIndex).filter { $0.type == .bar }.count
+                    let barCount = max(1, barSeries.count)
+                    let slotSize = (horizontal ? plot.height : plot.width) / CGFloat(count)
+                    let thickness = min(24, slotSize * 0.72 / CGFloat(barCount))
+                    let offset = (CGFloat(barIndex) - CGFloat(barCount - 1) / 2) * thickness
+                    let zero = horizontal ? plot.minX + zeroFraction * plot.width : plot.maxY - zeroFraction * plot.height
+                    let frame = horizontal
+                        ? CGRect(x: min(zero, point.x), y: point.y + offset - thickness / 2,
+                                 width: max(1, abs(point.x - zero)), height: thickness)
+                        : CGRect(x: point.x + offset - thickness / 2, y: min(zero, point.y),
+                                 width: thickness, height: max(1, abs(point.y - zero)))
+                    context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(color.opacity(0.85)))
+                } else {
+                    if index == 0 { line.move(to: point) } else { line.addLine(to: point) }
+                    context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(color))
+                }
+            }
+            if series.type == .line { context.stroke(line, with: .color(color), lineWidth: 2) }
+        }
+        for index in 0..<count {
+            let label = index < diagram.xyCategories.count ? diagram.xyCategories[index] : "\(index + 1)"
+            let point = horizontal
+                ? CGPoint(x: plot.minX - 8, y: plot.minY + (CGFloat(index) + 0.5) / CGFloat(count) * plot.height)
+                : CGPoint(x: plot.minX + (CGFloat(index) + 0.5) / CGFloat(count) * plot.width, y: plot.maxY + 32)
+            context.draw(Text(String(label.prefix(12))).font(.system(size: 10)).foregroundColor(ink), at: point,
+                         anchor: horizontal ? .trailing : .center)
+        }
+        if let axisTitle = horizontal ? diagram.xyYAxisTitle : diagram.xyXAxisTitle {
+            context.draw(Text(axisTitle).font(.system(size: 11)).foregroundColor(ink),
+                         at: CGPoint(x: plot.midX, y: 315))
         }
     }
 
