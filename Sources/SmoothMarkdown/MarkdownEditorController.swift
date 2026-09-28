@@ -162,6 +162,67 @@ public final class MarkdownEditorController: ObservableObject {
         if !block.isEmpty { insertSeparatedBlock(block) }
     }
 
+    /// Inserts host-provided Markdown at the selection captured before asynchronous I/O.
+    /// An intervening source edit invalidates the result instead of overwriting newer work.
+    @discardableResult
+    public func insertHostedMarkdownBlock(_ markdown: String, at range: NSRange, ifTextIs expectedText: String) -> Bool {
+        let block = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !block.isEmpty, text == expectedText, isValidSourceRange(range) else { return false }
+        let source = text as NSString
+        let before = source.substring(to: range.location)
+        let after = source.substring(from: NSMaxRange(range))
+        let newline = text.contains("\r\n") ? "\r\n" : "\n"
+        let leading = before.isEmpty || before.hasSuffix(newline + newline) ? "" :
+            before.hasSuffix(newline) ? newline : newline + newline
+        let trailing = after.isEmpty || after.hasPrefix(newline + newline) ? "" :
+            after.hasPrefix(newline) ? newline : newline + newline
+        let replacement = leading + block + trailing
+        replaceRange(range, with: replacement,
+                     selectedRange: NSRange(location: (leading as NSString).length + (block as NSString).length, length: 0))
+        return true
+    }
+
+    /// Inserts a safe Markdown image block. Empty alt text uses the captured selected text.
+    @discardableResult
+    public func insertHostedImage(_ image: MarkdownEditorImageSelection, at range: NSRange,
+                                  ifTextIs expectedText: String) -> Bool {
+        guard text == expectedText, isValidSourceRange(range) else { return false }
+        let url = image.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !url.contains(where: { $0.isWhitespace || $0 == "<" || $0 == ">" || $0 == "\"" || $0 == "\\" }),
+              ImageSource.parse(url) != nil else { return false }
+        let selected = (text as NSString).substring(with: range)
+        let alt = image.alt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? selected : image.alt
+        let safeAlt = alt.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "[", with: "\\[")
+            .replacingOccurrences(of: "]", with: "\\]")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+        let safeURL = url.replacingOccurrences(of: "(", with: "%28")
+            .replacingOccurrences(of: ")", with: "%29")
+            .replacingOccurrences(of: "[", with: "%5B")
+            .replacingOccurrences(of: "]", with: "%5D")
+        let title = image.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let safeTitle = title.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+        let titleSuffix = safeTitle.isEmpty ? "" : " \"\(safeTitle)\""
+        return insertHostedMarkdownBlock("![\(safeAlt)](\(safeURL)\(titleSuffix))", at: range, ifTextIs: expectedText)
+    }
+
+    private func isValidSourceRange(_ range: NSRange) -> Bool {
+        let source = text as NSString
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= source.length,
+              let swiftRange = Range(range, in: text), NSRange(swiftRange, in: text) == range else { return false }
+        for offset in [range.location, NSMaxRange(range)] where offset > 0 && offset < source.length {
+            let previous = source.character(at: offset - 1)
+            let next = source.character(at: offset)
+            if (0xD800...0xDBFF).contains(previous) && (0xDC00...0xDFFF).contains(next) { return false }
+        }
+        return true
+    }
+
     public func insertTable(rows: Int = 3, columns: Int = 3) {
         let rowCount = max(1, rows)
         let columnCount = max(1, columns)

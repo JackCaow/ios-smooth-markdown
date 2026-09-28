@@ -258,6 +258,7 @@ title Work split
 
 private let inlineEditorFixture = "Alpha"
 private let listEditorFixture = "7. First\n8. Second\n\n- [ ] Task"
+private let hostIOFixture = "Intro"
 
 @main
 struct SmoothMarkdownDemoApp: App {
@@ -269,9 +270,11 @@ struct SmoothMarkdownDemoApp: App {
 private struct DemoContentView: View {
     @StateObject private var controller = MarkdownEditorController(
         text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture :
-            (ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ? listEditorFixture : demoMarkdown))
+            (ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ? listEditorFixture :
+                (ProcessInfo.processInfo.arguments.contains("--host-io-fixture") ? hostIOFixture : demoMarkdown)))
     @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
-        ProcessInfo.processInfo.arguments.contains("--list-editor-fixture")
+        ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
     @State private var showSelection = false
@@ -279,6 +282,8 @@ private struct DemoContentView: View {
     @State private var themeIndex = 0
     @State private var imageTapCount = 0
     @State private var lastImageTap = ""
+    @State private var hostIOStatus = "idle"
+    @State private var exportedMarkdown = ""
     private let plugins = ParserPluginRegistry.builtIns()
     private let themes: [(String, MarkdownStyleSheet)] = [
         ("System", .default()), ("Light", .light()), ("Dark", .dark()),
@@ -326,7 +331,19 @@ private struct DemoContentView: View {
             if showPerformance {
                 PerformanceDemoView()
             } else if showEditor {
-                SmoothMarkdownEditor(controller: controller)
+                if ProcessInfo.processInfo.arguments.contains("--host-io-fixture") {
+                    Text("Host IO: \(hostIOStatus)").accessibilityIdentifier("host-io-status")
+                    Text("Exported: \(exportedMarkdown)").accessibilityIdentifier("host-io-export")
+                    SmoothMarkdownEditor(controller: controller,
+                                         onPickImage: { .init(url: "assets/fixture.png", alt: "Picked") },
+                                         onImportMarkdown: { "# Imported" },
+                                         onExportMarkdown: { exportedMarkdown = $0 },
+                                         onHostIOEvent: { event in
+                                             hostIOStatus = "\(event.operation)-\(event.status)"
+                                         })
+                } else {
+                    SmoothMarkdownEditor(controller: controller)
+                }
             } else {
                 SmoothMarkdownView(markdown: showSelection ? selectionMarkdown :
                                    (showStructured ? structuredMarkdown : controller.text), enableHTML: enableHTML,

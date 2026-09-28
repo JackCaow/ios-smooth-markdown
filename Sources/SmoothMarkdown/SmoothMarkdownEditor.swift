@@ -6,11 +6,25 @@ import UIKit
 @available(iOS 17.0, *)
 public struct SmoothMarkdownEditor: View {
     @ObservedObject private var controller: MarkdownEditorController
+    @State private var hostIOBusy = false
     private let onSave: ((String) -> Void)?
+    private let hostIO: MarkdownEditorHostIO
+    private let hasImagePicker: Bool
+    private let hasMarkdownImporter: Bool
 
-    public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil) {
+    public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
+                onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
+                onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
+                onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil,
+                onExportMarkdown: MarkdownEditorHostIO.MarkdownExporter? = nil,
+                onHostIOEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil) {
         self.controller = controller
         self.onSave = onSave
+        self.hasImagePicker = onPickImage != nil
+        self.hasMarkdownImporter = onImportMarkdown != nil
+        self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
+                                           onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
+                                           onImagePickEvent: onImagePickEvent, onEvent: onHostIOEvent)
     }
 
     public var body: some View {
@@ -22,6 +36,16 @@ public struct SmoothMarkdownEditor: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                Menu("File") {
+                    if hasImagePicker {
+                        Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
+                    }
+                    if hasMarkdownImporter {
+                        Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
+                    }
+                    Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
+                }
+                .disabled(hostIOBusy)
                 if let onSave {
                     Button("Save") {
                         onSave(controller.text)
@@ -77,6 +101,15 @@ public struct SmoothMarkdownEditor: View {
     private func commandButton(_ title: String, _ command: MarkdownEditorCommand) -> some View {
         Button(title) { controller.applyCommand(command) }
             .padding(.horizontal, 5)
+    }
+
+    private func runHostIO(_ work: @escaping () async -> Bool) {
+        guard !hostIOBusy else { return }
+        hostIOBusy = true
+        Task { @MainActor in
+            _ = await work()
+            hostIOBusy = false
+        }
     }
 }
 
