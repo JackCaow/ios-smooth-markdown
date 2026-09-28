@@ -44,6 +44,60 @@ public final class MarkdownEditorController: ObservableObject {
     /// A source-preserving semantic snapshot for supported top-level blocks.
     public var semanticDocument: MarkdownDocument { MarkdownDocumentCodec().parse(text) }
 
+    /// Copies complete top-level Blocks rows, including the exact source trivia between them.
+    /// Endpoints may be tapped in either order. The first row's preceding trivia is omitted.
+    public func copySemanticBlockRange(from startID: String, to endID: String) -> String? {
+        let document = semanticDocument
+        guard let range = semanticBlockRange(in: document, from: startID, to: endID) else { return nil }
+        return document.blocks[range].enumerated().map { offset, block in
+            (offset == 0 ? "" : block.leadingTrivia) + block.source
+        }.joined()
+    }
+
+    /// Complex source-only, list, and table blocks stay copyable but are not deleted yet.
+    public func canDeleteSemanticBlockRange(from startID: String, to endID: String) -> Bool {
+        deletionMarkdown(from: startID, to: endID) != nil
+    }
+
+    /// Deletes a complete multi-block selection as one source-backed undo step.
+    @discardableResult
+    public func deleteSemanticBlockRange(from startID: String, to endID: String) -> Bool {
+        guard let updated = deletionMarkdown(from: startID, to: endID) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    private func semanticBlockRange(in document: MarkdownDocument, from startID: String,
+                                    to endID: String) -> ClosedRange<Int>? {
+        guard let first = document.blocks.firstIndex(where: { $0.id == startID }),
+              let last = document.blocks.firstIndex(where: { $0.id == endID }), first != last else { return nil }
+        return min(first, last)...max(first, last)
+    }
+
+    private func deletionMarkdown(from startID: String, to endID: String) -> String? {
+        let document = semanticDocument
+        guard let range = semanticBlockRange(in: document, from: startID, to: endID) else { return nil }
+        for block in document.blocks[range] {
+            switch block.kind {
+            case .paragraph, .heading, .fencedCode, .horizontalRule: break
+            case .list, .table, .raw: return nil
+            }
+        }
+        var kept = document.blocks.enumerated().compactMap { range.contains($0.offset) ? nil : $0.element }
+        if range.lowerBound == 0, !kept.isEmpty {
+            let first = kept[0]
+            kept[0] = .init(id: first.id, kind: first.kind, source: first.source,
+                            leadingTrivia: document.blocks[0].leadingTrivia)
+        }
+        let updated = kept.isEmpty ? "" : MarkdownDocument(blocks: kept,
+                                                               trailingTrivia: document.trailingTrivia).toMarkdown()
+        let reparsed = MarkdownDocumentCodec().parse(updated)
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == kept.count,
+              zip(reparsed.blocks, kept).allSatisfy({ $0.0.kind == $0.1.kind && $0.0.source == $0.1.source }) else {
+            return nil
+        }
+        return updated == text ? nil : updated
+    }
+
     /// Applies one semantic body edit through the existing source undo history.
     @discardableResult
     public func replaceSemanticBlockContent(id: String, with content: String) -> Bool {

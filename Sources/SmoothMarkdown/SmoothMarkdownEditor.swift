@@ -265,6 +265,9 @@ private struct FormattedBlocksView: View {
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
+    @State private var rangeStartID: String?
+    @State private var rangeEndID: String?
+    @State private var copiedRange = false
 
     private enum Row: Identifiable {
         case block(MarkdownDocumentBlock)
@@ -306,12 +309,63 @@ private struct FormattedBlocksView: View {
                 Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(rangeStartID == nil ? "Tap Start range on a block, then End range on another block." :
+                         rangeEndID == nil ? "Choose the last block in the range." : "Block range selected.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        if let rangeStartID, let rangeEndID {
+                            Button("Copy Markdown") {
+                                if let copied = controller.copySemanticBlockRange(from: rangeStartID, to: rangeEndID) {
+                                    UIPasteboard.general.string = copied
+                                    copiedRange = true
+                                }
+                            }
+                            .accessibilityIdentifier("block-range-copy")
+                            Button("Delete blocks", role: .destructive) {
+                                if controller.deleteSemanticBlockRange(from: rangeStartID, to: rangeEndID) {
+                                    clearRange()
+                                }
+                            }
+                            .disabled(!controller.canDeleteSemanticBlockRange(from: rangeStartID, to: rangeEndID))
+                            .accessibilityIdentifier("block-range-delete")
+                        }
+                        if rangeStartID != nil {
+                            Button("Clear range") { clearRange() }
+                                .accessibilityIdentifier("block-range-clear")
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
+                if copiedRange {
+                    Text("Markdown copied")
+                        .font(.caption)
+                        .accessibilityIdentifier("block-range-copy-feedback")
+                }
                 ForEach(rows) { row in
                     switch row {
                     case let .block(block):
-                        FormattedBlockRow(controller: controller, block: block,
-                                          enableWikilinks: enableWikilinks,
-                                          wikilinkSuggestions: wikilinkSuggestions)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Button(rangeStartID == nil ? "Start range" : "End range") {
+                                if rangeStartID == nil || rangeEndID != nil {
+                                    rangeStartID = block.id
+                                    rangeEndID = nil
+                                } else if rangeStartID != block.id {
+                                    rangeEndID = block.id
+                                }
+                                copiedRange = false
+                            }
+                            .font(.caption)
+                            .accessibilityIdentifier("block-range-\(block.id)")
+                            FormattedBlockRow(controller: controller, block: block,
+                                              enableWikilinks: enableWikilinks,
+                                              wikilinkSuggestions: wikilinkSuggestions)
+                        }
+                        .padding(4)
+                        .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 9))
                     case .pendingParagraph:
                         PendingListParagraphField(controller: controller)
                     }
@@ -320,6 +374,22 @@ private struct FormattedBlocksView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
         }
+        .onChange(of: controller.text) { _, _ in clearRange() }
+    }
+
+    private func clearRange() {
+        rangeStartID = nil
+        rangeEndID = nil
+        copiedRange = false
+    }
+
+    private func isInSelectedRange(_ id: String) -> Bool {
+        guard let rangeStartID, let rangeEndID else { return id == rangeStartID }
+        let blocks = controller.semanticDocument.blocks
+        guard let start = blocks.firstIndex(where: { $0.id == rangeStartID }),
+              let end = blocks.firstIndex(where: { $0.id == rangeEndID }),
+              let index = blocks.firstIndex(where: { $0.id == id }) else { return false }
+        return (min(start, end)...max(start, end)).contains(index)
     }
 }
 

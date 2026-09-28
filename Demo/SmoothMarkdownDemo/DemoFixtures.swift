@@ -257,6 +257,7 @@ title Work split
 """
 
 let inlineEditorFixture = "Alpha"
+let crossBlockEditorFixture = "First\n\nSecond\n\nThird"
 let listEditorFixture = "7. First\n8. Second\n\n- [ ] Task"
 let emptyListEditorFixture = "- First\n- "
 let nestedListEditorFixture = "- Parent\n  - Child\n    continuation\n- Sibling"
