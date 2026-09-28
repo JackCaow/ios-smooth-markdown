@@ -43,6 +43,7 @@ public struct SmoothMarkdownEditor: View {
                     commandButton("Task", .taskList)
                     commandButton("Code", .codeBlock)
                     commandButton("Link", .link)
+                    commandButton("Table", .table)
                 }
                 .buttonStyle(.borderless)
                 .padding(.horizontal)

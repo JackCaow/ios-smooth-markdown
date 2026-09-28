@@ -98,12 +98,50 @@ public final class MarkdownEditorController: ObservableObject {
     }
 
     public func insertTable(rows: Int = 3, columns: Int = 3) {
-        let rowCount = max(2, rows)
+        let rowCount = max(1, rows)
         let columnCount = max(1, columns)
-        let header = (1...columnCount).map { "Column \($0)" }.joined(separator: " | ")
+        let header = Array(repeating: "Column", count: columnCount).joined(separator: " | ")
         let separator = Array(repeating: "---", count: columnCount).joined(separator: " | ")
-        let body = Array(repeating: "| " + Array(repeating: " ", count: columnCount).joined(separator: " | ") + " |", count: rowCount - 1)
+        let body = Array(repeating: "| " + Array(repeating: "Cell", count: columnCount).joined(separator: " | ") + " |", count: rowCount - 1)
         insertSeparatedBlock((["| \(header) |", "| \(separator) |"] + body).joined(separator: "\n"))
+    }
+
+    /// Returns the GFM table under the current source selection.
+    public func tableAtSelection() -> MarkdownSourceTable? {
+        findSourceTable(text, offset: selection.location)?.table
+    }
+
+    @discardableResult
+    public func replaceTableCellText(rowIndex: Int, columnIndex: Int, text: String, header: Bool = false) -> Bool {
+        editSelectedTable { $0.replacingCell(rowIndex: rowIndex, columnIndex: columnIndex, text: text, header: header) }
+    }
+
+    @discardableResult public func insertTableRowBefore(_ index: Int) -> Bool { editSelectedTable { $0.insertingRowBefore(index) } }
+    @discardableResult public func insertTableRowAfter(_ index: Int) -> Bool { editSelectedTable { $0.insertingRowAfter(index) } }
+    @discardableResult public func deleteTableRow(_ index: Int) -> Bool { editSelectedTable { $0.deletingRow(index) } }
+    @discardableResult public func insertTableColumnBefore(_ index: Int) -> Bool { editSelectedTable { $0.insertingColumnBefore(index) } }
+    @discardableResult public func insertTableColumnAfter(_ index: Int) -> Bool { editSelectedTable { $0.insertingColumnAfter(index) } }
+    @discardableResult public func deleteTableColumn(_ index: Int) -> Bool { editSelectedTable { $0.deletingColumn(index) } }
+    @discardableResult public func setTableColumnAlignment(_ index: Int, to alignment: MarkdownTableAlignment?) -> Bool {
+        editSelectedTable { $0.settingColumnAlignment(index, to: alignment) }
+    }
+
+    @discardableResult
+    public func deleteTableAtSelection() -> Bool {
+        guard let located = findSourceTable(text, offset: selection.location) else { return false }
+        replaceRange(located.range, with: "")
+        return true
+    }
+
+    private func editSelectedTable(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> Bool {
+        guard let located = findSourceTable(text, offset: selection.location) else { return false }
+        let updated = transform(located.table)
+        if updated != located.table {
+            let replacement = updated.toMarkdown()
+            let relativeCaret = min(max(0, selection.location - located.range.location), (replacement as NSString).length)
+            replaceRange(located.range, with: replacement, selectedRange: NSRange(location: relativeCaret, length: 0))
+        }
+        return true
     }
 
     public func findMatches(_ query: String, caseSensitive: Bool = false) -> [NSRange] {
