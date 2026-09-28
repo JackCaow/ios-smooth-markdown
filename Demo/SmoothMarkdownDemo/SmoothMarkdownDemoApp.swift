@@ -6,6 +6,12 @@ private let demoMarkdown = """
 
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+Inline math: $E=mc^2$ and $\\frac{a}{b}$.
+
+$$
+\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}
+$$
+
 ```swift
 let message = "A long code line stays on one line and scrolls horizontally instead of wrapping inside the code panel."
 print(message) // Copy this block

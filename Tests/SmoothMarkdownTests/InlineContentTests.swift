@@ -12,6 +12,7 @@ final class InlineContentTests: XCTestCase {
             case let .text(value, _, _, _): return value
             case let .image(image): return "[\(image.alt)]"
             case let .footnote(label): return "[^\(label)]"
+            case let .math(latex): return "$\(latex)$"
             }
         }.joined()
         XCTAssertEqual(labels, "before [one] middle [two] after")

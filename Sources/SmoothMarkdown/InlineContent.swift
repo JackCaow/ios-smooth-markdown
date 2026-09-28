@@ -14,6 +14,7 @@ enum InlineContent {
         case text(String, Style, [SafeHTML.Tag], code: Bool)
         case image(SafeHTML.ImageSpec)
         case footnote(String)
+        case math(String)
     }
 
     static func runs(in node: Markup, enableHTML: Bool) -> [Run] {
@@ -56,7 +57,13 @@ enum InlineContent {
             if let text = child as? Markdown.Text {
                 for part in FootnoteSyntax.parts(in: text.string) {
                     switch part {
-                    case let .text(value): result.append(.text(value, style, tags, code: false))
+                    case let .text(value):
+                        for math in MathSyntax.inlineParts(in: value) {
+                            switch math {
+                            case let .text(plain): result.append(.text(plain, style, tags, code: false))
+                            case let .math(latex): result.append(.math(latex))
+                            }
+                        }
                     case let .reference(label): result.append(.footnote(label))
                     }
                 }

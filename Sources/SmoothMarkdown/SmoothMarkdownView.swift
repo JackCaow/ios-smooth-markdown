@@ -1,6 +1,7 @@
 import Markdown
 import SwiftDraw
 import SwiftUI
+import SwiftUIMath
 
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
 public struct SmoothMarkdownView: View {
@@ -37,8 +38,14 @@ public struct SmoothMarkdownView: View {
                         ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, footnoteSection in
                             switch footnoteSection {
                             case let .markdown(content):
-                                ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, node in
-                                    block(node)
+                                ForEach(Array(MathSyntax.sections(content).enumerated()), id: \.offset) { _, mathSection in
+                                    switch mathSection {
+                                    case let .markdown(text):
+                                        ForEach(Array(MarkdownSyntax.parse(text).children.enumerated()), id: \.offset) { _, node in
+                                            block(node)
+                                        }
+                                    case let .block(latex): blockMath(latex)
+                                    }
                                 }
                             case let .definition(definition):
                                 footnoteDefinition(definition)
@@ -76,8 +83,14 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(FootnoteSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
                 switch section {
                 case let .markdown(source):
-                    ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, child in
-                        block(child)
+                    ForEach(Array(MathSyntax.sections(source).enumerated()), id: \.offset) { _, mathSection in
+                        switch mathSection {
+                        case let .markdown(text):
+                            ForEach(Array(MarkdownSyntax.parse(text).children.enumerated()), id: \.offset) { _, child in
+                                block(child)
+                            }
+                        case let .block(latex): blockMath(latex)
+                        }
                     }
                 case let .definition(definition):
                     footnoteDefinition(definition)
@@ -309,6 +322,7 @@ public struct SmoothMarkdownView: View {
     private enum FlowPiece {
         case text(SwiftUI.Text)
         case image(SafeHTML.ImageSpec)
+        case math(String)
         case lineBreak
     }
 
@@ -316,17 +330,18 @@ public struct SmoothMarkdownView: View {
         let runs = InlineContent.runs(in: node, enableHTML: enableHTML)
         let hasImage = runs.contains { if case .image = $0 { return true }; return false }
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
-        if !hasImage && !hasFootnote {
+        let hasMath = runs.contains { if case .math = $0 { return true }; return false }
+        if !hasImage && !hasFootnote && !hasMath {
             return AnyView(inline(node))
         }
-        if !hasImage {
+        if !hasImage && !hasMath {
             var result = SwiftUI.Text("")
             for run in runs {
                 switch run {
                 case let .text(value, sourceStyle, tags, code):
                     result = result + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
                 case let .footnote(label): result = result + footnoteReference(label)
-                case .image: break
+                case .image, .math: break
                 }
             }
             return AnyView(result)
@@ -338,6 +353,8 @@ public struct SmoothMarkdownView: View {
                 pieces.append(.image(image))
             case let .footnote(label):
                 pieces.append(.text(footnoteReference(label)))
+            case let .math(latex):
+                pieces.append(.math(latex))
             case let .text(value, sourceStyle, tags, code):
                 let style = inlineStyle(sourceStyle)
                 var word = ""
@@ -362,6 +379,12 @@ public struct SmoothMarkdownView: View {
                 case let .text(text): text.fixedSize()
                 case let .image(image):
                     imageView(image, inline: true)
+                case let .math(latex):
+                    SwiftUIMath.Math(latex)
+                        .mathTypesettingStyle(.text)
+                        .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
+                        .fixedSize()
+                        .accessibilityLabel(latex)
                 case .lineBreak:
                     Color.clear.frame(width: 0, height: 0)
                         .layoutValue(key: InlineBreakKey.self, value: true)
@@ -376,6 +399,19 @@ public struct SmoothMarkdownView: View {
 
     private func footnoteReference(_ label: String) -> SwiftUI.Text {
         SwiftUI.Text("[\(label)]").font(.system(size: 12)).baselineOffset(5).foregroundColor(.blue)
+    }
+
+    private func blockMath(_ latex: String) -> some View {
+        ScrollView(.horizontal) {
+            SwiftUIMath.Math(latex)
+                .mathTypesettingStyle(.display)
+                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 20))
+                .fixedSize()
+                .accessibilityLabel(latex.isEmpty ? "Empty formula" : latex)
+        }
+        .defaultScrollAnchor(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 
     private func inlineChildren(_ node: Markup, style: InlineStyle, tags: inout [SafeHTML.Tag]) -> SwiftUI.Text {
