@@ -62,6 +62,7 @@ struct DemoChatListView: View {
     @State private var isWaiting = false
     @State private var isStreaming = false
     @State private var replyTask: Task<Void, Never>?
+    @State private var replyStreams = DemoChatReplyStreams()
     @State private var scrollRevision = 0
     @State private var showCacheStatistics = false
     @State private var cacheStatistics = SmoothMarkdownView.cacheStatistics
@@ -103,12 +104,7 @@ struct DemoChatListView: View {
                         messages = [.init(content: fixture.welcome, isUser: false)]
                     }
                 }
-                .onDisappear {
-                    replyTask?.cancel()
-                    replyTask = nil
-                    isWaiting = false
-                    isStreaming = false
-                }
+                .onDisappear { stopReply() }
                 .overlay(alignment: .bottom) {
                     if cacheCleared {
                         Text("Cache cleared successfully")
@@ -182,8 +178,12 @@ struct DemoChatListView: View {
             if !message.isUser { avatar("brain.head.profile", color: .blue) }
             if message.isUser { Spacer(minLength: 36) }
             VStack(alignment: .leading, spacing: 4) {
-                if message.content.isEmpty && message.isStreaming {
-                    ProgressView().accessibilityLabel("Assistant is typing")
+                if message.isStreaming, let stream = replyStreams.stream(for: message.id) {
+                    DemoStreamingMarkdownBubble(stream: stream,
+                                                styleSheet: bubbleStyle(isUser: false),
+                                                plugins: nil,
+                                                emptyLabel: "Assistant is typing",
+                                                onVisibleChange: { scrollRevision += 1 })
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
@@ -265,9 +265,10 @@ struct DemoChatListView: View {
         inputFocused = false
         isWaiting = true
         scrollRevision += 1
+        let currentRunID = replyStreams.runID
         replyTask = Task { @MainActor in
             do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, replyStreams.runID == currentRunID else { return }
             isWaiting = false
             isStreaming = true
             let answer = fixture.responses.randomElement() ?? fixture.responses[0]
@@ -275,25 +276,39 @@ struct DemoChatListView: View {
             let index = messages.count - 1
             // The generated message has its own stable identity; earlier bubbles remain unchanged.
             let messageID = messages[index].id
+            _ = replyStreams.start(messageID: messageID)
             scrollRevision += 1
             let characters = Array(answer)
             var offset = 0
             while offset < characters.count {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, replyStreams.runID == currentRunID else { return }
                 let end = min(offset + Int.random(in: 3...5), characters.count)
-                guard let currentIndex = messages.firstIndex(where: { $0.id == messageID }) else { return }
-                messages[currentIndex].content += String(characters[offset..<end])
+                guard replyStreams.append(String(characters[offset..<end]), to: messageID, in: currentRunID) else { return }
                 offset = end
-                scrollRevision += 1
                 do {
                     try await Task.sleep(nanoseconds: UInt64(Int.random(in: 20...49)) * 1_000_000)
                 } catch { return }
             }
-            if let currentIndex = messages.firstIndex(where: { $0.id == messageID }) {
+            if let fullText = replyStreams.finish(messageID: messageID, in: currentRunID),
+               let currentIndex = messages.firstIndex(where: { $0.id == messageID }) {
+                messages[currentIndex].content = fullText
                 messages[currentIndex].isStreaming = false
             }
             isStreaming = false
             replyTask = nil
+            scrollRevision += 1
         }
+    }
+
+    private func stopReply() {
+        replyTask?.cancel()
+        replyTask = nil
+        let partial = replyStreams.cancelAll()
+        for index in messages.indices where messages[index].isStreaming {
+            messages[index].content = partial[messages[index].id] ?? messages[index].content
+            messages[index].isStreaming = false
+        }
+        isWaiting = false
+        isStreaming = false
     }
 }

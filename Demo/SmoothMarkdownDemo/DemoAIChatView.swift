@@ -72,7 +72,7 @@ struct DemoAIChatView: View {
     @State private var darkOverride: Bool?
     @State private var isStreaming = false
     @State private var streamTask: Task<Void, Never>?
-    @State private var runID = UUID()
+    @State private var replyStreams = DemoChatReplyStreams()
     @State private var scrollRevision = 0
     @State private var showSettings = false
     @State private var source: AIChatSource?
@@ -214,8 +214,12 @@ struct DemoAIChatView: View {
             if !message.isUser { avatar("sparkles", color: .indigo) }
             if message.isUser { Spacer(minLength: 36) }
             VStack(alignment: .leading, spacing: 4) {
-                if message.content.isEmpty && message.isStreaming {
-                    ProgressView().accessibilityLabel("AI 正在输入")
+                if message.isStreaming, let stream = replyStreams.stream(for: message.id) {
+                    DemoStreamingMarkdownBubble(stream: stream,
+                                                styleSheet: bubbleStyle(isUser: false),
+                                                plugins: plugins,
+                                                emptyLabel: "AI 正在输入",
+                                                onVisibleChange: { scrollRevision += 1 })
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
@@ -365,6 +369,7 @@ struct DemoAIChatView: View {
         messages.append(.init(content: text, isUser: true))
         messages.append(.init(content: "", isUser: false, isStreaming: true))
         let messageID = messages[messages.count - 1].id
+        let currentRunID = replyStreams.start(messageID: messageID)
         let liveConfiguration = liveAPIAvailable ? QwenChatRequest(apiKey: apiKey,
                                                                     model: selectedModel,
                                                                     enableThinking: enableThinking) : nil
@@ -372,25 +377,24 @@ struct DemoAIChatView: View {
         inputFocused = false
         isStreaming = true
         scrollRevision += 1
-        runID = UUID()
-        let currentRunID = runID
         streamTask = Task { @MainActor in
             if let liveConfiguration {
                 do {
                     try await QwenChatClient().stream(prompt: text, configuration: liveConfiguration) { fragment in
-                        guard runID == currentRunID,
-                              let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-                        messages[index].content += fragment
-                        scrollRevision += 1
+                        _ = replyStreams.append(fragment, to: messageID, in: currentRunID)
                     }
-                    guard !Task.isCancelled, runID == currentRunID,
+                    guard !Task.isCancelled,
+                          let fullText = replyStreams.finish(messageID: messageID, in: currentRunID),
                           let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    messages[index].content = fullText
                     messages[index].isStreaming = false
                     isStreaming = false
                     streamTask = nil
+                    scrollRevision += 1
                 } catch {
-                    guard !Task.isCancelled, runID == currentRunID,
+                    guard !Task.isCancelled, replyStreams.runID == currentRunID,
                           let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    _ = replyStreams.finish(messageID: messageID, in: currentRunID)
                     messages[index].content = "⚠️ **错误**: \(error.localizedDescription)\n\n请检查 API Key 配置或网络连接。"
                     messages[index].isStreaming = false
                     isStreaming = false
@@ -401,25 +405,31 @@ struct DemoAIChatView: View {
             }
             let response = fixture.response(for: text)
             let units = Array(response.utf16)
-            var end = 0
-            while end < units.count {
-                guard !Task.isCancelled, runID == currentRunID,
-                      let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-                end = min(end + fixture.chunkSizeUTF16, units.count)
-                // Dart String.substring indexes UTF-16 units. Decode each full prefix so a
-                // surrogate pair split by a chunk boundary is corrected on the next update.
-                messages[index].content = String(decoding: units.prefix(end), as: UTF16.self)
-                scrollRevision += 1
+            var offset = 0
+            while offset < units.count {
+                guard !Task.isCancelled, replyStreams.runID == currentRunID else { return }
+                var end = min(offset + fixture.chunkSizeUTF16, units.count)
+                // Preserve a surrogate pair at a UTF-16 chunk boundary so append-only
+                // buffering still produces the exact fixture response at completion.
+                if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]),
+                   (0xDC00...0xDFFF).contains(units[end]) {
+                    end += 1
+                }
+                let fragment = String(decoding: units[offset..<end], as: UTF16.self)
+                guard replyStreams.append(fragment, to: messageID, in: currentRunID) else { return }
+                offset = end
                 do {
                     try await Task.sleep(nanoseconds: fixture.delayMillis * 1_000_000)
                 } catch { return }
             }
-            guard !Task.isCancelled, runID == currentRunID,
+            guard !Task.isCancelled,
+                  let fullText = replyStreams.finish(messageID: messageID, in: currentRunID),
                   let index = messages.firstIndex(where: { $0.id == messageID }) else { return }
-            messages[index].content = response
+            messages[index].content = fullText
             messages[index].isStreaming = false
             isStreaming = false
             streamTask = nil
+            scrollRevision += 1
         }
     }
 
@@ -435,10 +445,11 @@ struct DemoAIChatView: View {
     }
 
     private func stopStreaming() {
-        runID = UUID()
         streamTask?.cancel()
         streamTask = nil
+        let partial = replyStreams.cancelAll()
         for index in messages.indices where messages[index].isStreaming {
+            messages[index].content = partial[messages[index].id] ?? messages[index].content
             messages[index].isStreaming = false
         }
         isStreaming = false
