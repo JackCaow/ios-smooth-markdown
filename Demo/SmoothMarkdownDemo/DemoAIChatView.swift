@@ -130,7 +130,6 @@ struct DemoAIChatView: View {
             }
         }
         .preferredColorScheme(isDark ? .dark : .light)
-        .accessibilityIdentifier("ai-chat-demo")
     }
 
     private var titleBar: some View {
@@ -230,7 +229,6 @@ struct DemoAIChatView: View {
             .background(message.isUser ? Color(red: 0, green: 0.478, blue: 1) : surfaceColor,
                         in: RoundedRectangle(cornerRadius: 20))
             .frame(maxWidth: 310, alignment: message.isUser ? .trailing : .leading)
-            .accessibilityIdentifier(message.isUser ? "ai-chat-user-bubble" : "ai-chat-assistant-bubble")
             if !message.isUser { Spacer(minLength: 36) }
             if message.isUser { avatar("person.fill", color: .gray) }
         }
