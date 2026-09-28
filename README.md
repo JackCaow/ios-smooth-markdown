@@ -13,7 +13,6 @@ Mermaid uses native SwiftUI Canvas for a bounded flowchart and sequence subset. 
 Math uses [SwiftUIMath](https://github.com/gonzalezreal/swiftui-math) 0.1.0 for native SwiftUI typesetting. It supports the library's TeX math subset, including fractions, sums, scripts, Greek letters, and common operators. Full LaTeX documents and arbitrary packages are outside this renderer's scope.
 
 Plugins are disabled unless passed to a reader. `ParserPluginRegistry.builtIns()` enables all eight native plugins; apps can register their own `InlineParserPlugin` or `BlockParserPlugin` implementations with parse and SwiftUI render hooks. Higher priorities run first, duplicate IDs throw, and a plugin returning `nil` lets the next plugin try. For example:
-Plugins are disabled unless passed to a reader. `ParserPluginRegistry.builtIns()` enables the five initial plugins; apps can register their own `InlineParserPlugin` or `BlockParserPlugin` implementations with parse and SwiftUI render hooks. Higher priorities run first, duplicate IDs throw, and a plugin returning `nil` lets the next plugin try. For example:
 
 ```swift
 let plugins = ParserPluginRegistry.builtIns()
@@ -21,6 +20,8 @@ SmoothMarkdownView(markdown: "Hi @alice :wave:", plugins: plugins)
 ```
 
 The AI block plugins recognize `<thinking>`/`<think>`/`<|thinking|>` (collapsed by default), `<artifact identifier="..." type="...">`, and `<tool_use>` with `<tool_name>`, optional `<tool_id>`, and `<input>`. Thinking content is shown as selectable text when expanded. Artifact cards show the type/title, let users copy exact content, and support an `onArtifactTap` callback. Tool-call cards show the name and pending status, with expandable parameters and an `onToolCallTap` callback. All three accept an omitted closing tag by consuming through the document end, matching the Flutter parser. Fenced code blocks are protected from plugin parsing. Flutter's parser creates tool calls in pending status; updates to results/status and artifact file download remain future work.
+
+The experimental `MarkdownDocumentCodec` keeps original Markdown bytes and whitespace for untouched blocks. This first semantic model recognizes paragraphs, ATX headings, fenced code, and horizontal rules; frontmatter, lists, tables, HTML, math, and other constructs remain source-preserving raw blocks. `MarkdownDocumentEditor` supports top-level content replacement and block moves with undo/redo. `MarkdownEditorController.semanticDocument` exposes a snapshot, and `replaceSemanticBlockContent(id:with:)` applies a supported edit through its existing undo stack. Inline rich-text marks, nested semantic blocks, structural paste/split, selection mapping, and stable IDs across reparsing remain future work.
 
 Run `swift test` for the package. Run `cd Demo && xcodegen generate`, then open `SmoothMarkdownDemo.xcodeproj` for the demo.
 

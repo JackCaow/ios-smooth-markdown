@@ -31,6 +31,20 @@ public final class MarkdownEditorController: ObservableObject {
     public var canRedo: Bool { !redoStack.isEmpty }
     public var selectedText: String { (text as NSString).substring(with: normalizedSelection()) }
 
+    /// A source-preserving semantic snapshot for supported top-level blocks.
+    public var semanticDocument: MarkdownDocument { MarkdownDocumentCodec().parse(text) }
+
+    /// Applies one semantic body edit through the existing source undo history.
+    @discardableResult
+    public func replaceSemanticBlockContent(id: String, with content: String) -> Bool {
+        let document = semanticDocument
+        guard let block = document.blockById(id), let replacement = block.replacingContent(content) else { return false }
+        let updated = document.replacingBlock(replacement).toMarkdown()
+        guard updated != text else { return false }
+        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
+        return true
+    }
+
     public func markSaved(_ saved: String? = nil) { savedText = saved ?? text }
     public func clearHistory() { undoStack.removeAll(); redoStack.removeAll() }
 
