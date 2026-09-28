@@ -12,6 +12,7 @@ public struct SmoothMarkdownView: View {
     public let codeBlockOptions: CodeBlockOptions
     public let onCodeCopy: ((String, String?) -> Void)?
     public let styleSheet: MarkdownStyleSheet
+    public let plugins: ParserPluginRegistry?
 
     public init(
         markdown: String,
@@ -20,7 +21,8 @@ public struct SmoothMarkdownView: View {
         enableHTML: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
-        styleSheet: MarkdownStyleSheet = .default()
+        styleSheet: MarkdownStyleSheet = .default(),
+        plugins: ParserPluginRegistry? = nil
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
@@ -29,6 +31,7 @@ public struct SmoothMarkdownView: View {
         self.codeBlockOptions = codeBlockOptions
         self.onCodeCopy = onCodeCopy
         self.styleSheet = styleSheet
+        self.plugins = plugins
     }
 
     public var body: some View {
@@ -61,10 +64,21 @@ public struct SmoothMarkdownView: View {
     private func detailsSection(_ section: DetailsSyntax.Section) -> some View {
         switch section {
         case let .markdown(source):
+            ForEach(Array(PluginBlockSyntax.sections(source, registry: plugins).enumerated()), id: \.offset) { _, item in
+                pluginSection(item)
+            }
+        case let .details(details): detailsBlock(details)
+        }
+    }
+
+    @ViewBuilder
+    private func pluginSection(_ section: PluginBlockSyntax.Section) -> some View {
+        switch section {
+        case let .markdown(source):
             ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, item in
                 footnoteSection(item)
             }
-        case let .details(details): detailsBlock(details)
+        case let .plugin(plugin, match): plugin.render(match)
         }
     }
 
@@ -97,8 +111,8 @@ public struct SmoothMarkdownView: View {
         return DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
             if let summaryNode { inlineView(summaryNode) }
         }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-            ForEach(Array(FootnoteSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
-                footnoteSection(section)
+            ForEach(Array(PluginBlockSyntax.sections(details.content, registry: plugins).enumerated()), id: \.offset) { _, section in
+                pluginSection(section)
             }
         }))
     }
@@ -334,25 +348,27 @@ public struct SmoothMarkdownView: View {
         case text(SwiftUI.Text)
         case image(SafeHTML.ImageSpec)
         case math(String)
+        case plugin(any InlineParserPlugin, InlinePluginMatch)
         case lineBreak
     }
 
     private func inlineView(_ node: Markup) -> AnyView {
-        let runs = InlineContent.runs(in: node, enableHTML: enableHTML)
+        let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins)
         let hasImage = runs.contains { if case .image = $0 { return true }; return false }
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }
-        if !hasImage && !hasFootnote && !hasMath {
+        let hasPlugin = runs.contains { if case .plugin = $0 { return true }; return false }
+        if !hasImage && !hasFootnote && !hasMath && !hasPlugin {
             return AnyView(inline(node))
         }
-        if !hasImage && !hasMath {
+        if !hasImage && !hasMath && !hasPlugin {
             var result = SwiftUI.Text("")
             for run in runs {
                 switch run {
                 case let .text(value, sourceStyle, tags, code):
                     result = result + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
                 case let .footnote(label): result = result + footnoteReference(label)
-                case .image, .math: break
+                case .image, .math, .plugin: break
                 }
             }
             return AnyView(result)
@@ -366,6 +382,8 @@ public struct SmoothMarkdownView: View {
                 pieces.append(.text(footnoteReference(label)))
             case let .math(latex):
                 pieces.append(.math(latex))
+            case let .plugin(plugin, match):
+                pieces.append(.plugin(plugin, match))
             case let .text(value, sourceStyle, tags, code):
                 let style = inlineStyle(sourceStyle)
                 var word = ""
@@ -396,6 +414,8 @@ public struct SmoothMarkdownView: View {
                         .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
                         .fixedSize()
                         .accessibilityLabel(latex)
+                case let .plugin(plugin, match):
+                    plugin.render(match).fixedSize()
                 case .lineBreak:
                     Color.clear.frame(width: 0, height: 0)
                         .layoutValue(key: InlineBreakKey.self, value: true)

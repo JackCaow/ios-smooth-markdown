@@ -6,6 +6,12 @@ private let demoMarkdown = """
 
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+Plugins: hello @john_doe, explore #swiftui, and wave :wave:.
+
+::: tip Native plugins
+Mention, hashtag, emoji, and admonition parsers are enabled in this demo.
+:::
+
 Inline math: $E=mc^2$ and $\\frac{a}{b}$.
 
 $$
@@ -79,6 +85,7 @@ private struct DemoContentView: View {
     @State private var showEditor = false
     @State private var enableHTML = false
     @State private var themeIndex = 0
+    private let plugins = ParserPluginRegistry.builtIns()
     private let themes: [(String, MarkdownStyleSheet)] = [
         ("System", .default()), ("Light", .light()), ("Dark", .dark()),
         ("GitHub", .github()), ("GitHub dark", .github(dark: true)),
@@ -105,7 +112,7 @@ private struct DemoContentView: View {
                 SmoothMarkdownEditor(controller: controller)
             } else {
                 SmoothMarkdownView(markdown: controller.text, enableHTML: enableHTML,
-                                   styleSheet: themes[themeIndex].1)
+                                   styleSheet: themes[themeIndex].1, plugins: plugins)
             }
         }
     }

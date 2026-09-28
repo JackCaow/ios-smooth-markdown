@@ -10,23 +10,24 @@ enum InlineContent {
         var link: URL?
     }
 
-    enum Run: Equatable {
+    enum Run {
         case text(String, Style, [SafeHTML.Tag], code: Bool)
         case image(SafeHTML.ImageSpec)
         case footnote(String)
         case math(String)
+        case plugin(any InlineParserPlugin, InlinePluginMatch)
     }
 
-    static func runs(in node: Markup, enableHTML: Bool) -> [Run] {
+    static func runs(in node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry? = nil) -> [Run] {
         var result: [Run] = []
         var tags: [SafeHTML.Tag] = []
-        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, to: &result)
+        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: plugins, to: &result)
         return result
     }
 
     private static func append(
         _ node: Markup, style: Style, tags: inout [SafeHTML.Tag],
-        enableHTML: Bool, to result: inout [Run]
+        enableHTML: Bool, plugins: ParserPluginRegistry?, to result: inout [Run]
     ) {
         for child in node.children {
             if let html = child as? InlineHTML {
@@ -55,16 +56,22 @@ enum InlineContent {
                 continue
             }
             if let text = child as? Markdown.Text {
-                for part in FootnoteSyntax.parts(in: text.string) {
-                    switch part {
-                    case let .text(value):
-                        for math in MathSyntax.inlineParts(in: value) {
-                            switch math {
-                            case let .text(plain): result.append(.text(plain, style, tags, code: false))
-                            case let .math(latex): result.append(.math(latex))
+                for pluginPart in PluginInlineSyntax.parts(in: text.string, registry: plugins) {
+                    switch pluginPart {
+                    case let .plugin(plugin, match): result.append(.plugin(plugin, match))
+                    case let .text(source):
+                        for part in FootnoteSyntax.parts(in: source) {
+                            switch part {
+                            case let .text(value):
+                                for math in MathSyntax.inlineParts(in: value) {
+                                    switch math {
+                                    case let .text(plain): result.append(.text(plain, style, tags, code: false))
+                                    case let .math(latex): result.append(.math(latex))
+                                    }
+                                }
+                            case let .reference(label): result.append(.footnote(label))
                             }
                         }
-                    case let .reference(label): result.append(.footnote(label))
                     }
                 }
             } else if let code = child as? InlineCode {
@@ -86,7 +93,7 @@ enum InlineContent {
                    let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) {
                     nested.link = url
                 }
-                append(child, style: nested, tags: &tags, enableHTML: enableHTML, to: &result)
+                append(child, style: nested, tags: &tags, enableHTML: enableHTML, plugins: plugins, to: &result)
             }
         }
     }
