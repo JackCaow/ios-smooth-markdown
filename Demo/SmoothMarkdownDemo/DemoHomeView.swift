@@ -132,6 +132,8 @@ struct DemoHomeView: View {
             DemoAIChatView(parentIsDark: theme.isDark)
         } else if currentFeature == .conversationList {
             DemoConversationListView()
+        } else if currentFeature == .plugins, let markdown {
+            DemoPluginView(markdown: markdown, styleSheet: theme.styleSheet)
         } else if let markdown {
             VStack(spacing: 0) {
                 if let linkMessage {
