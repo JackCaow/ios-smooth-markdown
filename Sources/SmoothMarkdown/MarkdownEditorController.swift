@@ -53,7 +53,7 @@ public final class MarkdownEditorController: ObservableObject {
         guard let block = document.blockById(id), let sourceRange = document.sourceRange(of: id) else { return nil }
         switch block.kind {
         case .paragraph, .heading: break
-        case .fencedCode, .table, .horizontalRule, .raw: return nil
+        case .fencedCode, .table, .list, .horizontalRule, .raw: return nil
         }
         let oldBody = block.plainText
         guard let edit = MarkdownInlineMarkEditor.apply(mark, to: oldBody, selection: selection),
@@ -84,6 +84,14 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func updateSemanticTable(id: String, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> Bool {
         guard let updated = semanticDocument.updatingTable(id, transform)?.toMarkdown(), updated != text else { return false }
+        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
+        return true
+    }
+
+    /// Edits a supported list item through the same source history as other Blocks edits.
+    @discardableResult
+    public func updateSemanticList(id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> Bool {
+        guard let updated = semanticDocument.updatingList(id, transform)?.toMarkdown(), updated != text else { return false }
         replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
         return true
     }

@@ -49,6 +49,11 @@ public struct MarkdownDocumentCodec {
             case .horizontalRule:
                 kind = .horizontalRule
                 index += 1
+            case .list:
+                index += 1
+                while index < lines.count && !lines[index].isBlank && !isDefiniteBreak(lines[index].text) { index += 1 }
+                let source = lines[start..<index].map(\.raw).joined()
+                kind = MarkdownSourceList.parse(source).map(MarkdownSemanticBlock.list) ?? .raw
             case .raw:
                 index += 1
                 if start == 0 && lines[start].text.trimmingCharacters(in: .whitespaces) == "---" {
@@ -83,6 +88,7 @@ public struct MarkdownDocumentCodec {
         case heading(Int, String)
         case fence(Character, Int, String)
         case horizontalRule
+        case list
         case raw
     }
 
@@ -96,6 +102,7 @@ public struct MarkdownDocumentCodec {
             if count >= 3 { return .fence(marker, count, String(trimmed.dropFirst(count))) }
         }
         if isRule(trimmed) { return .horizontalRule }
+        if MarkdownSourceList.isListStart(line) { return .list }
         if match(#"^(?: {0,3}(?:>|[-*+]\s+|[0-9]+[.)]\s+|\$\$|<|\|)|\t)"#, in: line) != nil { return .raw }
         return .paragraph
     }
@@ -116,7 +123,7 @@ public struct MarkdownDocumentCodec {
     private func isDefiniteBreak(_ line: String) -> Bool {
         switch classify(line) {
         case .heading, .fence, .horizontalRule: true
-        case .paragraph, .raw: false
+        case .paragraph, .list, .raw: false
         }
     }
 

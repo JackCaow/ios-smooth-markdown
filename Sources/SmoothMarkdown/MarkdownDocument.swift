@@ -6,6 +6,7 @@ public enum MarkdownSemanticBlock: Equatable {
     case heading(level: Int, markdown: String)
     case fencedCode(fence: String, info: String, code: String)
     case table(MarkdownSourceTable)
+    case list(MarkdownSourceList)
     case horizontalRule
     case raw
 }
@@ -29,6 +30,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
         case let .paragraph(markdown), let .heading(_, markdown): markdown
         case let .fencedCode(_, _, code): code
         case let .table(table): table.toMarkdown()
+        case let .list(list): list.items.map(\.content).joined(separator: "\n")
         case .horizontalRule: ""
         case .raw: source
         }
@@ -61,7 +63,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
             let rendered = opener + content + (content.hasSuffix(newline) || content.isEmpty ? "" : newline) + closer
             return validated(.init(id: id, kind: .fencedCode(fence: fence, info: info, code: content),
                                    source: rendered, leadingTrivia: leadingTrivia))
-        case .table, .horizontalRule, .raw: return nil
+        case .table, .list, .horizontalRule, .raw: return nil
         }
     }
 
@@ -145,6 +147,15 @@ public struct MarkdownDocument: Equatable {
         let newline = block.source.contains("\r\n") ? "\r\n" : "\n"
         let source = updated.toMarkdown().replacingOccurrences(of: "\n", with: newline) + ending
         let replacement = MarkdownDocumentBlock(id: id, kind: .table(updated), source: source,
+                                                leadingTrivia: block.leadingTrivia)
+        return replacingBlock(replacement)
+    }
+
+    /// Applies a one-line list item edit while preserving every marker and untouched source line.
+    public func updatingList(_ id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> MarkdownDocument? {
+        guard let block = blockById(id), case let .list(list) = block.kind,
+              let updated = transform(list), updated != list else { return nil }
+        let replacement = MarkdownDocumentBlock(id: id, kind: .list(updated), source: updated.toMarkdown(),
                                                 leadingTrivia: block.leadingTrivia)
         return replacingBlock(replacement)
     }

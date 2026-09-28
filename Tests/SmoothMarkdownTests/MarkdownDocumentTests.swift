@@ -29,7 +29,7 @@ final class MarkdownDocumentTests: XCTestCase {
 
         <custom data-x="a">*do not normalize*</custom>
 
-        - [x] Keep this list raw
+        - [x] Keep this list source
         - [ ] Second item
 
         """
@@ -41,7 +41,8 @@ final class MarkdownDocumentTests: XCTestCase {
             .heading(level: 1, markdown: "Heading *style*"),
             .paragraph(markdown: "Paragraph with [link](https://example.com) and `code`.\nContinuation line."),
             .fencedCode(fence: "~~~~", info: "swift title=Demo", code: "let value = 1"),
-            .horizontalRule, .raw, .raw,
+            .horizontalRule, .raw,
+            .list(MarkdownSourceList.parse("- [x] Keep this list source\n- [ ] Second item\n")!),
         ])
         XCTAssertEqual(Set(document.blocks.map(\.id)).count, document.blocks.count)
     }

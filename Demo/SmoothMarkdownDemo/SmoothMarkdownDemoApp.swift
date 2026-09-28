@@ -257,6 +257,7 @@ title Work split
 """
 
 private let inlineEditorFixture = "Alpha"
+private let listEditorFixture = "7. First\n8. Second\n\n- [ ] Task"
 
 @main
 struct SmoothMarkdownDemoApp: App {
@@ -267,8 +268,10 @@ struct SmoothMarkdownDemoApp: App {
 
 private struct DemoContentView: View {
     @StateObject private var controller = MarkdownEditorController(
-        text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture : demoMarkdown)
-    @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture")
+        text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture :
+            (ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ? listEditorFixture : demoMarkdown))
+    @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--list-editor-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
     @State private var showSelection = false
@@ -331,7 +334,8 @@ private struct DemoContentView: View {
             }
         }
         .onAppear {
-            if ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") {
+            if ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") {
                 controller.mode = .formatted
             }
         }

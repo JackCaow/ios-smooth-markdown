@@ -131,6 +131,8 @@ private struct FormattedBlockRow: View {
                     .accessibilityIdentifier("code-\(block.id)")
             case let .table(table):
                 FormattedTableView(controller: controller, blockID: block.id, table: table)
+            case let .list(list):
+                FormattedListView(controller: controller, blockID: block.id, list: list)
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
@@ -310,6 +312,44 @@ private struct FormattedTableCell: View {
                 $0.replacingCell(rowIndex: row, columnIndex: column, text: value, header: isHeader)
             }
         })
+    }
+}
+
+@available(iOS 17.0, *)
+private struct FormattedListView: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let list: MarkdownSourceList
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(list.items.indices, id: \.self) { index in
+                let item = list.items[index]
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if let checked = item.checked {
+                        Button {
+                            controller.updateSemanticList(id: blockID) { $0.settingTaskChecked(at: index, to: !checked) }
+                        } label: {
+                            Image(systemName: checked ? "checkmark.square" : "square")
+                        }
+                        .accessibilityLabel(checked ? "Mark item \(index + 1) incomplete" : "Mark item \(index + 1) complete")
+                    } else {
+                        Text(item.marker).font(.system(.body, design: .monospaced))
+                    }
+                    TextField("List item", text: Binding(get: {
+                        guard let block = controller.semanticDocument.blockById(blockID),
+                              case let .list(current) = block.kind,
+                              current.items.indices.contains(index) else { return item.content }
+                        return current.items[index].content
+                    }, set: { value in
+                        controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
+                    }))
+                    .accessibilityIdentifier("list-\(blockID)-item-\(index)")
+                }
+                .padding(.leading, CGFloat(item.indent.count) * 8)
+            }
+        }
     }
 }
 
