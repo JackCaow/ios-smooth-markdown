@@ -6,6 +6,8 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
     public let onError: ((Error) -> Void)?
+    /// Called after the final chunk has been published to the reader.
+    public let onComplete: ((String) -> Void)?
     public let streamID: String?
     public let throttleMillis: Int64
     public let enableHTML: Bool
@@ -26,6 +28,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil,
+        onComplete: ((String) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil
     ) {
@@ -36,6 +39,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onError = onError
+        self.onComplete = onComplete
         self.codeBlockOptions = codeBlockOptions
         self.onCodeCopy = onCodeCopy
         self.styleSheet = styleSheet
@@ -54,7 +58,10 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                         if Task.isCancelled { break }
                         accumulator.append(chunk)
                     }
-                    if !Task.isCancelled { accumulator.finish() }
+                    if !Task.isCancelled {
+                        accumulator.finish()
+                        onComplete?(accumulator.visibleText)
+                    }
                 } catch is CancellationError {
                     accumulator.cancel()
                 } catch {

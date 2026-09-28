@@ -12,6 +12,8 @@ targets:
     platform: iOS
     sources:
       - SmoothMarkdownDemo
+      - path: ../Tests/SmoothMarkdownTests/Fixtures/FlutterREADME.md
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo
@@ -33,5 +35,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.uitests
         SWIFT_VERSION: '5.9'
         CODE_SIGNING_ALLOWED: NO
+    dependencies:
+      - target: SmoothMarkdownDemo
+  SmoothMarkdownPerformanceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests
     dependencies:
       - target: SmoothMarkdownDemo

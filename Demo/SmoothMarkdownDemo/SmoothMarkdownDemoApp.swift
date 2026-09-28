@@ -260,6 +260,7 @@ private struct DemoContentView: View {
     @State private var enableHTML = false
     @State private var showStructured = false
     @State private var showSelection = false
+    @State private var showPerformance = false
     @State private var themeIndex = 0
     @State private var imageTapCount = 0
     private let plugins = ParserPluginRegistry.builtIns()
@@ -280,7 +281,7 @@ private struct DemoContentView: View {
         VStack(spacing: 0) {
             HStack {
                 Button(showEditor ? "Read" : "Open editor") { showEditor.toggle() }
-                if !showEditor {
+                if !showEditor && !showPerformance {
                     Button(showStructured ? "Show all" : "Structured") {
                         showStructured.toggle()
                         if showStructured { showSelection = false }
@@ -296,11 +297,14 @@ private struct DemoContentView: View {
                         }
                     }
                 }
+                Button(showPerformance ? "Close perf" : "Perf") { showPerformance.toggle() }
                 Spacer()
             }
             .padding(.horizontal)
             .padding(.vertical, 8)
-            if showEditor {
+            if showPerformance {
+                PerformanceDemoView()
+            } else if showEditor {
                 SmoothMarkdownEditor(controller: controller)
             } else {
                 SmoothMarkdownView(markdown: showSelection ? selectionMarkdown :

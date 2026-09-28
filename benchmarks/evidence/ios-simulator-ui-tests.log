@@ -1,0 +1,17 @@
+iPhone 17 Pro Simulator, iOS 26.0, Xcode 26.0.1, Debug
+Flutter README x4: 68,282 UTF-8 bytes
+
+PERF_UI rapidStream throttle=50 frames=568 p95=16.7 ms >25ms=19 max=60.6 ms RSS=59 MiB
+PERF_UI rapidStream throttle=50 First appear: 7 ms
+Test Case '-[SmoothMarkdownPerformanceUITests.PerformanceUITests testRapidStreamCompletes]' passed (16.676 seconds).
+PERF_UI rapidStream throttle=150 frames=575 p95=16.7 ms >25ms=9 max=64.6 ms RSS=59 MiB
+PERF_UI rapidStream throttle=150 First appear: 8 ms
+Test Case '-[SmoothMarkdownPerformanceUITests.PerformanceUITests testRapidStreamWithLongerThrottleCompletes]' passed (16.755 seconds).
+PERF_UI static First appear: 90 ms
+PERF_UI staticScroll frames=1983 p95=16.7 ms >25ms=22 max=163.5 ms RSS=103 MiB
+Test Case '-[SmoothMarkdownPerformanceUITests.PerformanceUITests testStaticReaderScroll]' passed (43.466 seconds).
+** TEST SUCCEEDED **
+
+Final reader buffer verification:
+2026-09-28 23:29:12.119 Df SmoothMarkdownDemo[52623:7f6f67] (Foundation) PERF visibleComplete throttleMs=50 bytes=68282 exact=1
+2026-09-28 23:29:28.118 Df SmoothMarkdownDemo[52765:7f72f7] (Foundation) PERF visibleComplete throttleMs=150 bytes=68282 exact=1
