@@ -66,7 +66,9 @@ final class DemoExamplesUITests: XCTestCase {
         ]
         for (id, title) in features {
             choose("feature-\(id)", in: app)
-            XCTAssertEqual(app.staticTexts["demo-current-title"].label, title)
+            XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
+                .matching(NSPredicate(format: "label == %@", title))
+                .firstMatch.exists)
             XCTAssertTrue(app.buttons["demo-feature-back"].exists)
             app.buttons["demo-feature-back"].tap()
             XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
@@ -109,7 +111,9 @@ final class DemoExamplesUITests: XCTestCase {
         app.buttons["VS Code Dark"].tap()
 
         choose("feature-math", in: app)
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Math Formula Demo")
+        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
+            .matching(NSPredicate(format: "label == %@", "Math Formula Demo"))
+            .firstMatch.exists)
         app.buttons["demo-feature-back"].tap()
 
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Headers")
@@ -124,6 +128,7 @@ final class DemoExamplesUITests: XCTestCase {
         for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.exists, "Missing navigation entry: \(identifier)")
         entry.tap()
-        XCTAssertTrue(app.staticTexts["demo-current-title"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
+            .firstMatch.waitForExistence(timeout: 5))
     }
 }

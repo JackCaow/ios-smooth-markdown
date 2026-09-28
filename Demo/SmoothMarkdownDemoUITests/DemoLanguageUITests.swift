@@ -35,7 +35,9 @@ final class DemoLanguageUITests: XCTestCase {
         }
 
         choosePage("feature-math", app: app)
-        XCTAssertEqual(title.label, "Math Formula Demo")
+        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
+            .matching(NSPredicate(format: "label == %@", "Math Formula Demo"))
+            .firstMatch.exists)
         app.buttons["demo-feature-back"].tap()
         choosePage("example-headers", app: app)
         XCTAssertEqual(title.label, "Headers")

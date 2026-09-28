@@ -1,14 +1,17 @@
 import SmoothMarkdown
 import SwiftUI
 
-private struct EditorSession: Identifiable {
+private struct EditorSession: Identifiable, Hashable {
     let id = UUID()
     let controller: MarkdownEditorController
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 
 private enum DemoRoute: Hashable {
     case feature(DemoFeature)
-    case editor(UUID)
+    case editor(EditorSession)
 }
 
 /// Native companion to the Flutter example's sample drawer and feature pages.
@@ -20,7 +23,6 @@ struct DemoHomeView: View {
     @State private var language: DemoLanguage = .zh
     @State private var showNavigation = false
     @State private var showSource = false
-    @State private var editorSession: EditorSession?
     @State private var openEditorAfterNavigation = false
     @State private var openFeatureAfterNavigation: DemoFeature?
     @State private var routePath: [DemoRoute] = []
@@ -105,10 +107,8 @@ struct DemoHomeView: View {
                 switch route {
                 case let .feature(feature):
                     featurePage(feature)
-                case let .editor(id):
-                    if let session = editorSession, session.id == id {
-                        editorPage(session)
-                    }
+                case let .editor(session):
+                    editorPage(session)
                 }
             }
         }
@@ -118,9 +118,7 @@ struct DemoHomeView: View {
     private func openEditor() {
         let controller = MarkdownEditorController(text: pageCatalog.pages["editor"] ?? markdown ?? "")
         controller.mode = .formatted
-        let session = EditorSession(controller: controller)
-        editorSession = session
-        routePath.append(.editor(session.id))
+        routePath.append(.editor(EditorSession(controller: controller)))
     }
 
     private func editorPage(_ session: EditorSession) -> some View {
@@ -130,9 +128,7 @@ struct DemoHomeView: View {
             .navigationBarBackButtonHidden()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        routePath.removeLast()
-                    } label: {
+                    Button { routePath.removeLast() } label: {
                         Label(DemoLocalizations.text("back", in: language), systemImage: "chevron.left")
                     }
                     .accessibilityIdentifier("demo-editor-back")
@@ -195,15 +191,12 @@ struct DemoHomeView: View {
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    routePath.removeLast()
-                } label: {
+                Button { routePath.removeLast() } label: {
                     Label(DemoLocalizations.text("back", in: language), systemImage: "chevron.left")
                 }
                 .accessibilityIdentifier("demo-feature-back")
             }
         }
-        .accessibilityIdentifier("demo-feature-page")
     }
 
     @ViewBuilder
