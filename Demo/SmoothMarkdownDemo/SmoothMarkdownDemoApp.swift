@@ -8,6 +8,12 @@ A **native** renderer with *inline formatting* and [links](https://github.com/Ja
 
 > The source editor now supports formatting commands and preview.
 
+Footnotes have named[^note] and numeric[^2] references.
+
+[^note]: A **formatted** footnote
+    With a continuation line
+[^2]: A second footnote
+
 HTML: <b>bold</b> and <span style="color:red">red</span>.
 
 Mixed Markdown: before ![inline GitHub logo](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png) after the image.

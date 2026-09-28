@@ -13,6 +13,7 @@ enum InlineContent {
     enum Run: Equatable {
         case text(String, Style, [SafeHTML.Tag], code: Bool)
         case image(SafeHTML.ImageSpec)
+        case footnote(String)
     }
 
     static func runs(in node: Markup, enableHTML: Bool) -> [Run] {
@@ -53,7 +54,12 @@ enum InlineContent {
                 continue
             }
             if let text = child as? Markdown.Text {
-                result.append(.text(text.string, style, tags, code: false))
+                for part in FootnoteSyntax.parts(in: text.string) {
+                    switch part {
+                    case let .text(value): result.append(.text(value, style, tags, code: false))
+                    case let .reference(label): result.append(.footnote(label))
+                    }
+                }
             } else if let code = child as? InlineCode {
                 result.append(.text(code.code, style, tags, code: true))
             } else if child is SoftBreak || child is LineBreak {

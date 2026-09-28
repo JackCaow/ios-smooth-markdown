@@ -31,4 +31,9 @@ final class MarkdownSyntaxTests: XCTestCase {
         XCTAssertFalse(MarkdownSyntax.isSafeImage(URL(string: "file:///etc/passwd")!))
         XCTAssertTrue(MarkdownSyntax.isSafeImage(URL(string: "https://example.com/a.png")!))
     }
+
+    func testFootnoteReferenceRemainsLiteralTextForDedicatedParser() {
+        let paragraph = MarkdownSyntax.parse("Text[^one] and[^2] end").child(at: 0)!
+        XCTAssertEqual((paragraph.child(at: 0) as? Markdown.Text)?.string, "Text[^one] and[^2] end")
+    }
 }

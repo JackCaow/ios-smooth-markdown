@@ -21,11 +21,18 @@ public struct SmoothMarkdownView: View {
     }
 
     public var body: some View {
-        let document = MarkdownSyntax.parse(markdown)
+        let sections = FootnoteSyntax.sections(markdown)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(document.children.enumerated()), id: \.offset) { _, node in
-                    block(node)
+                ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
+                    switch section {
+                    case let .markdown(source):
+                        ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in
+                            block(node)
+                        }
+                    case let .definition(definition):
+                        footnoteDefinition(definition)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -43,6 +50,17 @@ public struct SmoothMarkdownView: View {
 
     private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {
         AnyView(blockContent(node, alignment: alignment))
+    }
+
+    private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            SwiftUI.Text("[\(definition.label)]: ").bold().foregroundColor(.blue)
+            if let content = MarkdownSyntax.parse(definition.content).child(at: 0) {
+                inlineView(content).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.leading, 16)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
@@ -251,17 +269,32 @@ public struct SmoothMarkdownView: View {
 
     private func inlineView(_ node: Markup) -> AnyView {
         let runs = InlineContent.runs(in: node, enableHTML: enableHTML)
-        guard runs.contains(where: { if case .image = $0 { return true }; return false }) else {
+        let hasImage = runs.contains { if case .image = $0 { return true }; return false }
+        let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
+        if !hasImage && !hasFootnote {
             return AnyView(inline(node))
+        }
+        if !hasImage {
+            var result = SwiftUI.Text("")
+            for run in runs {
+                switch run {
+                case let .text(value, sourceStyle, tags, code):
+                    result = result + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
+                case let .footnote(label): result = result + footnoteReference(label)
+                case .image: break
+                }
+            }
+            return AnyView(result)
         }
         var pieces: [FlowPiece] = []
         for run in runs {
             switch run {
             case let .image(image):
                 pieces.append(.image(image))
+            case let .footnote(label):
+                pieces.append(.text(footnoteReference(label)))
             case let .text(value, sourceStyle, tags, code):
-                let style = InlineStyle(bold: sourceStyle.bold, italic: sourceStyle.italic,
-                                        strike: sourceStyle.strike, link: sourceStyle.link)
+                let style = inlineStyle(sourceStyle)
                 var word = ""
                 for character in value {
                     if character == "\n" {
@@ -292,6 +325,14 @@ public struct SmoothMarkdownView: View {
                 }
             }
         })
+    }
+
+    private func inlineStyle(_ source: InlineContent.Style) -> InlineStyle {
+        InlineStyle(bold: source.bold, italic: source.italic, strike: source.strike, link: source.link)
+    }
+
+    private func footnoteReference(_ label: String) -> SwiftUI.Text {
+        SwiftUI.Text("[\(label)]").font(.system(size: 12)).baselineOffset(5).foregroundColor(.blue)
     }
 
     private func inlineChildren(_ node: Markup, style: InlineStyle, tags: inout [SafeHTML.Tag]) -> SwiftUI.Text {
