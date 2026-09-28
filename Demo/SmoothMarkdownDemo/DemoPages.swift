@@ -63,7 +63,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
         switch self {
         case .aiChat: "Local plugin fixture; no Qwen API"
         case .chatList: "Interactive local chat"
-        case .conversationList: "Interaction demo not ported"
+        case .conversationList: "12 conversations from Flutter example"
         case .performance: "68 KB reader fixture"
         default: nil
         }

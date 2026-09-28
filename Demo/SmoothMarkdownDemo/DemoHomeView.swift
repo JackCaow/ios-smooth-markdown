@@ -129,9 +129,7 @@ struct DemoHomeView: View {
         } else if currentFeature == .chatList {
             DemoChatListView(parentIsDark: theme.isDark)
         } else if currentFeature == .conversationList {
-            ContentUnavailableView(DemoFeature.conversationList.localizedTitle(in: language),
-                                   systemImage: "bubble.left.and.bubble.right",
-                                   description: Text(DemoLocalizations.text("conversation_unported", in: language)))
+            DemoConversationListView()
         } else if let markdown {
             VStack(spacing: 0) {
                 if let linkMessage {
