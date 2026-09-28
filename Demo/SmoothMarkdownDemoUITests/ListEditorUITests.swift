@@ -1,6 +1,27 @@
 import XCTest
 
 final class ListEditorUITests: XCTestCase {
+    func testIndentAndOutdentControlsChangeNestedListLevel() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--nested-list-editor-fixture"]
+        app.launch()
+
+        let outdent = app.buttons["Outdent item 2"]
+        XCTAssertTrue(outdent.waitForExistence(timeout: 10))
+        outdent.tap()
+        app.segmentedControls.buttons["Source"].tap()
+        let source = app.textViews["markdown-source"]
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertEqual(source.value as? String, "- Parent\n- Child\n  continuation\n- Sibling")
+
+        app.segmentedControls.buttons["Blocks"].tap()
+        let indent = app.buttons["Indent item 2"]
+        XCTAssertTrue(indent.waitForExistence(timeout: 5))
+        indent.tap()
+        app.segmentedControls.buttons["Source"].tap()
+        XCTAssertEqual(source.value as? String, "- Parent\n  - Child\n    continuation\n- Sibling")
+    }
+
     func testNestedListItemAndContinuationEditUndoRedoInBlocks() {
         let app = XCUIApplication()
         app.launchArguments = ["--nested-list-editor-fixture"]

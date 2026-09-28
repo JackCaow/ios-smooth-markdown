@@ -83,4 +83,33 @@ final class SourceListEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, source)
         XCTAssertTrue(controller.canRedo)
     }
+
+    @MainActor
+    func testIndentAndOutdentMoveNestedSubtreeWithoutRewritingOtherSource() {
+        let source = "# Title\r\n\r\n- Parent\r\n- Child\r\n  continuation\r\n  - Grandchild\r\n- After\r\n\r\nEnd\r\n"
+        let controller = MarkdownEditorController(text: source)
+        let indented = "# Title\r\n\r\n- Parent\r\n  - Child\r\n    continuation\r\n    - Grandchild\r\n- After\r\n\r\nEnd\r\n"
+
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") { $0.indentingItem(at: 1) })
+        XCTAssertEqual(controller.text, indented)
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") { $0.outdentingItem(at: 1) })
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, indented)
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, source)
+    }
+
+    @MainActor
+    func testIndentRejectsFirstItemAndOutdentRejectsRootItem() {
+        let source = "- Parent\n- Child\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertFalse(controller.updateSemanticList(id: "block-0") { $0.indentingItem(at: 0) })
+        XCTAssertFalse(controller.updateSemanticList(id: "block-0") { $0.outdentingItem(at: 1) })
+        XCTAssertEqual(controller.text, source)
+        XCTAssertFalse(controller.canUndo)
+    }
 }

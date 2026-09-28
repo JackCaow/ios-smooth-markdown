@@ -102,6 +102,65 @@ public struct MarkdownSourceList: Equatable {
         return .init(items: next)
     }
 
+    /// Moves an item and its descendants under the preceding item at the same level.
+    public func indentingItem(at index: Int) -> Self? {
+        guard items.indices.contains(index), index > 0 else { return nil }
+        let currentWidth = Self.indentationWidth(items[index].indent)
+        guard let parentIndex = (0..<index).reversed().first(where: {
+            Self.indentationWidth(items[$0].indent) == currentWidth
+        }) else { return nil }
+        let parent = items[parentIndex]
+        let contentColumn = Self.indentationWidth(parent.indent + parent.marker + parent.spacing
+                                                + (parent.taskMarker ?? "") + parent.taskSpacing)
+        guard contentColumn > currentWidth else { return nil }
+        return shiftingSubtree(at: index, by: contentColumn - currentWidth)
+    }
+
+    /// Moves an item and its descendants to the level of its nearest ancestor.
+    public func outdentingItem(at index: Int) -> Self? {
+        guard items.indices.contains(index) else { return nil }
+        let currentWidth = Self.indentationWidth(items[index].indent)
+        guard currentWidth > 0 else { return nil }
+        let parentWidth = (0..<index).reversed().lazy.map { Self.indentationWidth(items[$0].indent) }
+            .first(where: { $0 < currentWidth }) ?? 0
+        return shiftingSubtree(at: index, by: parentWidth - currentWidth)
+    }
+
+    private func shiftingSubtree(at index: Int, by columns: Int) -> Self? {
+        guard columns != 0 else { return nil }
+        let baseWidth = Self.indentationWidth(items[index].indent)
+        var next = items
+        var end = index + 1
+        while end < items.count && Self.indentationWidth(items[end].indent) > baseWidth { end += 1 }
+        for position in index..<end {
+            let item = items[position]
+            guard let indent = Self.shiftingIndent(item.indent, by: columns) else { return nil }
+            let continuations = item.continuations.compactMap { line -> MarkdownSourceListContinuation? in
+                guard let shifted = Self.shiftingIndent(line.indent, by: columns) else { return nil }
+                return .init(indent: shifted, content: line.content, lineEnding: line.lineEnding)
+            }
+            guard continuations.count == item.continuations.count else { return nil }
+            next[position] = .init(indent: indent, marker: item.marker, spacing: item.spacing,
+                                   taskMarker: item.taskMarker, taskSpacing: item.taskSpacing,
+                                   content: item.content, lineEnding: item.lineEnding,
+                                   continuations: continuations)
+        }
+        return .init(items: next)
+    }
+
+    private static func shiftingIndent(_ indent: String, by columns: Int) -> String? {
+        if columns > 0 { return indent + String(repeating: " ", count: columns) }
+        let target = indentationWidth(indent) + columns
+        guard target >= 0 else { return nil }
+        var result = ""
+        for character in indent {
+            let next = indentationWidth(result + String(character))
+            if next > target { break }
+            result.append(character)
+        }
+        return result + String(repeating: " ", count: target - indentationWidth(result))
+    }
+
     public static func parse(_ source: String) -> Self? {
         guard !source.isEmpty else { return nil }
         let components = source.components(separatedBy: "\n")

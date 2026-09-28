@@ -630,7 +630,7 @@ private struct FormattedListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-            ForEach(list.items.indices, id: \.self) { index in
+            ForEach(0..<list.items.count, id: \.self) { index in
                 let item = list.items[index]
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -653,6 +653,16 @@ private struct FormattedListView: View {
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
                         }))
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
+                        Button { _ = changeIndent(at: index, outdent: true) } label: {
+                            Image(systemName: "decrease.indent")
+                        }
+                        .accessibilityLabel("Outdent item \(index + 1)")
+                        .disabled(list.outdentingItem(at: index) == nil)
+                        Button { _ = changeIndent(at: index, outdent: false) } label: {
+                            Image(systemName: "increase.indent")
+                        }
+                        .accessibilityLabel("Indent item \(index + 1)")
+                        .disabled(list.indentingItem(at: index) == nil)
                     }
                     ForEach(item.continuations.indices, id: \.self) { lineIndex in
                         let continuation = item.continuations[lineIndex]
@@ -675,6 +685,12 @@ private struct FormattedListView: View {
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
             }
+        }
+    }
+
+    private func changeIndent(at index: Int, outdent: Bool) -> Bool {
+        controller.updateSemanticList(id: blockID) { list in
+            outdent ? list.outdentingItem(at: index) : list.indentingItem(at: index)
         }
     }
 }
