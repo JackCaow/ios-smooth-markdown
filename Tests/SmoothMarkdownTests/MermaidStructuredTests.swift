@@ -42,6 +42,50 @@ final class MermaidStructuredTests: XCTestCase {
         assertValidLayout(diagram)
     }
 
+    func testStateSelfLoopLabelsAndArrowTangentsFitInAllDirections() {
+        let source = """
+        stateDiagram-v2
+        [*] --> Idle
+        [*] --> Waiting
+        Idle --> Idle: RETRY AFTER VALIDATION
+        Waiting --> Waiting: WAIT FOR CONFIRMATION
+        Idle --> Done
+        Waiting --> Done
+        Done --> [*]
+        """
+        for (token, direction) in [("TB", MermaidDirection.topToBottom),
+                                   ("BT", .bottomToTop), ("LR", .leftToRight),
+                                   ("RL", .rightToLeft)] {
+            let diagram = MermaidParser.parse(source.replacingOccurrences(
+                of: "stateDiagram-v2\n", with: "stateDiagram-v2\ndirection \(token)\n"))!
+            XCTAssertEqual(diagram.direction, direction)
+            let layout = MermaidLayout.compute(diagram)
+            assertValidLayout(diagram)
+            let bounds = CGRect(origin: .zero, size: layout.size)
+            let loops = layout.edges.filter { $0.edge.from == $0.edge.to }
+            XCTAssertEqual(loops.count, 2, token)
+            let labelFrames = loops.compactMap { $0.selfLoop?.labelFrame }
+            XCTAssertEqual(labelFrames.count, 2, token)
+            for placed in loops {
+                guard let loop = placed.selfLoop, let label = loop.labelFrame else {
+                    XCTFail("Missing self-loop geometry for \(token)"); continue
+                }
+                XCTAssertTrue(bounds.contains(label), token)
+                XCTAssertTrue(bounds.contains(loop.control1), token)
+                XCTAssertTrue(bounds.contains(loop.control2), token)
+                for node in layout.nodes.values {
+                    XCTAssertFalse(label.intersects(node), "\(token): label overlaps a state")
+                }
+                let angle = atan2(placed.end.y - loop.control2.y,
+                                  placed.end.x - loop.control2.x)
+                let expected: CGFloat = direction == .leftToRight || direction == .rightToLeft
+                    ? atan2(45, -25) : atan2(-25, -45)
+                XCTAssertEqual(angle, expected, accuracy: 0.01, token)
+            }
+            XCTAssertFalse(labelFrames[0].intersects(labelFrames[1]), token)
+        }
+    }
+
     func testClassFixtureKeepsMembersRelationsAndEndpointMarkers() {
         let diagram = MermaidParser.parse("""
         classDiagram

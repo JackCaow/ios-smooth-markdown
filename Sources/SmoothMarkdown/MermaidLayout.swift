@@ -5,6 +5,17 @@ struct MermaidPlacedEdge {
     let edge: MermaidEdge
     let start: CGPoint
     let end: CGPoint
+    let selfLoop: MermaidPlacedSelfLoop?
+
+    init(edge: MermaidEdge, start: CGPoint, end: CGPoint, selfLoop: MermaidPlacedSelfLoop? = nil) {
+        self.edge = edge; self.start = start; self.end = end; self.selfLoop = selfLoop
+    }
+}
+
+struct MermaidPlacedSelfLoop {
+    let control1: CGPoint
+    let control2: CGPoint
+    let labelFrame: CGRect?
 }
 
 struct MermaidLayoutResult {
@@ -150,12 +161,21 @@ enum MermaidLayout {
         let layers = grouped.keys.sorted().compactMap { grouped[$0] }
         let horizontal = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
         let hasSubgraphs = !diagram.subgraphs.isEmpty
-        let margin: CGFloat = hasSubgraphs ? 72 : diagram.kind == .flowchart ? 24 : 64
-        let mainGap: CGFloat = hasSubgraphs ? 100 : 72
+        let loopLabels = Dictionary(grouping: diagram.edges.filter { $0.from == $0.to }, by: \.from)
+            .mapValues { edges in edges.compactMap(\.label).map(labelWidth).max() ?? 0 }
+        let widestLoopLabel = loopLabels.values.max() ?? 0
+        let margin: CGFloat = max(hasSubgraphs ? 72 : diagram.kind == .flowchart ? 24 : 64,
+                                  horizontal && !loopLabels.isEmpty ? widestLoopLabel / 2 + 24 : 0)
+        let mainGap: CGFloat = max(hasSubgraphs ? 100 : 72,
+                                   horizontal && !loopLabels.isEmpty ? widestLoopLabel + 24 : 0)
         let crossGap: CGFloat = hasSubgraphs ? 80 : 40
         // In a horizontal graph the main axis uses node width, and the cross axis uses height.
         func axisSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeWidth(node) : nodeHeight(node) }
-        func laneSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeHeight(node) : nodeWidth(node) }
+        func laneSize(_ node: MermaidNode) -> CGFloat {
+            let base = horizontal ? nodeHeight(node) : nodeWidth(node)
+            guard let labelWidth = loopLabels[node.id] else { return base }
+            return base + (horizontal ? 86 : max(80, labelWidth + 80))
+        }
         let layerMain = layers.map { $0.map(axisSize).max() ?? 0 }
         let layerCross = layers.map { layer in
             layer.reduce(CGFloat(0)) { $0 + laneSize($1) } + CGFloat(max(0, layer.count - 1)) * crossGap
@@ -172,7 +192,8 @@ enum MermaidLayout {
             for node in layer {
                 let width = nodeWidth(node), height = nodeHeight(node)
                 let frame = horizontal
-                    ? CGRect(x: main + (layerMain[layerIndex] - width) / 2, y: cross, width: width, height: height)
+                    ? CGRect(x: main + (layerMain[layerIndex] - width) / 2,
+                             y: cross + (loopLabels[node.id] == nil ? 0 : 86), width: width, height: height)
                     : CGRect(x: cross, y: main + (layerMain[layerIndex] - height) / 2, width: width, height: height)
                 positions[node.id] = frame
                 cross += laneSize(node) + crossGap
@@ -208,6 +229,31 @@ enum MermaidLayout {
         let placed = diagram.edges.compactMap { edge -> MermaidPlacedEdge? in
             guard let from = positions[edge.from] ?? groupFrames[edge.from],
                   let to = positions[edge.to] ?? groupFrames[edge.to] else { return nil }
+            if edge.from == edge.to, positions[edge.from] != nil {
+                let labelFrame: CGRect?
+                let start: CGPoint, end: CGPoint, control1: CGPoint, control2: CGPoint
+                if horizontal {
+                    start = .init(x: from.minX + from.width * 0.3, y: from.minY)
+                    end = .init(x: from.minX + from.width * 0.7, y: from.minY)
+                    control1 = .init(x: start.x - 25, y: start.y - 45)
+                    control2 = .init(x: end.x + 25, y: end.y - 45)
+                    labelFrame = edge.label.map { label in
+                        CGRect(x: from.midX - labelWidth(label) / 2, y: from.minY - 78,
+                               width: labelWidth(label), height: 18)
+                    }
+                } else {
+                    start = .init(x: from.maxX, y: from.midY - 10)
+                    end = .init(x: from.maxX, y: from.midY + 10)
+                    control1 = .init(x: start.x + 45, y: start.y - 25)
+                    control2 = .init(x: end.x + 45, y: end.y + 25)
+                    labelFrame = edge.label.map { label in
+                        CGRect(x: from.maxX + 62, y: from.midY - 9,
+                               width: labelWidth(label), height: 18)
+                    }
+                }
+                return .init(edge: edge, start: start, end: end,
+                             selfLoop: .init(control1: control1, control2: control2, labelFrame: labelFrame))
+            }
             let start: CGPoint, end: CGPoint
             switch diagram.direction {
             case .topToBottom:
@@ -253,6 +299,11 @@ enum MermaidLayout {
         case .circle: return max(base, 80)
         default: return base
         }
+    }
+
+    private static func labelWidth(_ label: String) -> CGFloat {
+        // 10-point Canvas labels need wider cells for CJK glyphs than Latin glyphs.
+        CGFloat(label.unicodeScalars.reduce(0) { $0 + ($1.value > 0xFF ? 11 : 7) }) + 12
     }
 
     private static func nodeHeight(_ node: MermaidNode) -> CGFloat {

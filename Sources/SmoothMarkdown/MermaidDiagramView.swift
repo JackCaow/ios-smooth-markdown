@@ -61,8 +61,9 @@ public struct MermaidDiagramView: View {
                                  at: CGPoint(x: frame.midX, y: frame.minY + 15))
                 }
                 for placed in layout.edges {
-                    if placed.edge.from == placed.edge.to, let frame = layout.nodes[placed.edge.from] {
-                        drawSelfEdge(placed.edge, frame: frame, in: context, ink: ink)
+                    if let loop = placed.selfLoop {
+                        drawSelfEdge(placed, loop: loop, in: context, ink: ink,
+                                     background: colorScheme == .dark ? .black : .white)
                     } else {
                         drawEdge(placed, in: context, ink: ink, background: colorScheme == .dark ? .black : .white)
                     }
@@ -510,18 +511,20 @@ public struct MermaidDiagramView: View {
         }
     }
 
-    private func drawSelfEdge(_ edge: MermaidEdge, frame: CGRect, in context: GraphicsContext, ink: Color) {
-        let x = frame.maxX, y = frame.midY
+    private func drawSelfEdge(_ placed: MermaidPlacedEdge, loop: MermaidPlacedSelfLoop,
+                              in context: GraphicsContext, ink: Color, background: Color) {
         var path = Path()
-        path.move(to: CGPoint(x: x, y: y - 10))
-        path.addCurve(to: CGPoint(x: x, y: y + 10), control1: CGPoint(x: x + 56, y: y - 50),
-                      control2: CGPoint(x: x + 56, y: y + 50))
+        path.move(to: placed.start)
+        path.addCurve(to: placed.end, control1: loop.control1, control2: loop.control2)
         context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: 1.5,
-                                                                  dash: edge.line == .dotted ? [5, 4] : []))
-        drawArrow(at: CGPoint(x: x, y: y + 10), angle: .pi * 0.8, in: context, ink: ink)
-        if let label = edge.label {
+                                                                  dash: placed.edge.line == .dotted ? [5, 4] : []))
+        drawArrow(at: placed.end,
+                  angle: atan2(placed.end.y - loop.control2.y, placed.end.x - loop.control2.x),
+                  in: context, ink: ink)
+        if let label = placed.edge.label, let frame = loop.labelFrame {
+            context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(background))
             context.draw(Text(label).font(.system(size: 10)).foregroundColor(ink),
-                         at: CGPoint(x: x + 38, y: y - 26))
+                         at: CGPoint(x: frame.midX, y: frame.midY))
         }
     }
 
