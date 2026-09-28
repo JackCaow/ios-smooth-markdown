@@ -97,9 +97,20 @@ public struct SmoothMarkdownView: View {
     private func mathSection(_ section: MathSyntax.Section) -> some View {
         switch section {
         case let .markdown(source):
-            ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in
-                block(node)
+            #if os(iOS)
+            ForEach(Array(ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                      enableHTML: enableHTML, plugins: plugins).enumerated()), id: \.offset) { _, group in
+                switch group {
+                case let .selectable(nodes):
+                    if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
+                        ReaderSelectionTextView(document: document, styleSheet: styleSheet, onLinkTap: onLinkTap)
+                    }
+                case let .individual(node): block(node)
+                }
             }
+            #else
+            ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in block(node) }
+            #endif
         case let .block(latex): blockMath(latex)
         }
     }
