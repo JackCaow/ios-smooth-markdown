@@ -13,7 +13,7 @@ private struct ChatListFixture {
 
     static func load(bundle: Bundle = .main) -> ChatListFixture? {
         let names = ["welcome", "code", "markdown", "performance", "table"]
-        guard let manifestURL = resourceURL("manifest", extension: "json", bundle: bundle),
+        guard let manifestURL = resourceURL("chat-list", extension: "json", bundle: bundle),
               let manifestData = try? Data(contentsOf: manifestURL),
               let manifest = try? JSONDecoder().decode(Manifest.self, from: manifestData) else {
             return nil
@@ -40,6 +40,7 @@ private struct ChatListFixture {
     private static func resourceURL(_ name: String, extension ext: String, bundle: Bundle) -> URL? {
         bundle.url(forResource: name, withExtension: ext, subdirectory: "Examples/ChatList")
             ?? bundle.url(forResource: name, withExtension: ext, subdirectory: "ChatList")
+            ?? bundle.url(forResource: name, withExtension: ext)
     }
 }
 

@@ -44,7 +44,7 @@ def main() -> None:
         "sourceSha256": hashlib.sha256(source_bytes).hexdigest(),
         "sha256": hashes,
     }
-    files[output / "manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+    files[output / "chat-list.json"] = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
     if args.check:
         stale = [str(path) for path, expected in files.items()
                  if not path.exists() or path.read_bytes() != expected]
