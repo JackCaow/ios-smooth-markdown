@@ -21,6 +21,9 @@ struct DemoPageCatalog {
               let manifest = try? JSONDecoder().decode(Manifest.self, from: data) else {
             return .init(pages: [:], error: "Demo page manifest is missing or invalid")
         }
+        guard manifest.pages.count == 5 else {
+            return .init(pages: [:], error: "Expected five Flutter demo page fixtures")
+        }
         var pages: [String: String] = [:]
         for entry in manifest.pages {
             guard let url = resource(entry.file, bundle: bundle),
