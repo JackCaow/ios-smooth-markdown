@@ -9,8 +9,22 @@ A **native** renderer with *inline formatting* and [links](https://github.com/Ja
 Plugins: hello @john_doe, explore #swiftui, and wave :wave:.
 
 ::: tip Native plugins
-Mention, hashtag, emoji, and admonition parsers are enabled in this demo.
+Mention, hashtag, emoji, admonition, thinking, artifact, and tool-call parsers are enabled in this demo.
 :::
+
+<thinking>
+Compare the available options before answering.
+</thinking>
+
+<artifact identifier="sample-code" type="code" language="swift" title="Greeting.swift">
+print("Hello from an artifact")
+</artifact>
+
+<tool_use>
+<tool_name>search</tool_name>
+<tool_id>demo-1</tool_id>
+<input>{"query":"SwiftUI Markdown"}</input>
+</tool_use>
 
 Inline math: $E=mc^2$ and $\\frac{a}{b}$.
 

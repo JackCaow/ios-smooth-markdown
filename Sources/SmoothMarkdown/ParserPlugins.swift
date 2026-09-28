@@ -76,6 +76,9 @@ public final class ParserPluginRegistry {
         try! result.register(HashtagPlugin())
         try! result.register(EmojiPlugin())
         try! result.register(AdmonitionPlugin())
+        try! result.register(ToolCallPlugin())
+        try! result.register(ThinkingPlugin())
+        try! result.register(ArtifactPlugin())
         return result
     }
 
