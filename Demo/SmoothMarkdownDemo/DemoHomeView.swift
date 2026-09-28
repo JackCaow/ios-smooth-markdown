@@ -28,7 +28,11 @@ struct DemoHomeView: View {
         guard case let .feature(feature) = selected else { return nil }
         return feature
     }
-    private var title: String { currentExample?.title ?? currentFeature?.title ?? "Examples unavailable" }
+    private var title: String {
+        if let currentExample { return DemoLocalizations.exampleTitle(currentExample, in: language) }
+        if let currentFeature { return currentFeature.localizedTitle(in: language) }
+        return DemoLocalizations.text("examples", in: language)
+    }
     private var markdown: String? {
         currentExample?.markdown ?? currentFeature.flatMap { pageCatalog.markdown(for: $0) ?? $0.markdown }
     }
@@ -38,25 +42,26 @@ struct DemoHomeView: View {
             VStack(spacing: 0) {
                 header
                 if let error = catalog.error {
-                    ContentUnavailableView("Examples unavailable", systemImage: "doc.questionmark", description: Text(error))
+                    ContentUnavailableView(DemoLocalizations.text("examples_unavailable", in: language),
+                                           systemImage: "doc.questionmark", description: Text(error))
                 } else {
                     pageContent
                 }
             }
-            .navigationTitle("Smooth Markdown Demo")
+            .navigationTitle(DemoLocalizations.text("app_title", in: language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Examples", systemImage: "line.3.horizontal") { showNavigation = true }
+                    Button(DemoLocalizations.text("examples", in: language), systemImage: "line.3.horizontal") { showNavigation = true }
                         .accessibilityIdentifier("open-examples")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if markdown != nil {
-                        Button("View Markdown Source", systemImage: "chevron.left.forwardslash.chevron.right") {
+                        Button(DemoLocalizations.text("source", in: language), systemImage: "chevron.left.forwardslash.chevron.right") {
                             showSource = true
                         }
                         .accessibilityIdentifier("view-markdown-source")
-                        Button("Open Editor", systemImage: "square.and.pencil") {
+                        Button(DemoLocalizations.text("open_editor", in: language), systemImage: "square.and.pencil") {
                             editorSession = .init(controller: MarkdownEditorController(
                                 text: pageCatalog.pages["editor"] ?? markdown ?? ""))
                         }
@@ -64,10 +69,10 @@ struct DemoHomeView: View {
                     }
                     Menu {
                         ForEach(DemoTheme.allCases) { candidate in
-                            Button(candidate.rawValue) { theme = candidate }
+                            Button(candidate.localizedTitle(in: language)) { theme = candidate }
                         }
                     } label: {
-                        Label("Theme", systemImage: "paintpalette")
+                        Label(DemoLocalizations.text("drawer_theme", in: language), systemImage: "paintpalette")
                     }
                     .accessibilityIdentifier("theme-menu")
                 }
@@ -77,16 +82,16 @@ struct DemoHomeView: View {
                     .presentationDetents([.large])
             }
             .sheet(isPresented: $showSource) {
-                DemoSourceSheet(markdown: markdown ?? "")
+                DemoSourceSheet(markdown: markdown ?? "", language: language)
             }
             .sheet(item: $editorSession) { session in
                 NavigationStack {
                     SmoothMarkdownEditor(controller: session.controller)
-                        .navigationTitle("Markdown Editor")
+                        .navigationTitle(DemoLocalizations.text("editor", in: language))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .topBarTrailing) {
-                                Button("Close") { editorSession = nil }
+                                Button(DemoLocalizations.text("close", in: language)) { editorSession = nil }
                             }
                         }
                 }
@@ -99,14 +104,14 @@ struct DemoHomeView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline).accessibilityIdentifier("demo-current-title")
-                Text("Theme: \(theme.rawValue) · \(language.nativeName)")
+                Text("\(DemoLocalizations.text("theme_status", in: language)): \(theme.localizedTitle(in: language)) · \(language.nativeName)")
                     .font(.caption).foregroundStyle(.secondary)
                     .accessibilityIdentifier("demo-current-theme")
             }
             Spacer()
             if currentFeature == .html {
                 Toggle("HTML", isOn: $htmlEnabled).labelsHidden()
-                    .accessibilityLabel("Enable HTML")
+                    .accessibilityLabel(DemoLocalizations.text("html_enabled", in: language))
             }
         }
         .padding(.horizontal, 16)
@@ -124,22 +129,25 @@ struct DemoHomeView: View {
         } else if currentFeature == .streaming {
             DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
         } else if currentFeature == .conversationList {
-            ContentUnavailableView("Conversation List", systemImage: "bubble.left.and.bubble.right",
-                                   description: Text("Long-press actions, swipes, and multi-select from Flutter are not ported to this iOS demo."))
+            ContentUnavailableView(DemoFeature.conversationList.localizedTitle(in: language),
+                                   systemImage: "bubble.left.and.bubble.right",
+                                   description: Text(DemoLocalizations.text("conversation_unported", in: language)))
         } else if let markdown {
             VStack(spacing: 0) {
                 if let linkMessage {
-                    Text(linkMessage).font(.caption).accessibilityIdentifier("demo-link-message")
+                    Text("\(DemoLocalizations.text("link_tapped", in: language)): \(linkMessage)")
+                        .font(.caption).accessibilityIdentifier("demo-link-message")
                 }
                 SmoothMarkdownView(markdown: markdown,
-                                   onLinkTap: { linkMessage = "Link tapped: \($0.absoluteString)" },
+                                   onLinkTap: { linkMessage = $0.absoluteString },
                                    enableHTML: currentFeature == .html && htmlEnabled,
                                    styleSheet: theme.styleSheet, plugins: plugins)
                     .id(selected)
                     .accessibilityIdentifier("demo-reader")
             }
         } else if let error = pageCatalog.error {
-            ContentUnavailableView("Demo page unavailable", systemImage: "doc.questionmark",
+            ContentUnavailableView(DemoLocalizations.text("demo_page_unavailable", in: language),
+                                   systemImage: "doc.questionmark",
                                    description: Text(error))
         }
     }
@@ -154,24 +162,24 @@ private struct DemoNavigationSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Markdown Editor") {
-                    Text("Use the editor button on the selected example.")
+                Section(DemoLocalizations.text("editor", in: language)) {
+                    Text(DemoLocalizations.text("editor_hint", in: language))
                         .foregroundStyle(.secondary)
                 }
-                Section("Examples") {
+                Section(DemoLocalizations.text("drawer_header_title", in: language)) {
                     ForEach(catalog.examples) { example in
-                        Button(example.title) { choose(.example(example.id)) }
+                        Button(DemoLocalizations.exampleTitle(example, in: language)) { choose(.example(example.id)) }
                             .accessibilityIdentifier("example-\(example.id)")
                     }
                 }
-                Section("Demos") {
+                Section(DemoLocalizations.text("drawer_demos", in: language)) {
                     ForEach(DemoFeature.allCases) { feature in
                         Button {
                             choose(.feature(feature))
                         } label: {
                             VStack(alignment: .leading) {
-                                Text(feature.title)
-                                if let subtitle = feature.subtitle {
+                                Text(feature.localizedTitle(in: language))
+                                if let subtitle = feature.localizedSubtitle(in: language) {
                                     Text(subtitle).font(.caption).foregroundStyle(.secondary)
                                 }
                             }
@@ -179,7 +187,7 @@ private struct DemoNavigationSheet: View {
                         .accessibilityIdentifier("feature-\(feature.rawValue)")
                     }
                 }
-                Section("Language") {
+                Section(DemoLocalizations.text("language", in: language)) {
                     ForEach(DemoLanguage.allCases) { candidate in
                         Button(candidate.nativeName) {
                             language = candidate
@@ -187,13 +195,11 @@ private struct DemoNavigationSheet: View {
                         }
                         .accessibilityIdentifier("language-\(candidate.rawValue)")
                     }
-                    Text("The native demo chrome is not fully localized yet; sample Markdown stays in its original language.")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Examples & Demos")
+            .navigationTitle(DemoLocalizations.text("examples_demos", in: language))
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) { Button(DemoLocalizations.text("close", in: language)) { dismiss() } }
             }
         }
     }
@@ -207,6 +213,7 @@ private struct DemoNavigationSheet: View {
 private struct DemoSourceSheet: View {
     @Environment(\.dismiss) private var dismiss
     let markdown: String
+    let language: DemoLanguage
 
     var body: some View {
         NavigationStack {
@@ -218,10 +225,10 @@ private struct DemoSourceSheet: View {
                     .padding()
                     .accessibilityIdentifier("markdown-source-content")
             }
-            .navigationTitle("Markdown Source")
+            .navigationTitle(DemoLocalizations.text("source_title", in: language))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button("Close") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) { Button(DemoLocalizations.text("close", in: language)) { dismiss() } }
             }
         }
     }
