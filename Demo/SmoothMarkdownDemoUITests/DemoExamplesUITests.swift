@@ -12,6 +12,7 @@ final class DemoExamplesUITests: XCTestCase {
     func testTenFlutterExamplesSourceThemeAndEditor() {
         let app = XCUIApplication()
         app.launch()
+        choose("language-en", in: app)
         XCTAssertTrue(app.staticTexts["demo-current-title"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
         XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("Default Light"))
@@ -40,8 +41,9 @@ final class DemoExamplesUITests: XCTestCase {
     func testFlutterSpecialPagesAndNativeExtrasOpen() {
         let app = XCUIApplication()
         app.launch()
+        choose("language-en", in: app)
         let features: [(String, String)] = [
-            ("math", "Math Formulas"), ("streaming", "Streaming Markdown"),
+            ("math", "Math Formulas"), ("streaming", "Streaming"),
             ("footnotes", "Footnotes"), ("html", "HTML Tags"),
             ("chatList", "Chat List"), ("aiChat", "AI Chat"),
             ("conversationList", "Conversation List"), ("plugins", "Plugin System"),
