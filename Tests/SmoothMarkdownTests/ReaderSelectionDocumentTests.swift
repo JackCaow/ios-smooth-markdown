@@ -61,4 +61,32 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         XCTAssertEqual(document.lines.count, 2)
         XCTAssertTrue(document.lines.flatMap(\.runs).allSatisfy { $0.style.link == nil })
     }
+
+    func testQuoteIDsKeepParagraphsInOneDecorationAndSeparateAdjacentQuotes() {
+        let source = """
+        > First paragraph
+        >
+        > Second paragraph
+
+        Ordinary paragraph
+
+        > Another quote
+        """
+        let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
+                                                       enableHTML: false, plugins: nil)!
+        let quoteLines = document.lines.filter { $0.quoteDepth > 0 }
+        XCTAssertEqual(quoteLines.count, 3)
+        XCTAssertEqual(quoteLines[0].quoteIDs, quoteLines[1].quoteIDs)
+        XCTAssertNotEqual(quoteLines[1].quoteIDs, quoteLines[2].quoteIDs)
+    }
+
+    func testNestedQuoteRetainsOuterAndInnerDecorationIDs() {
+        let source = "> Outer\n> > Inner"
+        let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
+                                                       enableHTML: false, plugins: nil)!
+        XCTAssertEqual(document.lines.count, 2)
+        XCTAssertEqual(document.lines[0].quoteIDs.count, 1)
+        XCTAssertEqual(document.lines[1].quoteIDs.count, 2)
+        XCTAssertEqual(document.lines[0].quoteIDs[0], document.lines[1].quoteIDs[0])
+    }
 }

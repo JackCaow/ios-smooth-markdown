@@ -1,5 +1,18 @@
 import SwiftUI
 
+/// Fill and left border of a Markdown blockquote. Nil colors inherit the legacy quote colors.
+public struct MarkdownBlockquoteDecoration {
+    public var backgroundColor: Color?
+    public var borderColor: Color?
+    public var borderWidth: CGFloat
+
+    public init(backgroundColor: Color? = nil, borderColor: Color? = nil, borderWidth: CGFloat = 4) {
+        self.backgroundColor = backgroundColor
+        self.borderColor = borderColor
+        self.borderWidth = max(0, borderWidth)
+    }
+}
+
 /// Visual settings for `SmoothMarkdownView` and `StreamMarkdownView`.
 /// Nil colors and fonts inherit the host application's SwiftUI appearance.
 public struct MarkdownStyleSheet {
@@ -13,6 +26,10 @@ public struct MarkdownStyleSheet {
     public var inlineCodeTextColor: Color?
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
+    /// Overrides the legacy quote colors and left border width when provided.
+    public var blockquoteDecoration: MarkdownBlockquoteDecoration?
+    /// Insets inside the blockquote background and border.
+    public var blockquotePadding: EdgeInsets
     public var tableBorderColor: Color?
     /// Background behind the header row, matching Flutter's tableHeaderDecoration color.
     public var tableHeaderBackgroundColor: Color?
@@ -70,7 +87,9 @@ public struct MarkdownStyleSheet {
         listIndent: CGFloat = 32,
         codePadding: CGFloat = 12,
         tableCellPadding: CGFloat = 8,
-        darkCodeHighlighting: Bool? = nil
+        darkCodeHighlighting: Bool? = nil,
+        blockquoteDecoration: MarkdownBlockquoteDecoration? = nil,
+        blockquotePadding: EdgeInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
     ) {
         self.backgroundColor = backgroundColor
         self.textColor = textColor
@@ -82,6 +101,11 @@ public struct MarkdownStyleSheet {
         self.inlineCodeTextColor = inlineCodeTextColor
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
+        self.blockquoteDecoration = blockquoteDecoration
+        self.blockquotePadding = EdgeInsets(top: max(0, blockquotePadding.top),
+                                           leading: max(0, blockquotePadding.leading),
+                                           bottom: max(0, blockquotePadding.bottom),
+                                           trailing: max(0, blockquotePadding.trailing))
         self.tableBorderColor = tableBorderColor
         self.tableHeaderBackgroundColor = tableHeaderBackgroundColor
         self.ruleColor = ruleColor
@@ -111,7 +135,8 @@ public struct MarkdownStyleSheet {
         Self(backgroundColor: .white, textColor: rgb(0x212121), headingColor: .black,
              linkColor: rgb(0x1976D2), codeBackground: rgb(0xF5F5F5), codeTextColor: rgb(0x212121),
              inlineCodeBackground: rgb(0xEEEEEE), inlineCodeTextColor: rgb(0xD32F2F),
-             quoteBarColor: rgb(0xBDBDBD), tableBorderColor: rgb(0xE0E0E0),
+             quoteBarColor: rgb(0xBDBDBD), quoteBackground: rgb(0xFAFAFA),
+             tableBorderColor: rgb(0xE0E0E0),
              tableHeaderBackgroundColor: rgb(0xEEEEEE),
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
@@ -122,7 +147,8 @@ public struct MarkdownStyleSheet {
         Self(backgroundColor: rgb(0x121212), textColor: rgb(0xB3B3B3), headingColor: .white,
              linkColor: rgb(0x64B5F6), codeBackground: rgb(0x212121), codeTextColor: rgb(0xB3B3B3),
              inlineCodeBackground: rgb(0x424242), inlineCodeTextColor: rgb(0xEF9A9A),
-             quoteBarColor: rgb(0x757575), tableBorderColor: rgb(0x616161),
+             quoteBarColor: rgb(0x757575), quoteBackground: rgb(0x212121),
+             tableBorderColor: rgb(0x616161),
              tableHeaderBackgroundColor: rgb(0x303030),
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
@@ -161,5 +187,16 @@ public struct MarkdownStyleSheet {
         Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255,
               green: Double((value >> 8) & 0xFF) / 255,
               blue: Double(value & 0xFF) / 255, opacity: 1)
+    }
+
+    internal var resolvedBlockquoteDecoration: MarkdownBlockquoteDecoration {
+        if let blockquoteDecoration {
+            return MarkdownBlockquoteDecoration(
+                backgroundColor: blockquoteDecoration.backgroundColor,
+                borderColor: blockquoteDecoration.borderColor ?? quoteBarColor ?? .accentColor,
+                borderWidth: blockquoteDecoration.borderWidth)
+        }
+        return MarkdownBlockquoteDecoration(backgroundColor: quoteBackground,
+                                            borderColor: quoteBarColor ?? .accentColor)
     }
 }

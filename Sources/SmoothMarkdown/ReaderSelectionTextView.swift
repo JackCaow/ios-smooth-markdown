@@ -56,8 +56,12 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             view.isSelectable = onTextLongPress == nil
             view.invalidateIntrinsicContentSize()
         }
-        view.quoteRanges = built.quoteRanges
-        view.quoteBarColor = UIColor(styleSheet.quoteBarColor ?? .accentColor)
+        let decoration = styleSheet.resolvedBlockquoteDecoration
+        view.quoteRegions = built.quoteRegions
+        view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
+        view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
+        view.quoteBorderWidth = decoration.borderWidth
+        view.quotePadding = styleSheet.blockquotePadding
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: QuoteTextView, context: Context) -> CGSize? {
@@ -129,9 +133,18 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         }
     }
 
-    private func attributedContent() -> (text: NSAttributedString, quoteRanges: [NSRange]) {
+    private func attributedContent() -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
         let output = NSMutableAttributedString(string: "")
-        var quoteRanges: [NSRange] = []
+        var quoteBounds: [Int: (start: Int, end: Int, depth: Int)] = [:]
+        var quoteOrder: [Int] = []
+        var firstQuoteLine: [Int: Int] = [:]
+        var lastQuoteLine: [Int: Int] = [:]
+        for (index, line) in document.lines.enumerated() {
+            for id in line.quoteIDs {
+                if firstQuoteLine[id] == nil { firstQuoteLine[id] = index }
+                lastQuoteLine[id] = index
+            }
+        }
         let normalColor = UIColor(styleSheet.textColor ?? .primary)
         for (index, line) in document.lines.enumerated() {
             if index > 0 { output.append(NSAttributedString(string: "\n")) }
@@ -143,9 +156,20 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             case .paragraph, .list, .quote: size = 16; weight = .regular
             }
             let paragraph = NSMutableParagraphStyle()
-            paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent + CGFloat(line.quoteDepth) * 16
+            paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
+                + CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.leading
             paragraph.headIndent = paragraph.firstLineHeadIndent
-            paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
+            if line.quoteDepth > 0 {
+                paragraph.tailIndent = -CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.trailing
+                paragraph.paragraphSpacingBefore = CGFloat(line.quoteIDs.filter { firstQuoteLine[$0] == index }.count)
+                    * styleSheet.blockquotePadding.top
+                let closingCount = line.quoteIDs.filter { lastQuoteLine[$0] == index }.count
+                paragraph.paragraphSpacing = closingCount > 0
+                    ? CGFloat(closingCount) * styleSheet.blockquotePadding.bottom + styleSheet.blockSpacing
+                    : styleSheet.quoteSpacing
+            } else {
+                paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
+            }
             paragraph.lineSpacing = 2
             for run in line.runs {
                 let font = UIFont.systemFont(ofSize: size,
@@ -171,18 +195,37 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 }
                 output.append(NSAttributedString(string: run.text, attributes: attributes))
             }
-            if line.quoteDepth > 0 {
-                quoteRanges.append(NSRange(location: start, length: max(1, output.length - start)))
+            for (depth, id) in line.quoteIDs.enumerated() {
+                if quoteBounds[id] == nil {
+                    quoteOrder.append(id)
+                    quoteBounds[id] = (start: start, end: output.length, depth: depth + 1)
+                } else if var bounds = quoteBounds[id] {
+                    bounds.end = output.length
+                    quoteBounds[id] = bounds
+                }
             }
         }
-        return (output, quoteRanges)
+        let quoteRegions = quoteOrder.compactMap { id -> QuoteTextView.Region? in
+            guard let bounds = quoteBounds[id] else { return nil }
+            return .init(range: NSRange(location: bounds.start, length: max(1, bounds.end - bounds.start)),
+                         depth: bounds.depth)
+        }
+        return (output, quoteRegions)
     }
 }
 
 @available(iOS 17.0, *)
 final class QuoteTextView: UITextView {
-    var quoteRanges: [NSRange] = [] { didSet { setNeedsDisplay() } }
+    struct Region {
+        let range: NSRange
+        let depth: Int
+    }
+
+    var quoteRegions: [Region] = [] { didSet { setNeedsDisplay() } }
     var quoteBarColor: UIColor = .tintColor { didSet { setNeedsDisplay() } }
+    var quoteBackgroundColor: UIColor? { didSet { setNeedsDisplay() } }
+    var quoteBorderWidth: CGFloat = 4 { didSet { setNeedsDisplay() } }
+    var quotePadding = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16) { didSet { setNeedsDisplay() } }
 
     @objc func selectAllReaderText() -> Bool {
         guard textStorage.length > 0 else { return false }
@@ -192,15 +235,33 @@ final class QuoteTextView: UITextView {
         return true
     }
 
+    func quoteFrames() -> [(CGRect, Int)] {
+        quoteRegions.compactMap { region -> (CGRect, Int)? in
+            guard region.range.location < textStorage.length else { return nil }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: region.range, actualCharacterRange: nil)
+            let textFrame = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+            let x = textContainerInset.left + CGFloat(region.depth - 1) * quotePadding.leading
+            let frame = CGRect(x: x, y: textContainerInset.top + textFrame.minY - quotePadding.top,
+                               width: max(0, bounds.width - x - textContainerInset.right),
+                               height: max(textFrame.height, 18) + quotePadding.top + quotePadding.bottom)
+            return (frame, region.depth)
+        }
+    }
+
     override func draw(_ rect: CGRect) {
+        let quoteFrames = quoteFrames()
+        if let quoteBackgroundColor {
+            quoteBackgroundColor.setFill()
+            for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
+                UIRectFill(frame)
+            }
+        }
         super.draw(rect)
+        guard quoteBorderWidth > 0 else { return }
         quoteBarColor.setFill()
-        for range in quoteRanges {
-            guard range.location < textStorage.length else { continue }
-            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            let frame = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
-            UIBezierPath(roundedRect: CGRect(x: textContainerInset.left + 3, y: textContainerInset.top + frame.minY,
-                                             width: 3, height: max(frame.height, 18)), cornerRadius: 1.5).fill()
+        for (frame, _) in quoteFrames {
+            UIRectFill(CGRect(x: frame.minX, y: frame.minY,
+                              width: min(quoteBorderWidth, frame.width), height: frame.height))
         }
     }
 }

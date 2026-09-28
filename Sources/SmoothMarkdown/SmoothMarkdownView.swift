@@ -220,15 +220,10 @@ public struct SmoothMarkdownView: View {
                                       options: codeBlockOptions, onCopy: onCodeCopy, styleSheet: styleSheet)
             }
         } else if let quote = node as? BlockQuote {
-            VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
+            blockquote {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in
                     block(child, alignment: alignment)
                 }
-            }
-            .padding(.leading, 14)
-            .background(styleSheet.quoteBackground ?? Color.clear)
-            .overlay(alignment: .leading) {
-                Rectangle().fill(styleSheet.quoteBarColor ?? Color.accentColor).frame(width: 3)
             }
         } else if let ordered = node as? OrderedList {
             list(ordered, start: Int(ordered.startIndex))
@@ -267,15 +262,18 @@ public struct SmoothMarkdownView: View {
                 case "right": .trailing
                 default: alignment
                 }
-                VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
-                    ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
-                        block(child, alignment: childAlignment)
+                if name == "blockquote" {
+                    blockquote {
+                        ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
+                            block(child, alignment: childAlignment)
+                        }
                     }
-                }
-                .padding(.leading, name == "blockquote" ? 14 : 0)
-                .background(name == "blockquote" ? (styleSheet.quoteBackground ?? Color.clear) : Color.clear)
-                .overlay(alignment: .leading) {
-                    if name == "blockquote" { Rectangle().fill(styleSheet.quoteBarColor ?? Color.accentColor).frame(width: 3) }
+                } else {
+                    VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
+                        ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
+                            block(child, alignment: childAlignment)
+                        }
+                    }
                 }
                 if !trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ForEach(Array(MarkdownSyntax.parse(trailing).children.enumerated()), id: \.offset) { _, child in
@@ -286,6 +284,20 @@ public struct SmoothMarkdownView: View {
         } else {
             SwiftUI.Text(html.rawHTML).textSelection(.enabled)
         }
+    }
+
+    private func blockquote<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        let decoration = styleSheet.resolvedBlockquoteDecoration
+        return VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(styleSheet.blockquotePadding)
+            .background(decoration.backgroundColor ?? Color.clear)
+            .overlay(alignment: .leading) {
+                if decoration.borderWidth > 0 {
+                    Rectangle().fill(decoration.borderColor ?? .accentColor)
+                        .frame(width: decoration.borderWidth)
+                }
+            }
     }
 
     @ViewBuilder

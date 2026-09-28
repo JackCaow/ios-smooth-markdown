@@ -15,6 +15,8 @@ struct ReaderSelectionDocument {
         let runs: [Run]
         let indent: Int
         let quoteDepth: Int
+        /// IDs of enclosing quote blocks, from the outermost to the innermost.
+        let quoteIDs: [Int]
     }
 
     let lines: [Line]
@@ -23,9 +25,10 @@ struct ReaderSelectionDocument {
 
     static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
         var lines: [Line] = []
+        var nextQuoteID = 0
         for node in nodes {
             guard let part = linesForBlock(node, enableHTML: enableHTML, plugins: plugins,
-                                           indent: 0, quoteDepth: 0) else { return nil }
+                                           indent: 0, quoteIDs: [], nextQuoteID: &nextQuoteID) else { return nil }
             lines.append(contentsOf: part)
         }
         return lines.isEmpty ? nil : .init(lines: lines)
@@ -36,38 +39,43 @@ struct ReaderSelectionDocument {
     }
 
     private static func linesForBlock(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?,
-                                      indent: Int, quoteDepth: Int) -> [Line]? {
+                                      indent: Int, quoteIDs: [Int], nextQuoteID: inout Int) -> [Line]? {
         if let heading = node as? Heading {
             guard let runs = inlineRuns(heading, enableHTML: enableHTML, plugins: plugins) else { return nil }
-            return [.init(kind: .heading(heading.level), runs: runs, indent: indent, quoteDepth: quoteDepth)]
+            return [.init(kind: .heading(heading.level), runs: runs, indent: indent,
+                          quoteDepth: quoteIDs.count, quoteIDs: quoteIDs)]
         }
         if let paragraph = node as? Paragraph {
             guard let runs = inlineRuns(paragraph, enableHTML: enableHTML, plugins: plugins) else { return nil }
-            return [.init(kind: quoteDepth > 0 ? .quote : .paragraph, runs: runs,
-                          indent: indent, quoteDepth: quoteDepth)]
+            return [.init(kind: quoteIDs.isEmpty ? .paragraph : .quote, runs: runs,
+                          indent: indent, quoteDepth: quoteIDs.count, quoteIDs: quoteIDs)]
         }
         if let quote = node as? BlockQuote {
+            let quoteID = nextQuoteID
+            nextQuoteID += 1
             var lines: [Line] = []
             for child in quote.children {
                 guard let part = linesForBlock(child, enableHTML: enableHTML, plugins: plugins,
-                                               indent: indent, quoteDepth: quoteDepth + 1) else { return nil }
+                                               indent: indent, quoteIDs: quoteIDs + [quoteID],
+                                               nextQuoteID: &nextQuoteID) else { return nil }
                 lines.append(contentsOf: part)
             }
             return lines.isEmpty ? nil : lines
         }
         if let ordered = node as? OrderedList {
             return listLines(ordered, start: Int(ordered.startIndex), enableHTML: enableHTML,
-                             plugins: plugins, indent: indent, quoteDepth: quoteDepth)
+                             plugins: plugins, indent: indent, quoteIDs: quoteIDs, nextQuoteID: &nextQuoteID)
         }
         if let unordered = node as? UnorderedList {
             return listLines(unordered, start: nil, enableHTML: enableHTML,
-                             plugins: plugins, indent: indent, quoteDepth: quoteDepth)
+                             plugins: plugins, indent: indent, quoteIDs: quoteIDs, nextQuoteID: &nextQuoteID)
         }
         return nil
     }
 
     private static func listLines(_ list: Markup, start: Int?, enableHTML: Bool,
-                                  plugins: ParserPluginRegistry?, indent: Int, quoteDepth: Int) -> [Line]? {
+                                  plugins: ParserPluginRegistry?, indent: Int, quoteIDs: [Int],
+                                  nextQuoteID: inout Int) -> [Line]? {
         var output: [Line] = []
         for (index, child) in list.children.enumerated() {
             guard let item = child as? ListItem else { return nil }
@@ -78,12 +86,14 @@ struct ReaderSelectionDocument {
             var first = true
             for block in item.children {
                 guard let part = linesForBlock(block, enableHTML: enableHTML, plugins: plugins,
-                                               indent: indent + 1, quoteDepth: quoteDepth) else { return nil }
+                                               indent: indent + 1, quoteIDs: quoteIDs,
+                                               nextQuoteID: &nextQuoteID) else { return nil }
                 for line in part {
                     if first {
                         let prefix = Run(text: marker, style: .init(), code: false)
                         output.append(.init(kind: .list, runs: [prefix] + line.runs,
-                                            indent: line.indent, quoteDepth: line.quoteDepth))
+                                            indent: line.indent, quoteDepth: line.quoteDepth,
+                                            quoteIDs: line.quoteIDs))
                         first = false
                     } else { output.append(line) }
                 }
