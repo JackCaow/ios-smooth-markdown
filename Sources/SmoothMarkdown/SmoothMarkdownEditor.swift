@@ -11,17 +11,26 @@ public struct SmoothMarkdownEditor: View {
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
     private let hasMarkdownImporter: Bool
+    private let enableWikilinks: Bool
+    private let wikilinkSuggestions: [String]
+    private let onTapWikilink: ((String) -> Void)?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
                 onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
                 onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil,
                 onExportMarkdown: MarkdownEditorHostIO.MarkdownExporter? = nil,
-                onHostIOEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil) {
+                onHostIOEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil,
+                enableWikilinks: Bool = true,
+                wikilinkSuggestions: [String] = [],
+                onTapWikilink: ((String) -> Void)? = nil) {
         self.controller = controller
         self.onSave = onSave
         self.hasImagePicker = onPickImage != nil
         self.hasMarkdownImporter = onImportMarkdown != nil
+        self.enableWikilinks = enableWikilinks
+        self.wikilinkSuggestions = wikilinkSuggestions
+        self.onTapWikilink = onTapWikilink
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onImagePickEvent: onImagePickEvent, onEvent: onHostIOEvent)
@@ -69,6 +78,7 @@ public struct SmoothMarkdownEditor: View {
                         commandButton("Code", .codeBlock)
                         commandButton("Link", .link)
                         commandButton("Table", .table)
+                        if enableWikilinks { commandButton("Wiki", .wikilink) }
                     }
                 }
                 .buttonStyle(.borderless)
@@ -81,21 +91,29 @@ public struct SmoothMarkdownEditor: View {
             case .source:
                 SourceTextView(controller: controller)
             case .formatted:
-                FormattedBlocksView(controller: controller)
+                FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
+                                    wikilinkSuggestions: wikilinkSuggestions)
             case .preview:
-                SmoothMarkdownView(markdown: controller.text)
+                SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
             case .split:
                 GeometryReader { geometry in
                     VStack(spacing: 0) {
                         SourceTextView(controller: controller)
                             .frame(height: geometry.size.height / 2)
                         Divider()
-                        SmoothMarkdownView(markdown: controller.text)
+                        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
                             .frame(height: geometry.size.height / 2)
                     }
                 }
             }
         }
+    }
+
+    private var previewPlugins: ParserPluginRegistry? {
+        guard enableWikilinks else { return nil }
+        let registry = ParserPluginRegistry()
+        try? registry.register(WikilinkPlugin(onTapWikilink: onTapWikilink))
+        return registry
     }
 
     private func commandButton(_ title: String, _ command: MarkdownEditorCommand) -> some View {
@@ -116,6 +134,8 @@ public struct SmoothMarkdownEditor: View {
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
     @ObservedObject var controller: MarkdownEditorController
+    let enableWikilinks: Bool
+    let wikilinkSuggestions: [String]
 
     var body: some View {
         let document = controller.semanticDocument
@@ -125,7 +145,9 @@ private struct FormattedBlocksView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(document.blocks) { block in
-                    FormattedBlockRow(controller: controller, block: block)
+                    FormattedBlockRow(controller: controller, block: block,
+                                      enableWikilinks: enableWikilinks,
+                                      wikilinkSuggestions: wikilinkSuggestions)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -138,7 +160,10 @@ private struct FormattedBlocksView: View {
 private struct FormattedBlockRow: View {
     @ObservedObject var controller: MarkdownEditorController
     let block: MarkdownDocumentBlock
+    let enableWikilinks: Bool
+    let wikilinkSuggestions: [String]
     @State private var inlineSelection = NSRange(location: 0, length: 0)
+    @State private var wikilinkSelectedIndex = 0
     @State private var linkDestination = "https://"
     @State private var showLinkEditor = false
 
@@ -150,10 +175,12 @@ private struct FormattedBlockRow: View {
                 inlineActions
                 inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
                                identifier: "heading-\(block.id)")
+                wikilinkSuggestionPanel
             case .paragraph:
                 blockLabel("Paragraph")
                 inlineActions
                 inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
+                wikilinkSuggestionPanel
             case let .fencedCode(_, info, _):
                 blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
                 TextEditor(text: contentBinding)
@@ -195,6 +222,43 @@ private struct FormattedBlockRow: View {
         } message: {
             Text("Only http, https, mailto, and tel links are accepted.")
         }
+        .onChange(of: controller.text) { _, _ in wikilinkSelectedIndex = 0 }
+    }
+
+    private var activeWikilinkMatch: WikilinkTrigger.Match? {
+        guard enableWikilinks, inlineSelection.length == 0 else { return nil }
+        let body = controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText
+        return WikilinkTrigger.match(in: body, cursor: inlineSelection.location)
+    }
+
+    private var visibleWikilinkSuggestions: [String] {
+        guard let match = activeWikilinkMatch else { return [] }
+        return WikilinkTrigger.suggestions(wikilinkSuggestions, for: match.query)
+    }
+
+    @ViewBuilder
+    private var wikilinkSuggestionPanel: some View {
+        if activeWikilinkMatch != nil {
+            let matches = visibleWikilinkSuggestions
+            VStack(alignment: .leading, spacing: 4) {
+                if matches.isEmpty {
+                    Text("No matching notes").foregroundStyle(.secondary)
+                        .accessibilityIdentifier("wikilink-empty-state")
+                } else {
+                    ForEach(Array(matches.enumerated()), id: \.offset) { index, title in
+                        Button(title) {
+                            selectWikilink(title)
+                        }
+                        .accessibilityIdentifier("wikilink-suggestion-\(index)")
+                        .fontWeight(index == min(wikilinkSelectedIndex, matches.count - 1) ? .semibold : .regular)
+                    }
+                }
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+        }
     }
 
     private func inlineTextView(font: UIFont, identifier: String) -> some View {
@@ -205,8 +269,28 @@ private struct FormattedBlockRow: View {
                 return controller.removeSemanticBlock(id: block.id)
             }
             return controller.replaceSemanticBlockContent(id: block.id, with: value)
-        }, onSelection: { inlineSelection = $0 })
+        }, onSelection: { inlineSelection = $0 },
+                               suggestionsVisible: !visibleWikilinkSuggestions.isEmpty,
+                               onSuggestionKey: handleWikilinkKey)
         .frame(minHeight: 44)
+    }
+
+    private func selectWikilink(_ title: String) {
+        if let next = controller.insertWikilinkSuggestion(title, inBlock: block.id,
+                                                          selection: inlineSelection) {
+            inlineSelection = next
+            wikilinkSelectedIndex = 0
+        }
+    }
+
+    private func handleWikilinkKey(_ key: WikilinkSuggestionKey) {
+        let suggestions = visibleWikilinkSuggestions
+        guard !suggestions.isEmpty else { return }
+        switch key {
+        case .next: wikilinkSelectedIndex = (wikilinkSelectedIndex + 1) % suggestions.count
+        case .previous: wikilinkSelectedIndex = (wikilinkSelectedIndex - 1 + suggestions.count) % suggestions.count
+        case .accept: selectWikilink(suggestions[min(wikilinkSelectedIndex, suggestions.count - 1)])
+        }
     }
 
     private var inlineActions: some View {
@@ -387,6 +471,26 @@ private struct FormattedListView: View {
 }
 
 @available(iOS 17.0, *)
+private enum WikilinkSuggestionKey { case next, previous, accept }
+
+@available(iOS 17.0, *)
+private final class WikilinkInputTextView: UITextView {
+    var suggestionsVisible = false
+    var onSuggestionKey: ((WikilinkSuggestionKey) -> Void)?
+
+    override var keyCommands: [UIKeyCommand]? {
+        guard suggestionsVisible else { return super.keyCommands }
+        return (super.keyCommands ?? []) + [
+            UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(nextSuggestion)),
+            UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(previousSuggestion)),
+        ]
+    }
+
+    @objc private func nextSuggestion() { onSuggestionKey?(.next) }
+    @objc private func previousSuggestion() { onSuggestionKey?(.previous) }
+}
+
+@available(iOS 17.0, *)
 private struct SemanticInlineTextView: UIViewRepresentable {
     let text: String
     let selectedRange: NSRange
@@ -394,9 +498,11 @@ private struct SemanticInlineTextView: UIViewRepresentable {
     let identifier: String
     let onEdit: (String) -> Bool
     let onSelection: (NSRange) -> Void
+    let suggestionsVisible: Bool
+    let onSuggestionKey: (WikilinkSuggestionKey) -> Void
 
     func makeUIView(context: Context) -> UITextView {
-        let view = UITextView()
+        let view = WikilinkInputTextView()
         view.delegate = context.coordinator
         view.isScrollEnabled = false
         view.backgroundColor = .clear
@@ -406,6 +512,8 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.text = text
         view.autocorrectionType = .default
         view.accessibilityIdentifier = identifier
+        view.suggestionsVisible = suggestionsVisible
+        view.onSuggestionKey = onSuggestionKey
         return view
     }
 
@@ -414,6 +522,11 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         context.coordinator.isUpdating = true
         defer { context.coordinator.isUpdating = false }
         view.font = font
+        if let view = view as? WikilinkInputTextView {
+            if view.suggestionsVisible != suggestionsVisible { view.setNeedsUpdateOfKeyCommands() }
+            view.suggestionsVisible = suggestionsVisible
+            view.onSuggestionKey = onSuggestionKey
+        }
         if view.text != text { view.text = text }
         let limit = (text as NSString).length
         let location = min(max(0, selectedRange.location), limit)
@@ -442,6 +555,15 @@ private struct SemanticInlineTextView: UIViewRepresentable {
                 return
             }
             parent.onSelection(textView.selectedRange)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange,
+                      replacementText text: String) -> Bool {
+            if text == "\n", parent.suggestionsVisible {
+                parent.onSuggestionKey(.accept)
+                return false
+            }
+            return true
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {

@@ -370,6 +370,33 @@ public final class MarkdownEditorController: ObservableObject {
         }
     }
 
+    /// Replaces the active `[[` trigger in a formatted paragraph or heading.
+    /// The source edit is a single undo step and leaves every other byte untouched.
+    @discardableResult
+    public func insertWikilinkSuggestion(_ title: String, inBlock id: String,
+                                         selection: NSRange) -> NSRange? {
+        guard !title.isEmpty, !title.contains("]"), !title.contains("\n"), !title.contains("\r"),
+              selection.length == 0,
+              let block = semanticDocument.blockById(id),
+              let blockRange = semanticDocument.sourceRange(of: id) else { return nil }
+        switch block.kind {
+        case .paragraph, .heading: break
+        case .fencedCode, .table, .list, .horizontalRule, .raw: return nil
+        }
+        let body = block.plainText
+        guard let match = WikilinkTrigger.match(in: body, cursor: selection.location) else { return nil }
+        let endingLength = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+        let bodyOffset = (block.source as NSString).length - (body as NSString).length - endingLength
+        guard bodyOffset >= 0 else { return nil }
+        let sourceRange = NSRange(location: blockRange.location + bodyOffset + match.range.location,
+                                  length: match.range.length)
+        guard isValidSourceRange(sourceRange),
+              (text as NSString).substring(with: sourceRange) == "[[" + match.query else { return nil }
+        let replacement = "[[\(title)]]"
+        replaceRange(sourceRange, with: replacement)
+        return NSRange(location: match.range.location + (replacement as NSString).length, length: 0)
+    }
+
     private func updateValue(_ next: String, selection nextSelection: NSRange) {
         if next != text { recordUndo(Snapshot(text: text, selection: selection)) }
         text = next
