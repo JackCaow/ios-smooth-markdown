@@ -54,7 +54,14 @@ public struct SmoothMarkdownView: View {
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                 .textSelection(.enabled)
         } else if let paragraph = node as? Paragraph {
-            if let image = paragraph.childCount == 1 ? paragraph.child(at: 0) as? Markdown.Image : nil {
+            let meaningful = Array(paragraph.children).filter { child in
+                guard let text = child as? Markdown.Text else { return true }
+                return !text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            let sole = meaningful.count == 1 ? meaningful.first : nil
+            if let image = sole as? Markdown.Image {
+                imageView(image)
+            } else if enableHTML, let html = sole as? InlineHTML, let image = SafeHTML.imageTag(html.rawHTML) {
                 imageView(image)
             } else {
                 inline(paragraph).font(.body).multilineTextAlignment(alignment ?? .leading)
@@ -99,7 +106,11 @@ public struct SmoothMarkdownView: View {
 
     @ViewBuilder
     private func htmlBlock(_ html: HTMLBlock, alignment: TextAlignment?) -> some View {
-        if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
+        if enableHTML, let image = SafeHTML.imageTag(html.rawHTML) {
+            imageView(image)
+        } else if enableHTML, let alt = SafeHTML.imageAlt(html.rawHTML) {
+            SwiftUI.Text(alt).textSelection(.enabled)
+        } else if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
             switch parsed {
             case .rule:
                 Divider().padding(.vertical, 8)
@@ -179,18 +190,45 @@ public struct SmoothMarkdownView: View {
 
     @ViewBuilder
     private func imageView(_ image: Markdown.Image) -> some View {
-        if let source = image.source, let url = URL(string: source), MarkdownSyntax.isSafeImage(url) {
-            AsyncImage(url: url) { loaded in
-                loaded.resizable().scaledToFit()
-            } placeholder: {
-                ProgressView().frame(maxWidth: .infinity)
-            }
-            .frame(maxWidth: .infinity)
-            .onTapGesture { onImageTap?(url) }
-            .accessibilityLabel(plainText(image))
+        if let source = image.source {
+            imageView(SafeHTML.ImageSpec(source: source, alt: plainText(image), title: image.title, width: nil, height: nil))
         } else {
             SwiftUI.Text(plainText(image))
         }
+    }
+
+    private func imageView(_ image: SafeHTML.ImageSpec) -> AnyView {
+        let source = image.source
+        let url = URL(string: source)
+        let isNetwork = url?.scheme.map { ["http", "https"].contains($0.lowercased()) } ?? false
+        let isLocal = !source.isEmpty && !source.hasPrefix("//") && !source.contains("..") &&
+            !source.contains(":") && !source.contains("\\")
+        let label = image.alt.isEmpty ? (image.title ?? "Image") : image.alt
+        let width: CGFloat? = image.width.map { CGFloat($0) }
+        let height: CGFloat? = image.height.map { CGFloat($0) }
+        if isNetwork, let url {
+            return AnyView(
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let loaded): loaded.resizable().scaledToFit()
+                    case .failure: SwiftUI.Text(label)
+                    case .empty: ProgressView()
+                    @unknown default: SwiftUI.Text(label)
+                    }
+                }
+                .frame(width: width, height: height)
+                .onTapGesture { onImageTap?(url) }
+                .accessibilityLabel(label)
+            )
+        }
+        if isLocal {
+            return AnyView(SwiftUI.Image(source)
+                .resizable().scaledToFit()
+                .frame(width: width, height: height)
+                .onTapGesture { if let url { onImageTap?(url) } }
+                .accessibilityLabel(label))
+        }
+        return AnyView(SwiftUI.Text(label))
     }
 
     private struct InlineStyle {

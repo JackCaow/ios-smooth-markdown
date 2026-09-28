@@ -46,4 +46,15 @@ final class SafeHTMLTests: XCTestCase {
         XCTAssertEqual(SafeHTML.parseBlock("<hr>"), .rule)
         XCTAssertNil(SafeHTML.parseBlock("<script>alert(1)</script>"))
     }
+
+    func testHTMLImageValidatesSourceAndDimensions() {
+        let image = SafeHTML.imageTag("<img src='https://x/a.png' alt='pic' width='64' height='32px'>")
+        XCTAssertEqual(image?.alt, "pic")
+        XCTAssertEqual(image?.width, 64)
+        XCTAssertEqual(image?.height, 32)
+        XCTAssertNil(SafeHTML.imageTag("<img src='javascript:alert(1)' alt='unsafe'>"))
+        XCTAssertEqual(SafeHTML.imageAlt("<img src='javascript:alert(1)' alt='unsafe'>"), "unsafe")
+        XCTAssertNil(SafeHTML.dimension("100%"))
+        XCTAssertNil(SafeHTML.dimension("10001"))
+    }
 }

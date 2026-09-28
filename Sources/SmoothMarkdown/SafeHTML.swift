@@ -15,6 +15,41 @@ public enum SafeHTML {
         public let end: Int
     }
 
+    public struct ImageSpec: Equatable {
+        public let source: String
+        public let alt: String
+        public let title: String?
+        public let width: Double?
+        public let height: Double?
+    }
+
+    public static func imageTag(_ source: String) -> ImageSpec? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tag = lexTag(trimmed), tag.name == "img", !tag.isClosing,
+              tag.end == (trimmed as NSString).length,
+              let imageSource = tag.attributes["src"], isSafeImageSource(imageSource) else { return nil }
+        return ImageSpec(
+            source: imageSource,
+            alt: tag.attributes["alt"] ?? "",
+            title: tag.attributes["title"],
+            width: tag.attributes["width"].flatMap(dimension),
+            height: tag.attributes["height"].flatMap(dimension)
+        )
+    }
+
+    public static func imageAlt(_ source: String) -> String? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tag = lexTag(trimmed), tag.name == "img", !tag.isClosing,
+              tag.end == (trimmed as NSString).length else { return nil }
+        return tag.attributes["alt"] ?? ""
+    }
+
+    public static func dimension(_ value: String) -> Double? {
+        let normalized = value.trimmingCharacters(in: .whitespaces).lowercased()
+        let number = normalized.hasSuffix("px") ? String(normalized.dropLast(2)).trimmingCharacters(in: .whitespaces) : normalized
+        return Double(number).flatMap { $0 > 0 && $0 <= 10000 ? $0 : nil }
+    }
+
     public enum Block: Equatable {
         case rule
         case container(name: String, content: String, alignment: String?, trailing: String)
