@@ -1,0 +1,16 @@
+gantt
+    title 软件开发生命周期
+    dateFormat YYYY-MM-DD
+
+    section 规划阶段
+        需求分析 :done, req, 2024-01-01, 14d
+        系统设计 :done, des, after req, 10d
+
+    section 开发阶段
+        前端开发 :active, front, 2024-01-25, 30d
+        后端开发 :active, back, 2024-01-20, 35d
+        API集成 :crit, api, after back, 10d
+
+    section 测试阶段
+        单元测试 :test1, 2024-02-25, 10d
+        集成测试 :test2, after test1, 7d

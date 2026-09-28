@@ -1,0 +1,326 @@
+{
+  "source": "flutter-smooth-markdown/example/lib/mermaid_demo.dart",
+  "sourceSha256": "eebd9d0daad44ac4a02210b0dfa5da90788d154e9665cf468fccb4694ef40081",
+  "examples": [
+    {
+      "index": 1,
+      "category": "flowchart",
+      "title": "基础流程图 (TD)",
+      "description": "从上到下的简单流程图",
+      "file": "mermaid-01.mmd",
+      "sha256": "56394eaf16736e549a5b636df716dcb1058d87c9ca3abcc5c15ebb51b0b8815b"
+    },
+    {
+      "index": 2,
+      "category": "flowchart",
+      "title": "流程图 (LR)",
+      "description": "从左到右的流程图",
+      "file": "mermaid-02.mmd",
+      "sha256": "41c60e65111da94f228ba12ec51c60a95319cac4aa91c347654b2319c62f416a"
+    },
+    {
+      "index": 3,
+      "category": "flowchart",
+      "title": "流程图 (BT)",
+      "description": "从下到上的流程图",
+      "file": "mermaid-03.mmd",
+      "sha256": "af75e9b5a7f866285250b3fa3c622af593ccc447eb7a42c0a910f7fe5456af8d"
+    },
+    {
+      "index": 4,
+      "category": "flowchart",
+      "title": "流程图 (RL)",
+      "description": "从右到左的流程图",
+      "file": "mermaid-04.mmd",
+      "sha256": "86064594052c1c30d9b1926b9b8b5a43309ae280f295eaa9c2a10f43afc08364"
+    },
+    {
+      "index": 5,
+      "category": "flowchart",
+      "title": "复杂流程图",
+      "description": "包含多分支和循环的流程图",
+      "file": "mermaid-05.mmd",
+      "sha256": "d699b21471e7cd7279598c4d26274924cffa80a6cd0ae9da42e5d8d864da69fd"
+    },
+    {
+      "index": 6,
+      "category": "flowchart",
+      "title": "节点形状",
+      "description": "展示不同的节点形状",
+      "file": "mermaid-06.mmd",
+      "sha256": "7902d1bcfc2a0f1a76cd6fc5adb3284c9857caa663ffb8b4b5be363e155c278c"
+    },
+    {
+      "index": 7,
+      "category": "flowchart",
+      "title": "带样式的流程图",
+      "description": "包含子图的流程图",
+      "file": "mermaid-07.mmd",
+      "sha256": "51cea150f03f8028ba0a4759599be9abb1e998b3067aab09ba99f8ad3a456cea"
+    },
+    {
+      "index": 8,
+      "category": "sequence",
+      "title": "基础时序图",
+      "description": "简单的消息交互",
+      "file": "mermaid-08.mmd",
+      "sha256": "ae4b2963c71eb9b617838ae403ccdaccaa7e9703c8541826fbc6e39fb988dae7"
+    },
+    {
+      "index": 9,
+      "category": "sequence",
+      "title": "时序图 - 多参与者",
+      "description": "多个参与者之间的交互",
+      "file": "mermaid-09.mmd",
+      "sha256": "0ce56cf46df6fff6cde54e1e4e3c279d8b7e5588708e9b0f7dc039924dc1e2ab"
+    },
+    {
+      "index": 10,
+      "category": "sequence",
+      "title": "API 调用流程",
+      "description": "REST API 调用示例",
+      "file": "mermaid-10.mmd",
+      "sha256": "df1cbfc22d1d3b228daade47207305bf2de5ed6c8c84ab7577d24ffbf24b6858"
+    },
+    {
+      "index": 11,
+      "category": "sequence",
+      "title": "登录流程",
+      "description": "用户登录认证流程",
+      "file": "mermaid-11.mmd",
+      "sha256": "ac48d72536a49fb0ac68bb7c966146046f86bcefe7156d938debdc60f08bea01"
+    },
+    {
+      "index": 12,
+      "category": "pie",
+      "title": "饼图 - 基础",
+      "description": "展示基本的饼图数据",
+      "file": "mermaid-12.mmd",
+      "sha256": "5e0b9739e6de3b0f540ea34abe21e7c71d6700825358e4027131c23e41f7f345"
+    },
+    {
+      "index": 13,
+      "category": "pie",
+      "title": "饼图 - 市场份额",
+      "description": "展示市场份额分布",
+      "file": "mermaid-13.mmd",
+      "sha256": "3a8ec1ca11457bff220767eda4b0a02733ac9378fb743384bdfc8863082714da"
+    },
+    {
+      "index": 14,
+      "category": "pie",
+      "title": "饼图 - 编程语言",
+      "description": "开发者最常用的编程语言",
+      "file": "mermaid-14.mmd",
+      "sha256": "cdd4e3b2de355b310dcbc6837e714638b9e2879f7933633ead2f5563beb3dcb6"
+    },
+    {
+      "index": 15,
+      "category": "pie",
+      "title": "饼图 - 项目时间分配",
+      "description": "软件开发项目时间分配",
+      "file": "mermaid-15.mmd",
+      "sha256": "2ac60a6a371efbcac6294407b57bc882b464ff0af2a4e3693cf32999dd94743d"
+    },
+    {
+      "index": 16,
+      "category": "gantt",
+      "title": "甘特图 - 基础",
+      "description": "简单的项目时间线",
+      "file": "mermaid-16.mmd",
+      "sha256": "af2073b5d9254cbb572db9fd87fa3f178fadc599ddf447daaa7e216570fd5a0e"
+    },
+    {
+      "index": 17,
+      "category": "gantt",
+      "title": "甘特图 - 带分组",
+      "description": "按阶段分组的项目计划",
+      "file": "mermaid-17.mmd",
+      "sha256": "5da18f4d941601ff3db82c7542091fb475b9a4d1b26b56c5c3bf8c2d2e7bf7b9"
+    },
+    {
+      "index": 18,
+      "category": "gantt",
+      "title": "甘特图 - 任务状态",
+      "description": "展示不同任务状态",
+      "file": "mermaid-18.mmd",
+      "sha256": "627bcb7db52f4afea6a22fcd60507fe9df6ab5e26fae63c04e68087e9d14e21c"
+    },
+    {
+      "index": 19,
+      "category": "gantt",
+      "title": "甘特图 - 产品发布",
+      "description": "产品发布计划",
+      "file": "mermaid-19.mmd",
+      "sha256": "2b7d7d96fc67430c16ba2a6e4fa303391a915aad39788327d2d6faa0c0c2ef90"
+    },
+    {
+      "index": 20,
+      "category": "timeline",
+      "title": "时间线 - 基础",
+      "description": "社交媒体平台发展历史",
+      "file": "mermaid-20.mmd",
+      "sha256": "ee442923052d57f686c52d9ff67d50b9266aeaceb4d63a194f2250a9f96dae0a"
+    },
+    {
+      "index": 21,
+      "category": "timeline",
+      "title": "时间线 - 编程语言",
+      "description": "编程语言发展历史",
+      "file": "mermaid-21.mmd",
+      "sha256": "50e46e4d4e2b11f5a79bcc8f53ea153ed730675341b5cb330ad59175850d8749"
+    },
+    {
+      "index": 22,
+      "category": "timeline",
+      "title": "时间线 - 技术发展",
+      "description": "计算机技术发展历程",
+      "file": "mermaid-22.mmd",
+      "sha256": "d3ad0154502aff7bd10d1cc67069a53e8271f6e3cb2eecd89a8fac0ec19ff14c"
+    },
+    {
+      "index": 23,
+      "category": "timeline",
+      "title": "时间线 - 产品路线图",
+      "description": "产品发布时间线",
+      "file": "mermaid-23.mmd",
+      "sha256": "386719b1bb4f0c5ed29f05c480471c44d7dcdfa27e838a7bb5976d6589b6b2e1"
+    },
+    {
+      "index": 24,
+      "category": "timeline",
+      "title": "时间线 - 公司发展",
+      "description": "公司里程碑",
+      "file": "mermaid-24.mmd",
+      "sha256": "a254190527264e4a85d36ebe458e8f16cef6c606953d28489a1b2730fa1c5dd8"
+    },
+    {
+      "index": 25,
+      "category": "kanban",
+      "title": "看板 - 基础",
+      "description": "简单的任务看板",
+      "file": "mermaid-25.mmd",
+      "sha256": "16c17fd3c144412b70b8f7e6781b0332922ac03ca5ccfb761b7799fe64326f20"
+    },
+    {
+      "index": 26,
+      "category": "kanban",
+      "title": "看板 - 带优先级",
+      "description": "展示任务优先级的看板",
+      "file": "mermaid-26.mmd",
+      "sha256": "3baa92e498a65acb8152058686254222a362b7149d98a54084b449243b30522e"
+    },
+    {
+      "index": 27,
+      "category": "kanban",
+      "title": "看板 - 团队协作",
+      "description": "分配负责人的团队看板",
+      "file": "mermaid-27.mmd",
+      "sha256": "f0130a0a73d5bab5f97dd4c3b556b700e999bbba491a5453da6b5708127ca996"
+    },
+    {
+      "index": 28,
+      "category": "kanban",
+      "title": "看板 - WIP 限制",
+      "description": "设置在制品限制的看板",
+      "file": "mermaid-28.mmd",
+      "sha256": "7fb44ccca140a6cca138fa56f591eabaa876c4bd423cd249fb77f5d15fa4f729"
+    },
+    {
+      "index": 29,
+      "category": "kanban",
+      "title": "看板 - 完整示例",
+      "description": "包含所有功能的看板",
+      "file": "mermaid-29.mmd",
+      "sha256": "f3ae97823f416acd59e776d31716315ef5b00d3af19bb74576f0ad3036973040"
+    },
+    {
+      "index": 30,
+      "category": "kanban",
+      "title": "看板 - 敏捷开发",
+      "description": "Scrum 敏捷开发看板",
+      "file": "mermaid-30.mmd",
+      "sha256": "469cae44ff36dbb0091748471d9370959ec292ba4241e9645cce265a252c3667"
+    },
+    {
+      "index": 31,
+      "category": "complex",
+      "title": "Git 工作流",
+      "description": "Git 分支管理流程",
+      "file": "mermaid-31.mmd",
+      "sha256": "5fc52098468bc20fac520209ca0eeb4a3e950c2bd926d314b984289069807394"
+    },
+    {
+      "index": 32,
+      "category": "complex",
+      "title": "CI/CD 流程",
+      "description": "持续集成/持续部署流程",
+      "file": "mermaid-32.mmd",
+      "sha256": "e290c04c4de00fa1717272af67bf384a39708c698d3c5839ed2cf1e22d703d57"
+    },
+    {
+      "index": 33,
+      "category": "complex",
+      "title": "状态机",
+      "description": "订单状态流转",
+      "file": "mermaid-33.mmd",
+      "sha256": "3aa83f6c31a8dfea11bb165657cadd77290beadfb130cc98b458e1e8ee20e7ca"
+    },
+    {
+      "index": 34,
+      "category": "radar",
+      "title": "雷达图 - 技能评估",
+      "description": "展示多维度技能水平对比",
+      "file": "mermaid-34.mmd",
+      "sha256": "58e114ea1f2a28cf8ef7009cacd1021c9b9d6c5783a5d3ec2e50a6b83408fae0"
+    },
+    {
+      "index": 35,
+      "category": "radar",
+      "title": "雷达图 - 产品特性",
+      "description": "产品竞争力分析",
+      "file": "mermaid-35.mmd",
+      "sha256": "8992df6628f08f4f29a91a9727d57a6094045a10c5343847556d1a67dcde057f"
+    },
+    {
+      "index": 36,
+      "category": "radar",
+      "title": "雷达图 - 简单圆形",
+      "description": "使用圆形网格的雷达图",
+      "file": "mermaid-36.mmd",
+      "sha256": "4a8b5668848e03affb036465cfd1b5f2f1ac158bce8e1efd6fc2c46993a8b11e"
+    },
+    {
+      "index": 37,
+      "category": "xy",
+      "title": "XY图 - 柱状图",
+      "description": "季度销售数据柱状图",
+      "file": "mermaid-37.mmd",
+      "sha256": "796b86626a1ca096e068c33281ec14340816a3b7d0e71a9ca8e211fc2b2ef03a"
+    },
+    {
+      "index": 38,
+      "category": "xy",
+      "title": "XY图 - 柱状+折线",
+      "description": "柱状图与折线图混合展示",
+      "file": "mermaid-38.mmd",
+      "sha256": "c794ec2448bdc23a587d0c40aaa3bda8295e4b756f685849ad5f0a465aa175b4"
+    },
+    {
+      "index": 39,
+      "category": "xy",
+      "title": "XY图 - 多系列",
+      "description": "多组数据对比",
+      "file": "mermaid-39.mmd",
+      "sha256": "2ba15bf67a64c8910be702ed8b90494e5ee97987d19c2993bf58bf99eb8199ea"
+    },
+    {
+      "index": 40,
+      "category": "xy",
+      "title": "XY图 - 年度营收",
+      "description": "12个月营收柱状图+趋势线",
+      "file": "mermaid-40.mmd",
+      "sha256": "860e3557180957f70a29e697627d091421a47d9475747f1045a5dfde837c09d8"
+    }
+  ]
+}

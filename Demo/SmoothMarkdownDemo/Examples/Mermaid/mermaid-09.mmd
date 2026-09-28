@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant Client
+    participant Server
+    participant Database
+    Client->>Server: 请求数据
+    Server->>Database: 查询
+    Database-->>Server: 返回结果
+    Server-->>Client: 响应数据

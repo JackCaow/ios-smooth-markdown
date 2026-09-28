@@ -1,0 +1,10 @@
+flowchart TD
+    subgraph Frontend
+        A[React] --> B[Vue]
+        B --> C[Angular]
+    end
+    subgraph Backend
+        D[Node.js] --> E[Python]
+        E --> F[Go]
+    end
+    Frontend --> Backend

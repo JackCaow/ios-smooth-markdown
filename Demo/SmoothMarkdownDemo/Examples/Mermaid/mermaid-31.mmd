@@ -1,0 +1,12 @@
+graph LR
+    A[main] --> B[develop]
+    B --> C[feature_a]
+    B --> D[feature_b]
+    C --> E[PR]
+    D --> E
+    E --> F[Review]
+    F --> G{通过}
+    G -->|是| H[合并]
+    G -->|否| C
+    H --> I[发布]
+    I --> A
