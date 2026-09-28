@@ -2,13 +2,10 @@ import SmoothMarkdown
 import SwiftUI
 
 struct FixtureDemoView: View {
-    @StateObject private var controller = MarkdownEditorController(
-        text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture :
-            (ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ? nestedListEditorFixture :
-            (ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ? listEditorFixture :
-                (ProcessInfo.processInfo.arguments.contains("--host-io-fixture") ? hostIOFixture : demoMarkdown))))
+    @StateObject private var controller = MarkdownEditorController(text: editorFixtureText())
     @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
     @State private var enableHTML = false
@@ -89,10 +86,21 @@ struct FixtureDemoView: View {
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") {
                 controller.mode = .formatted
             }
         }
         }
     }
+}
+
+private func editorFixtureText() -> String {
+    let arguments = ProcessInfo.processInfo.arguments
+    if arguments.contains("--inline-editor-fixture") { return inlineEditorFixture }
+    if arguments.contains("--empty-list-editor-fixture") { return emptyListEditorFixture }
+    if arguments.contains("--nested-list-editor-fixture") { return nestedListEditorFixture }
+    if arguments.contains("--list-editor-fixture") { return listEditorFixture }
+    if arguments.contains("--host-io-fixture") { return hostIOFixture }
+    return demoMarkdown
 }

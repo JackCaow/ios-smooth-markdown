@@ -258,5 +258,6 @@ title Work split
 
 let inlineEditorFixture = "Alpha"
 let listEditorFixture = "7. First\n8. Second\n\n- [ ] Task"
+let emptyListEditorFixture = "- First\n- "
 let nestedListEditorFixture = "- Parent\n  - Child\n    continuation\n- Sibling"
 let hostIOFixture = "Intro"

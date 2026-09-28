@@ -1,6 +1,25 @@
 import XCTest
 
 final class ListEditorUITests: XCTestCase {
+    func testReturnOnEmptyRootItemFocusesNewParagraph() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--empty-list-editor-fixture"]
+        app.launch()
+
+        let emptyItem = app.textFields["list-block-0-item-1"]
+        XCTAssertTrue(emptyItem.waitForExistence(timeout: 10))
+        emptyItem.tap()
+        emptyItem.typeText("\n")
+
+        let paragraph = app.textFields["list-exit-paragraph"]
+        XCTAssertTrue(paragraph.waitForExistence(timeout: 5))
+        app.typeText("Body")
+        app.segmentedControls.buttons["Source"].tap()
+        let source = app.textViews["markdown-source"]
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertEqual(source.value as? String, "- First\n\nBody")
+    }
+
     func testReturnCreatesNextOrderedItemInBlocks() {
         let app = XCUIApplication()
         app.launchArguments = ["--list-editor-fixture"]
