@@ -18,6 +18,12 @@ Hidden **formatted** content.
 Visible content by default.
 </details>
 
+Inline SVG: before ![Bundled vector](native-vector.svg) after.
+
+![Bundled vector](native-vector.svg)
+
+![Remote SVG](https://upload.wikimedia.org/wikipedia/commons/0/02/SVG_logo.svg)
+
 > The source editor now supports formatting commands and preview.
 
 Footnotes have named[^note] and numeric[^2] references.

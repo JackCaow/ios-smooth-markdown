@@ -1,4 +1,5 @@
 import Markdown
+import SwiftDraw
 import SwiftUI
 
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
@@ -242,16 +243,27 @@ public struct SmoothMarkdownView: View {
         }
     }
 
-    private func imageView(_ image: SafeHTML.ImageSpec) -> AnyView {
-        let source = image.source
-        let url = URL(string: source)
-        let isNetwork = url?.scheme.map { ["http", "https"].contains($0.lowercased()) } ?? false
-        let isLocal = !source.isEmpty && !source.hasPrefix("//") && !source.contains("..") &&
-            !source.contains(":") && !source.contains("\\")
+    private func imageView(_ image: SafeHTML.ImageSpec, inline: Bool = false) -> AnyView {
         let label = image.alt.isEmpty ? (image.title ?? "Image") : image.alt
-        let width: CGFloat? = image.width.map { CGFloat($0) }
-        let height: CGFloat? = image.height.map { CGFloat($0) }
-        if isNetwork, let url {
+        let width: CGFloat? = image.width.map { CGFloat($0) } ?? (inline ? 24 : nil)
+        let height: CGFloat? = image.height.map { CGFloat($0) } ?? (inline ? 24 : nil)
+        let resizableSVG = width != nil || height != nil
+        guard let source = ImageSource.parse(image.source) else { return AnyView(SwiftUI.Text(label)) }
+        switch source {
+        case let .remote(url, svg: true):
+            return AnyView(
+                AsyncSVGView(url: url) { phase in
+                    switch phase {
+                    case .success(let svg): svgContent(svg, resizable: resizableSVG)
+                    case .failure: SwiftUI.Text(label)
+                    case .empty: ProgressView()
+                    }
+                }
+                .frame(width: width, height: height)
+                .onTapGesture { onImageTap?(url) }
+                .accessibilityLabel(label)
+            )
+        case let .remote(url, svg: false):
             return AnyView(
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -265,15 +277,24 @@ public struct SmoothMarkdownView: View {
                 .onTapGesture { onImageTap?(url) }
                 .accessibilityLabel(label)
             )
-        }
-        if isLocal {
-            return AnyView(SwiftUI.Image(source)
+        case let .bundled(name, svg: true):
+            guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
+            return AnyView(svgContent(svg, resizable: resizableSVG)
+                .frame(width: width, height: height)
+                .onTapGesture { if let url = URL(string: name) { onImageTap?(url) } }
+                .accessibilityLabel(label))
+        case let .bundled(name, svg: false):
+            return AnyView(SwiftUI.Image(name)
                 .resizable().scaledToFit()
                 .frame(width: width, height: height)
-                .onTapGesture { if let url { onImageTap?(url) } }
+                .onTapGesture { if let url = URL(string: name) { onImageTap?(url) } }
                 .accessibilityLabel(label))
         }
-        return AnyView(SwiftUI.Text(label))
+    }
+
+    private func svgContent(_ svg: SVG, resizable: Bool) -> AnyView {
+        if resizable { return AnyView(SVGView(svg: svg).resizable().scaledToFit()) }
+        return AnyView(SVGView(svg: svg))
     }
 
     private struct InlineStyle {
@@ -343,9 +364,7 @@ public struct SmoothMarkdownView: View {
                 switch piece {
                 case let .text(text): text.fixedSize()
                 case let .image(image):
-                    imageView(image)
-                        .frame(width: image.width.map { CGFloat($0) } ?? 24,
-                               height: image.height.map { CGFloat($0) } ?? 24)
+                    imageView(image, inline: true)
                 case .lineBreak:
                     Color.clear.frame(width: 0, height: 0)
                         .layoutValue(key: InlineBreakKey.self, value: true)

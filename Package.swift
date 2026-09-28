@@ -6,15 +6,18 @@ let package = Package(
     platforms: [.iOS(.v17), .macOS(.v14)],
     products: [.library(name: "SmoothMarkdown", targets: ["SmoothMarkdown"])],
     dependencies: [
-        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0")
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.8.0"),
+        .package(url: "https://github.com/swhitty/SwiftDraw.git", from: "0.29.0")
     ],
     targets: [
         .target(name: "SmoothMarkdown", dependencies: [
-            .product(name: "Markdown", package: "swift-markdown")
+            .product(name: "Markdown", package: "swift-markdown"),
+            .product(name: "SwiftDraw", package: "SwiftDraw")
         ]),
         .testTarget(name: "SmoothMarkdownTests", dependencies: [
             "SmoothMarkdown",
-            .product(name: "Markdown", package: "swift-markdown")
-        ])
+            .product(name: "Markdown", package: "swift-markdown"),
+            .product(name: "SwiftDraw", package: "SwiftDraw")
+        ], resources: [.process("Fixtures")])
     ]
 )
