@@ -32,7 +32,7 @@ struct DemoHomeView: View {
         return catalog.examples.first { $0.id == id }
     }
     private var title: String {
-        if let currentExample { return DemoLocalizations.exampleTitle(currentExample, in: language) }
+        if let currentExample { return currentExample.title }
         return DemoLocalizations.text("examples", in: language)
     }
     private var markdown: String? {

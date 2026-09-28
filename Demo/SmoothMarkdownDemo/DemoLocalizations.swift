@@ -1,8 +1,27 @@
 import Foundation
 
-/// UI labels copied from Flutter example/lib/l10n/app_localizations.dart.
+/// Flutter labels load from a checked fixture generated from
+/// example/lib/l10n/app_localizations.dart. Native-only labels live below.
 /// Markdown fixtures retain their original text across language changes.
 enum DemoLocalizations {
+    private struct FlutterFixture: Decodable {
+        let translations: [String: [String: String]]
+    }
+
+    private static let syncedFlutter: [String: [String: String]] = {
+        let bundle = Bundle.main
+        let url = bundle.url(forResource: "flutter-localizations", withExtension: "json", subdirectory: "Examples/l10n")
+            ?? bundle.url(forResource: "flutter-localizations", withExtension: "json", subdirectory: "l10n")
+            ?? bundle.url(forResource: "flutter-localizations", withExtension: "json")
+        guard let url,
+              let data = try? Data(contentsOf: url),
+              let fixture = try? JSONDecoder().decode(FlutterFixture.self, from: data) else {
+            return [:]
+        }
+        return fixture.translations
+    }()
+
+    // Fallback for preview contexts that do not include Demo resources.
     static let flutter: [DemoLanguage: [String: String]] = [
         .zh: [
             "app_title": "Flutter Smooth Markdown",
@@ -282,7 +301,13 @@ enum DemoLocalizations {
     ]
 
     static func text(_ key: String, in language: DemoLanguage) -> String {
-        flutter[language]?[key] ?? native[language]?[key] ?? flutter[.en]?[key] ?? native[.en]?[key] ?? key
+        syncedFlutter[language.rawValue]?[key]
+            ?? flutter[language]?[key]
+            ?? native[language]?[key]
+            ?? syncedFlutter[DemoLanguage.en.rawValue]?[key]
+            ?? flutter[.en]?[key]
+            ?? native[.en]?[key]
+            ?? key
     }
 
     static func exampleTitle(_ example: DemoExample, in language: DemoLanguage) -> String {

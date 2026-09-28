@@ -15,6 +15,7 @@ SOURCES = (
     ("sync_flutter_ai_chat.py", "ai_chat_demo.dart"),
     ("sync_flutter_chat_list.py", "chat_list_demo.dart"),
     ("sync_flutter_conversations.py", "conversation_list_demo.dart"),
+    ("sync_flutter_l10n.py", "l10n/app_localizations.dart"),
 )
 
 
@@ -35,7 +36,7 @@ def main() -> None:
         source_flag = ["--source", str(source_dir / source_file)] if source_file else ["--source-dir", str(source_dir)]
         print(f"Checking {script}...", flush=True)
         subprocess.run([sys.executable, str(tools / script), "--check", *source_flag], check=True)
-    print("All seven iOS Demo fixture groups match the Flutter example.")
+    print("All eight iOS Demo fixture groups match the Flutter example.")
 
 
 if __name__ == "__main__":

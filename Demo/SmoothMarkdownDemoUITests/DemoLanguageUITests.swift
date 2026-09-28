@@ -8,7 +8,7 @@ final class DemoLanguageUITests: XCTestCase {
         let title = app.staticTexts["demo-current-title"]
         let status = app.staticTexts["demo-current-theme"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "基础格式")
+        XCTAssertEqual(title.label, "Basic Formatting")
         XCTAssertTrue(status.label.contains("默认亮色"))
 
         app.buttons["view-markdown-source"].tap()
@@ -21,16 +21,16 @@ final class DemoLanguageUITests: XCTestCase {
         app.buttons["Default Dark"].tap()
         XCTAssertTrue(status.label.contains("Default Dark"))
 
-        let translated: [(String, String, String)] = [
-            ("ja", "基本書式", "デフォルトダーク"),
-            ("es", "Formato Básico", "Oscuro Predeterminado"),
-            ("fr", "Formatage de Base", "Sombre Par Défaut"),
-            ("ko", "기본 서식", "기본 다크"),
-            ("zh", "基础格式", "默认暗色"),
+        let translated: [(String, String)] = [
+            ("ja", "デフォルトダーク"),
+            ("es", "Oscuro Predeterminado"),
+            ("fr", "Sombre Par Défaut"),
+            ("ko", "기본 다크"),
+            ("zh", "默认暗色"),
         ]
-        for (code, expectedTitle, expectedTheme) in translated {
+        for (code, expectedTheme) in translated {
             chooseLanguage(code, app: app)
-            XCTAssertEqual(title.label, expectedTitle)
+            XCTAssertEqual(title.label, "Basic Formatting")
             XCTAssertTrue(status.label.contains(expectedTheme))
         }
 
@@ -38,7 +38,7 @@ final class DemoLanguageUITests: XCTestCase {
         XCTAssertEqual(title.label, "数学公式")
         app.buttons["demo-feature-back"].tap()
         choosePage("example-headers", app: app)
-        XCTAssertEqual(title.label, "标题")
+        XCTAssertEqual(title.label, "Headers")
         XCTAssertTrue(status.label.contains("默认暗色"))
 
         app.buttons["view-markdown-source"].tap()
