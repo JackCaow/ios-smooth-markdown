@@ -46,26 +46,15 @@ public struct SmoothMarkdownEditor: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                if !focusMode {
+            if !focusMode {
+                HStack {
                     Picker("Mode", selection: $controller.mode) {
                         ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
                             Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                }
-                Button(focusMode ? "Exit Focus" : "Focus",
-                       systemImage: focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
-                    focusMode.toggle()
-                    if focusMode {
-                        searchOpen = false
-                        searchFieldFocused = false
-                    }
-                }
-                    .labelStyle(.iconOnly)
-                    .accessibilityIdentifier("editor-focus-toggle")
-                if !focusMode {
+                    focusToggle
                     Menu("File") {
                         if hasImagePicker {
                             Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
@@ -85,8 +74,8 @@ public struct SmoothMarkdownEditor: View {
                         .disabled(!controller.isDirty)
                     }
                 }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
 
             if !focusMode {
                 ScrollView(.horizontal) {
@@ -111,7 +100,7 @@ public struct SmoothMarkdownEditor: View {
                 .frame(height: 44)
             }
 
-            if !focusMode {
+            if searchOpen || !focusMode {
                 HStack {
                     if searchOpen {
                         TextField("Find in note...", text: $searchQuery)
@@ -136,35 +125,53 @@ public struct SmoothMarkdownEditor: View {
                             .accessibilityIdentifier("editor-find-close")
                     } else {
                         Spacer()
-                        Button("Find", systemImage: "magnifyingglass") {
-                            searchOpen = true
-                            searchFieldFocused = true
-                        }
-                        .accessibilityIdentifier("editor-find-open")
+                        Button("Find", systemImage: "magnifyingglass", action: openSearch)
+                            .keyboardShortcut("f", modifiers: .command)
+                            .accessibilityIdentifier("editor-find-open")
                     }
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 4)
             }
 
+            if focusMode || searchOpen {
+                // Keep the keyboard command active when Focus hides the toolbar or Find is open.
+                Button("Find in note", action: openSearch)
+                    .keyboardShortcut("f", modifiers: .command)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
+
             Divider()
-            switch controller.mode {
-            case .source:
-                SourceTextView(controller: controller)
-            case .formatted:
-                FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
-                                    wikilinkSuggestions: wikilinkSuggestions)
-            case .preview:
-                SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
-            case .split:
-                GeometryReader { geometry in
-                    VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                Group {
+                    switch controller.mode {
+                    case .source:
                         SourceTextView(controller: controller)
-                            .frame(height: geometry.size.height / 2)
-                        Divider()
+                    case .formatted:
+                        FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
+                                            wikilinkSuggestions: wikilinkSuggestions)
+                    case .preview:
                         SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
-                            .frame(height: geometry.size.height / 2)
+                    case .split:
+                        GeometryReader { geometry in
+                            VStack(spacing: 0) {
+                                SourceTextView(controller: controller)
+                                    .frame(height: geometry.size.height / 2)
+                                Divider()
+                                SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+                                    .frame(height: geometry.size.height / 2)
+                            }
+                        }
                     }
+                }
+                if focusMode {
+                    // iPhone users need a touch exit while the normal toolbar is hidden.
+                    focusToggle
+                        .padding(8)
+                        .background(.regularMaterial, in: Circle())
+                        .padding(8)
                 }
             }
         }
@@ -173,6 +180,21 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private var searchMatches: [NSRange] { controller.findMatches(searchQuery) }
+
+    private var focusToggle: some View {
+        Button(focusMode ? "Exit Focus" : "Focus",
+               systemImage: focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+            focusMode.toggle()
+        }
+        .labelStyle(.iconOnly)
+        .keyboardShortcut(.return, modifiers: [.command, .shift])
+        .accessibilityIdentifier("editor-focus-toggle")
+    }
+
+    private func openSearch() {
+        searchOpen = true
+        searchFieldFocused = true
+    }
 
     private func selectSearchMatch(forward: Bool) {
         let matches = searchMatches

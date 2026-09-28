@@ -10,6 +10,9 @@ final class DemoEditorUITests: XCTestCase {
         XCTAssertTrue(focus.waitForExistence(timeout: 10))
         focus.tap()
         XCTAssertFalse(app.segmentedControls.buttons["Blocks"].exists)
+        XCTAssertFalse(app.buttons["File"].exists)
+        XCTAssertFalse(app.buttons["editor-find-open"].exists)
+        XCTAssertTrue(app.staticTexts["Scratch-style editor preview"].exists)
         focus.tap()
         XCTAssertTrue(app.segmentedControls.buttons["Blocks"].exists)
 
@@ -19,10 +22,23 @@ final class DemoEditorUITests: XCTestCase {
         find.tap()
         find.typeText("Mermaid")
         XCTAssertEqual(app.staticTexts["editor-find-count"].label, "1/2")
+        focus.tap()
+        XCTAssertTrue(find.exists)
+        focus.tap()
         app.buttons["editor-find-next"].tap()
         XCTAssertTrue(app.textViews["markdown-source"].waitForExistence(timeout: 5))
         app.buttons["editor-find-close"].tap()
         XCTAssertFalse(find.exists)
+    }
+
+    func testCommandFFindsInFlutterEditorDemo() {
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["open-demo-editor"].tap()
+
+        XCTAssertTrue(app.buttons["editor-find-open"].waitForExistence(timeout: 10))
+        app.typeKey("f", modifierFlags: .command)
+        XCTAssertTrue(app.textFields["editor-find-field"].waitForExistence(timeout: 5))
     }
 
     func testFlutterEditorDemoHostCallbacksAndSource() {
