@@ -1,6 +1,22 @@
 import XCTest
 
 final class ListEditorUITests: XCTestCase {
+    func testReturnCreatesNextOrderedItemInBlocks() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--list-editor-fixture"]
+        app.launch()
+
+        let firstItem = app.textFields["list-block-0-item-0"]
+        XCTAssertTrue(firstItem.waitForExistence(timeout: 10))
+        firstItem.tap()
+        firstItem.typeText("\n")
+
+        app.segmentedControls.buttons["Source"].tap()
+        let source = app.textViews["markdown-source"]
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertEqual(source.value as? String, "7. First\n8. \n8. Second\n\n- [ ] Task")
+    }
+
     func testIndentAndOutdentControlsChangeNestedListLevel() {
         let app = XCUIApplication()
         app.launchArguments = ["--nested-list-editor-fixture"]

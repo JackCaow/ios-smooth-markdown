@@ -87,6 +87,40 @@ public struct MarkdownSourceList: Equatable {
         return .init(items: next)
     }
 
+    /// Adds a sibling after this item's nested subtree, retaining the surrounding source lines.
+    public func insertingEmptyItem(after index: Int) -> Self? {
+        guard items.indices.contains(index) else { return nil }
+        let item = items[index]
+        let width = Self.indentationWidth(item.indent)
+        var insertion = index + 1
+        while insertion < items.count && Self.indentationWidth(items[insertion].indent) > width {
+            insertion += 1
+        }
+        let newline = items.lazy.map(\.lineEnding).first(where: { !$0.isEmpty }) ?? "\n"
+        let marker: String
+        if item.kind == .ordered, let number = Int(item.marker.dropLast()), let delimiter = item.marker.last {
+            marker = String(number + 1) + String(delimiter)
+        } else {
+            marker = item.marker
+        }
+        let sibling = MarkdownSourceListItem(indent: item.indent, marker: marker, spacing: item.spacing,
+                                             taskMarker: item.taskMarker.map { _ in "[ ]" },
+                                             taskSpacing: item.taskSpacing, content: "",
+                                             lineEnding: insertion < items.count ? newline : item.lineEnding)
+        var next = items
+        if let lastContinuation = next[insertion - 1].continuations.last,
+           lastContinuation.lineEnding.isEmpty { return nil }
+        if next[insertion - 1].lineEnding.isEmpty {
+            let last = next[insertion - 1]
+            next[insertion - 1] = .init(indent: last.indent, marker: last.marker, spacing: last.spacing,
+                                         taskMarker: last.taskMarker, taskSpacing: last.taskSpacing,
+                                         content: last.content, lineEnding: newline,
+                                         continuations: last.continuations)
+        }
+        next.insert(sibling, at: insertion)
+        return .init(items: next)
+    }
+
     public func settingTaskChecked(at index: Int, to checked: Bool) -> Self? {
         guard items.indices.contains(index), let item = items[index].settingChecked(checked) else { return nil }
         var next = items

@@ -112,4 +112,24 @@ final class SourceListEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, source)
         XCTAssertFalse(controller.canUndo)
     }
+
+    @MainActor
+    func testReturnAddsSiblingAfterNestedSubtreeAndPreservesOtherSource() {
+        let source = "# Title\r\n\r\n7) Parent\r\n   - Child\r\n8) Next\r\n\r\nEnd\r\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") { $0.insertingEmptyItem(after: 0) })
+        XCTAssertEqual(controller.text,
+                       "# Title\r\n\r\n7) Parent\r\n   - Child\r\n8) \r\n8) Next\r\n\r\nEnd\r\n")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertTrue(controller.text.contains("8) \r\n8) Next"))
+    }
+
+    func testReturnAddsUncheckedTaskAndHandlesLastLineWithoutNewline() {
+        let task = MarkdownSourceList.parse("- [x] Done\n")!
+        XCTAssertEqual(task.insertingEmptyItem(after: 0)?.toMarkdown(), "- [x] Done\n- [ ] \n")
+        let bullet = MarkdownSourceList.parse("* Last")!
+        XCTAssertEqual(bullet.insertingEmptyItem(after: 0)?.toMarkdown(), "* Last\n* ")
+    }
 }

@@ -653,6 +653,10 @@ private struct FormattedListView: View {
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
                         }))
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
+                        .submitLabel(.return)
+                        .onSubmit {
+                            controller.updateSemanticList(id: blockID) { $0.insertingEmptyItem(after: index) }
+                        }
                         Button { _ = changeIndent(at: index, outdent: true) } label: {
                             Image(systemName: "decrease.indent")
                         }
