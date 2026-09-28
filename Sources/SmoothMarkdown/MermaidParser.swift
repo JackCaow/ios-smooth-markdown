@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline }
+public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
 public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder }
 public enum MermaidLine: Equatable { case solid, dotted, thick }
@@ -66,23 +66,38 @@ public struct MermaidDiagram: Equatable {
     public let showData: Bool
     public let pieSlices: [MermaidPieSlice]
     public let timelineSections: [MermaidTimelineSection]
+    public let ganttTasks: [MermaidGanttTask]
+    public let ganttDateFormat: String
+    public let ganttAxisFormat: String?
+    public let ganttExcludes: String?
+    public let ganttTodayMarker: Bool
+    public let kanbanColumns: [MermaidKanbanColumn]
+    public let kanbanTicketBaseURL: String?
 
     public init(kind: MermaidKind, direction: MermaidDirection, nodes: [MermaidNode] = [], edges: [MermaidEdge] = [],
                 title: String? = nil, showData: Bool = false, pieSlices: [MermaidPieSlice] = [],
-                timelineSections: [MermaidTimelineSection] = []) {
+                timelineSections: [MermaidTimelineSection] = [], ganttTasks: [MermaidGanttTask] = [],
+                ganttDateFormat: String = "YYYY-MM-DD", ganttAxisFormat: String? = nil,
+                ganttExcludes: String? = nil, ganttTodayMarker: Bool = true,
+                kanbanColumns: [MermaidKanbanColumn] = [], kanbanTicketBaseURL: String? = nil) {
         self.kind = kind; self.direction = direction; self.nodes = nodes; self.edges = edges
         self.title = title; self.showData = showData; self.pieSlices = pieSlices; self.timelineSections = timelineSections
+        self.ganttTasks = ganttTasks; self.ganttDateFormat = ganttDateFormat; self.ganttAxisFormat = ganttAxisFormat
+        self.ganttExcludes = ganttExcludes; self.ganttTodayMarker = ganttTodayMarker
+        self.kanbanColumns = kanbanColumns; self.kanbanTicketBaseURL = kanbanTicketBaseURL
     }
 
     public func node(_ id: String) -> MermaidNode? { nodes.first { $0.id == id } }
 }
 
-/// Parses the documented native flowchart, sequence, pie, and timeline subset.
+/// Parses the documented native flowchart, sequence, pie, timeline, Gantt, and Kanban subset.
 public enum MermaidParser {
     public static func parse(_ source: String) -> MermaidDiagram? {
-        let lines = source.components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("%%") }
+        let rawLines = source.components(separatedBy: "\n")
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+                      !$0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("%%") }
+        let lines = rawLines.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        if lines.first == "---" { return MermaidExtendedParser.kanban(rawLines) }
         guard let header = lines.first else { return nil }
         if let match = RegexCapture.first(#"^(?:graph|flowchart)\s+(TD|TB|BT|LR|RL)$"#, in: header, options: [.caseInsensitive]) {
             let direction: MermaidDirection = switch match[1].uppercased() {
@@ -98,6 +113,8 @@ public enum MermaidParser {
             return pie(Array(lines.dropFirst()), showData: header.lowercased().contains("showdata"))
         }
         if header.lowercased() == "timeline" { return timeline(Array(lines.dropFirst())) }
+        if header.lowercased() == "gantt" { return MermaidExtendedParser.gantt(lines) }
+        if header.lowercased() == "kanban" { return MermaidExtendedParser.kanban(rawLines) }
         return nil
     }
 

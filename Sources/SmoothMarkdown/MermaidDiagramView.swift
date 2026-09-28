@@ -21,6 +21,14 @@ public struct MermaidDiagramView: View {
                     drawTimeline(in: context, diagram: diagram, size: layout.size, ink: ink)
                     return
                 }
+                if diagram.kind == .gantt {
+                    drawGantt(in: context, diagram: diagram, size: layout.size, ink: ink)
+                    return
+                }
+                if diagram.kind == .kanban {
+                    drawKanban(in: context, diagram: diagram, size: layout.size, ink: ink)
+                    return
+                }
                 if diagram.kind == .sequence {
                     for node in diagram.nodes {
                         guard let frame = layout.nodes[node.id] else { continue }
@@ -61,6 +69,8 @@ public struct MermaidDiagramView: View {
         case .sequence: "Sequence diagram with \(diagram.nodes.count) participants and \(diagram.edges.count) messages"
         case .pie: "Pie chart with \(diagram.pieSlices.count) slices"
         case .timeline: "Timeline with \(diagram.timelineSections.count) periods"
+        case .gantt: "Gantt chart with \(diagram.ganttTasks.count) tasks"
+        case .kanban: "Kanban board with \(diagram.kanbanColumns.count) columns"
         }
     }
 
@@ -116,6 +126,88 @@ public struct MermaidDiagramView: View {
                 if let description = event.description {
                     context.draw(Text(description).font(.system(size: 10)).foregroundColor(ink.opacity(0.7)),
                                  at: CGPoint(x: x, y: y + 13))
+                }
+            }
+        }
+    }
+
+    private func drawGantt(in context: GraphicsContext, diagram: MermaidDiagram, size: CGSize, ink: Color) {
+        if let title = diagram.title {
+            context.draw(Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(ink),
+                         at: CGPoint(x: min(size.width / 2, 210), y: 22))
+        }
+        let bars = MermaidLayout.ganttBars(diagram)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        if let start = diagram.ganttTasks.map(\.startDate).min(), let end = diagram.ganttTasks.map(\.endDate).max() {
+            context.draw(Text(formatter.string(from: start)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
+                         at: CGPoint(x: 180, y: 60), anchor: .leading)
+            context.draw(Text(formatter.string(from: end)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
+                         at: CGPoint(x: size.width - 20, y: 60), anchor: .trailing)
+        }
+        for (index, task) in diagram.ganttTasks.enumerated() {
+            guard index < bars.count else { continue }
+            let frame = bars[index]
+            let color: Color = switch task.status {
+            case .normal: .blue
+            case .done: .green
+            case .active: .cyan
+            case .critical: .red
+            case .milestone: .orange
+            }
+            let label = task.section.map { "\($0) · \(task.name)" } ?? task.name
+            context.draw(Text(String(label.prefix(25))).font(.system(size: 11)).foregroundColor(ink),
+                         at: CGPoint(x: 16, y: frame.midY), anchor: .leading)
+            let path: Path
+            if task.status == .milestone {
+                var diamond = Path()
+                diamond.move(to: CGPoint(x: frame.midX, y: frame.minY))
+                diamond.addLine(to: CGPoint(x: frame.maxX, y: frame.midY))
+                diamond.addLine(to: CGPoint(x: frame.midX, y: frame.maxY))
+                diamond.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
+                diamond.closeSubpath()
+                path = diamond
+            } else { path = Path(roundedRect: frame, cornerRadius: 4) }
+            context.fill(path, with: .color(color))
+            context.stroke(path, with: .color(ink.opacity(0.35)), lineWidth: 1)
+        }
+    }
+
+    private func drawKanban(in context: GraphicsContext, diagram: MermaidDiagram, size: CGSize, ink: Color) {
+        if let title = diagram.title {
+            context.draw(Text(title).font(.system(size: 16, weight: .semibold)).foregroundColor(ink),
+                         at: CGPoint(x: min(size.width / 2, 195), y: 22))
+        }
+        for (index, column) in diagram.kanbanColumns.enumerated() {
+            let frame = MermaidLayout.kanbanColumns(diagram)[index]
+            context.fill(Path(roundedRect: frame, cornerRadius: 8),
+                         with: .color(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.04)))
+            context.stroke(Path(roundedRect: frame, cornerRadius: 8), with: .color(ink.opacity(0.25)), lineWidth: 1)
+            let heading = column.title + (column.wipLimit.map { "  \(column.tasks.count)/\($0)" } ?? "")
+            context.draw(Text(String(heading.prefix(24))).font(.system(size: 13, weight: .semibold))
+                .foregroundColor(column.isOverLimit ? .red : ink),
+                at: CGPoint(x: frame.minX + 12, y: frame.minY + 20), anchor: .leading)
+            for (taskIndex, task) in column.tasks.enumerated() {
+                let card = CGRect(x: frame.minX + 10, y: frame.minY + 44 + CGFloat(taskIndex) * 86,
+                                  width: frame.width - 20, height: 74)
+                context.fill(Path(roundedRect: card, cornerRadius: 6),
+                             with: .color(colorScheme == .dark ? Color.black.opacity(0.35) : .white))
+                context.stroke(Path(roundedRect: card, cornerRadius: 6), with: .color(ink.opacity(0.18)), lineWidth: 1)
+                let stripe: Color = switch task.priority {
+                case .veryHigh: .red
+                case .high: .orange
+                case .normal: .gray
+                case .low: .blue
+                case .veryLow: .green
+                }
+                context.fill(Path(CGRect(x: card.minX + 1, y: card.minY + 5, width: 4, height: card.height - 10)), with: .color(stripe))
+                context.draw(Text(String(task.description.prefix(23))).font(.system(size: 12, weight: .medium)).foregroundColor(ink),
+                             at: CGPoint(x: card.minX + 14, y: card.minY + 22), anchor: .leading)
+                let detail = [task.assigned, task.ticket].compactMap { $0 }.joined(separator: " · ")
+                if !detail.isEmpty {
+                    context.draw(Text(String(detail.prefix(27))).font(.system(size: 10)).foregroundColor(ink.opacity(0.65)),
+                                 at: CGPoint(x: card.minX + 14, y: card.minY + 51), anchor: .leading)
                 }
             }
         }

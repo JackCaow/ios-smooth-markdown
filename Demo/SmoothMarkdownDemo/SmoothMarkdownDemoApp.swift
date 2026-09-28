@@ -6,6 +6,28 @@ private let demoMarkdown = """
 
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+```mermaid
+gantt
+  title Release plan
+  dateFormat YYYY-MM-DD
+  section Build
+    Parser :done, p1, 2024-01-01, 10d
+    Native views :active, p2, after p1, 14d
+  section Ship
+    Demo :milestone, m1, after p2, 0d
+```
+
+```mermaid
+kanban
+  title Native work
+  todo[To Do] wip:2
+    task1[Parser tests] @{ assigned: "Alice", priority: "High" }
+  doing[In Progress]
+    task2[Canvas rendering] @{ assigned: "Bob", ticket: "IOS-2" }
+  done[Done]
+    task3[Research]
+```
+
 Plugins: hello @john_doe, explore #swiftui, and wave :wave:.
 
 ::: tip Native plugins

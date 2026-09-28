@@ -105,6 +105,65 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidParser.parse("timeline\ntitle Empty Timeline"))
     }
 
+    func testGanttFixtureSectionsStatusesDependenciesAndLayout() {
+        let diagram = MermaidParser.parse("""
+        gantt
+          title Software Development Timeline
+          dateFormat YYYY-MM-DD
+          section Planning
+            Requirements :done, req, 2024-01-01, 14d
+            Design :done, design, after req, 10d
+          section Development
+            Frontend :active, front, 2024-01-25, 30d
+            Backend :crit, back, 2024-01-20, 2024-02-10
+            Release :milestone, rel, after back, 0d
+        """)!
+        XCTAssertEqual(diagram.kind, .gantt)
+        XCTAssertEqual(diagram.title, "Software Development Timeline")
+        XCTAssertEqual(diagram.ganttTasks.count, 5)
+        XCTAssertEqual(diagram.ganttTasks.map(\.section), ["Planning", "Planning", "Development", "Development", "Development"])
+        XCTAssertEqual(diagram.ganttTasks.map(\.status), [.done, .done, .active, .critical, .milestone])
+        XCTAssertEqual(diagram.ganttTasks[1].dependencies, ["req"])
+        XCTAssertEqual(diagram.ganttTasks[1].startDate.timeIntervalSince(diagram.ganttTasks[0].endDate), 86_400, accuracy: 1)
+        XCTAssertEqual(diagram.ganttTasks[3].endDate.timeIntervalSince(diagram.ganttTasks[3].startDate), 21 * 86_400, accuracy: 1)
+        XCTAssertEqual(diagram.ganttTasks[4].startDate, diagram.ganttTasks[4].endDate)
+        let bars = MermaidLayout.ganttBars(diagram)
+        XCTAssertEqual(bars.count, 5)
+        XCTAssertGreaterThan(bars[1].minX, bars[0].minX)
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.width, 500)
+        XCTAssertNil(MermaidParser.parse("gantt\ntitle Empty"))
+    }
+
+    func testKanbanFixtureYAMLMetadataWIPAndFallback() {
+        let diagram = MermaidParser.parse("""
+        ---
+        config:
+          kanban:
+            ticketBaseUrl: 'https://example.com/#TICKET#'
+        ---
+        kanban
+          title Product Development
+          todo[To Do] wip:1
+            task1[Fix bug] @{ assigned: "Alice", ticket: "P-123", priority: "High" }
+            task2[Review patch] @{ priority: "Very Low" }
+          done[Done]
+            task3[Ship it]
+        """)!
+        XCTAssertEqual(diagram.kind, .kanban)
+        XCTAssertEqual(diagram.title, "Product Development")
+        XCTAssertEqual(diagram.kanbanTicketBaseURL, "https://example.com/#TICKET#")
+        XCTAssertEqual(diagram.kanbanColumns.map(\.title), ["To Do", "Done"])
+        XCTAssertTrue(diagram.kanbanColumns[0].isOverLimit)
+        XCTAssertEqual(diagram.kanbanColumns[0].tasks.map(\.id), ["task1", "task2"])
+        XCTAssertEqual(diagram.kanbanColumns[0].tasks[0].assigned, "Alice")
+        XCTAssertEqual(diagram.kanbanColumns[0].tasks[0].ticket, "P-123")
+        XCTAssertEqual(diagram.kanbanColumns[0].tasks.map(\.priority), [.high, .veryLow])
+        XCTAssertEqual(MermaidLayout.kanbanColumns(diagram).count, 2)
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.height, 200)
+        XCTAssertNil(MermaidParser.parse("kanban\ntitle Empty Board"))
+        XCTAssertNil(MermaidParser.parse("erDiagram\nA ||--o{ B : owns"))
+    }
+
     func testMermaidFencePluginAndOrdinaryFenceFallback() throws {
         let registry = ParserPluginRegistry.builtIns()
         let source = """

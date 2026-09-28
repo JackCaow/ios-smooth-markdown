@@ -21,6 +21,8 @@ enum MermaidLayout {
         case .sequence: sequence(diagram)
         case .pie: pie(diagram)
         case .timeline: timeline(diagram)
+        case .gantt: gantt(diagram)
+        case .kanban: kanban(diagram)
         }
     }
 
@@ -34,6 +36,38 @@ enum MermaidLayout {
         let eventRows = diagram.timelineSections.map { $0.events.count }.max() ?? 0
         return .init(size: CGSize(width: max(320, CGFloat(count) * 180 + 64),
                                   height: CGFloat(200 + eventRows * 30)), nodes: [:], edges: [])
+    }
+
+    private static func gantt(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        guard let first = diagram.ganttTasks.map(\.startDate).min(),
+              let last = diagram.ganttTasks.map(\.endDate).max() else { return .init(size: .zero, nodes: [:], edges: []) }
+        let days = max(1, Calendar(identifier: .gregorian).dateComponents([.day], from: first, to: last).day ?? 0)
+        return .init(size: CGSize(width: max(460, CGFloat(days + 1) * 12 + 210),
+                                  height: CGFloat(100 + diagram.ganttTasks.count * 48)), nodes: [:], edges: [])
+    }
+
+    static func ganttBars(_ diagram: MermaidDiagram) -> [CGRect] {
+        guard let first = diagram.ganttTasks.map(\.startDate).min() else { return [] }
+        let calendar = Calendar(identifier: .gregorian)
+        return diagram.ganttTasks.enumerated().map { index, task in
+            let offset = max(0, calendar.dateComponents([.day], from: first, to: task.startDate).day ?? 0)
+            let duration = max(1, (calendar.dateComponents([.day], from: task.startDate, to: task.endDate).day ?? 0) + 1)
+            return CGRect(x: 180 + CGFloat(offset) * 12, y: 82 + CGFloat(index) * 48,
+                          width: task.status == .milestone ? 12 : CGFloat(duration) * 12, height: 22)
+        }
+    }
+
+    private static func kanban(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        let rows = diagram.kanbanColumns.map { $0.tasks.count }.max() ?? 0
+        return .init(size: CGSize(width: CGFloat(diagram.kanbanColumns.count) * 216 + 32,
+                                  height: CGFloat(120 + rows * 86)), nodes: [:], edges: [])
+    }
+
+    static func kanbanColumns(_ diagram: MermaidDiagram) -> [CGRect] {
+        let height = CGFloat(86 + (diagram.kanbanColumns.map { $0.tasks.count }.max() ?? 0) * 86)
+        return diagram.kanbanColumns.indices.map { index in
+            CGRect(x: 24 + CGFloat(index) * 216, y: 50, width: 200, height: height)
+        }
     }
 
     private static func flowchart(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
