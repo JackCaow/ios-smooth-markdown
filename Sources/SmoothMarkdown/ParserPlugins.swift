@@ -79,6 +79,7 @@ public final class ParserPluginRegistry {
         try! result.register(ToolCallPlugin())
         try! result.register(ThinkingPlugin())
         try! result.register(ArtifactPlugin())
+        try! result.register(MermaidPlugin())
         return result
     }
 
@@ -201,13 +202,6 @@ enum PluginBlockSyntax {
                 index += 1
                 continue
             }
-            if let run = fenceRun(trimmed), run.1 >= 3 {
-                fence = run.0
-                fenceLength = run.1
-                ordinary.append(line)
-                index += 1
-                continue
-            }
             var accepted: (any BlockParserPlugin, BlockPluginMatch)?
             for plugin in registry.findBlockPlugins(line, lines: lines, at: index) {
                 guard let match = plugin.parse(lines, at: index), match.linesConsumed > 0,
@@ -220,6 +214,10 @@ enum PluginBlockSyntax {
                 result.append(.plugin(plugin, match))
                 index += match.linesConsumed
             } else {
+                if let run = fenceRun(trimmed), run.1 >= 3 {
+                    fence = run.0
+                    fenceLength = run.1
+                }
                 ordinary.append(line)
                 index += 1
             }

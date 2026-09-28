@@ -25,6 +25,20 @@ print("Hello from an artifact")
 <tool_id>demo-1</tool_id>
 <input>{"query":"SwiftUI Markdown"}</input>
 </tool_use>
+```mermaid
+flowchart TD
+  A[Start] --> B{Ready?}
+  B -->|Yes| C[Done]
+  B -.->|No| D(Retry)
+```
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant S as Server
+  U->>S: Request
+  S-->>U: Response
+```
 
 Inline math: $E=mc^2$ and $\\frac{a}{b}$.
 
