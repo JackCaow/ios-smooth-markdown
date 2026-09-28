@@ -80,23 +80,9 @@ public struct MermaidDiagramView: View {
         .background(colorScheme == .dark ? Color(red: 0.10, green: 0.12, blue: 0.17) : .white,
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
-        .accessibilityLabel(accessibilitySummary)
-    }
-
-    private var accessibilitySummary: String {
-        switch diagram.kind {
-        case .flowchart: "Flowchart with \(diagram.nodes.count) nodes and \(diagram.edges.count) connections"
-        case .sequence: "Sequence diagram with \(diagram.nodes.count) participants and \(diagram.edges.count) messages"
-        case .classDiagram: "Class diagram with \(diagram.nodes.count) classes and \(diagram.edges.count) relationships"
-        case .stateDiagram: "State diagram with \(diagram.nodes.count) states and \(diagram.edges.count) transitions"
-        case .erDiagram: "ER diagram with \(diagram.nodes.count) entities and \(diagram.edges.count) relationships"
-        case .pie: "Pie chart with \(diagram.pieSlices.count) slices"
-        case .timeline: "Timeline with \(diagram.timelineSections.count) periods"
-        case .gantt: "Gantt chart with \(diagram.ganttTasks.count) tasks"
-        case .kanban: "Kanban board with \(diagram.kanbanColumns.count) columns"
-        case .radar: "Radar chart with \(diagram.radarAxes.count) axes and \(diagram.radarCurves.count) curves"
-        case .xyChart: "XY chart with \(diagram.xySeries.count) series"
-        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(diagram.voiceOverSummary)
+        .accessibilityIdentifier("mermaid-diagram")
     }
 
     private func drawPie(in context: GraphicsContext, diagram: MermaidDiagram, size: CGSize, ink: Color) {

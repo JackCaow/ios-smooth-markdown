@@ -242,17 +242,18 @@ private struct ThinkingCard: View {
             Button { expanded.toggle() } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle.magnifyingglass")
-                    Text(expanded ? expandedHeaderText : headerText).font(.system(size: 13, weight: .medium))
+                    Text(expanded ? expandedHeaderText : headerText).font(.subheadline.weight(.medium))
                     Spacer()
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
                 }
                 .padding(12)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             if expanded {
-                Text(block.content).font(.system(size: 13)).textSelection(.enabled)
+                Text(block.content).font(.body).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12).padding(.bottom, 12)
             }
@@ -273,20 +274,24 @@ private struct ArtifactCard: View {
             HStack(spacing: 8) {
                 Image(systemName: icon).foregroundColor(.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
-                    if let title = block.title { Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1) }
-                    Text(typeLabel).font(.system(size: 10, weight: .semibold)).foregroundColor(.accentColor)
+                    if let title = block.title { Text(title).font(.subheadline.weight(.medium)) }
+                    Text(typeLabel).font(.caption2.weight(.semibold)).foregroundColor(.accentColor)
                 }
                 Spacer()
                 if showCopyButton {
-                    Button { copy() } label: { Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc") }
-                        .buttonStyle(.plain).font(.system(size: 12))
+                    Button { copy() } label: {
+                        Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                        .buttonStyle(.plain).font(.caption)
+                        .accessibilityLabel(copied ? "Copied!" : "Copy artifact")
                 }
             }
             .padding(12)
             .background(Color.secondary.opacity(0.08))
             Divider()
             ScrollView {
-                Text(block.content).font(.system(size: 13, design: .monospaced))
+                Text(block.content).font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(12)
             }
@@ -359,14 +364,15 @@ private struct ToolCallCard: View {
                     Circle().fill(statusColor).frame(width: 8, height: 8)
                     Image(systemName: "wrench.and.screwdriver").foregroundColor(.secondary)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(block.toolName).font(.system(size: 13, design: .monospaced))
-                        if let id = block.toolId { Text("ID: \(id)").font(.system(size: 10)).foregroundColor(.secondary) }
+                        Text(block.toolName).font(.system(.subheadline, design: .monospaced))
+                        if let id = block.toolId { Text("ID: \(id)").font(.caption2).foregroundColor(.secondary) }
                     }
                     Spacer()
-                    Text(block.status.rawValue.capitalized).font(.system(size: 11, weight: .medium)).foregroundColor(statusColor)
+                    Text(block.status.rawValue.capitalized).font(.caption.weight(.medium)).foregroundColor(statusColor)
                     if hasDetails { Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption) }
                 }
                 .padding(12)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -384,8 +390,8 @@ private struct ToolCallCard: View {
 
     private func section(_ heading: String, _ content: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(heading).font(.system(size: 11, weight: .semibold)).foregroundColor(.secondary)
-            Text(content).font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+            Text(heading).font(.caption.weight(.semibold)).foregroundColor(.secondary)
+            Text(content).font(.system(.body, design: .monospaced)).textSelection(.enabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
     }

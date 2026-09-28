@@ -98,7 +98,7 @@ public struct MarkdownStyleSheet {
              inlineCodeBackground: rgb(0xEEEEEE), inlineCodeTextColor: rgb(0xD32F2F),
              quoteBarColor: rgb(0xBDBDBD), tableBorderColor: rgb(0xE0E0E0),
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
-             headingFonts: defaultHeadingFonts, paragraphFont: .system(size: 16),
+             headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false)
     }
 
@@ -108,7 +108,7 @@ public struct MarkdownStyleSheet {
              inlineCodeBackground: rgb(0x424242), inlineCodeTextColor: rgb(0xEF9A9A),
              quoteBarColor: rgb(0x757575), tableBorderColor: rgb(0x616161),
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
-             headingFonts: defaultHeadingFonts, paragraphFont: .system(size: 16),
+             headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true)
     }
 
@@ -136,7 +136,8 @@ public struct MarkdownStyleSheet {
     }
 
     private static var defaultHeadingFonts: [Font] {
-        [32, 28, 24, 20, 18, 16].map { .system(size: CGFloat($0), weight: .bold) }
+        [.largeTitle, .title, .title2, .title3, .headline, .subheadline]
+            .map { .system($0, weight: .bold) }
     }
 
     private static func rgb(_ value: UInt32) -> Color {

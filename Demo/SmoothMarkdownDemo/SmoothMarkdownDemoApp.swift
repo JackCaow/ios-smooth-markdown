@@ -208,6 +208,45 @@ print("Code keeps its own copy button")
 ```
 """
 
+private let accessibilityMarkdown = """
+# Accessible heading
+
+This paragraph has a [sample link](https://example.com).
+
+- First list item
+- Second list item
+
+> Quoted guidance
+
+| Name | Value |
+| --- | --- |
+| Alpha | 42 |
+
+![Bundled vector](native-vector.svg)
+
+Inline ![Inline icon](native-vector.svg) in text.
+
+Footnote text[^a].
+
+[^a]: Footnote explanation.
+
+<details>
+<summary>More information</summary>
+Expanded explanation.
+</details>
+
+```swift
+print("Accessible code")
+```
+
+```mermaid
+pie showData
+title Work split
+"Reader" : 60
+"Editor" : 40
+```
+"""
+
 @main
 struct SmoothMarkdownDemoApp: App {
     var body: some Scene {
@@ -222,6 +261,7 @@ private struct DemoContentView: View {
     @State private var showStructured = false
     @State private var showSelection = false
     @State private var themeIndex = 0
+    @State private var imageTapCount = 0
     private let plugins = ParserPluginRegistry.builtIns()
     private let themes: [(String, MarkdownStyleSheet)] = [
         ("System", .default()), ("Light", .light()), ("Dark", .dark()),
@@ -230,6 +270,13 @@ private struct DemoContentView: View {
     ]
 
     var body: some View {
+        if ProcessInfo.processInfo.arguments.contains("--accessibility-fixture") {
+            VStack(spacing: 0) {
+                Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
+                SmoothMarkdownView(markdown: accessibilityMarkdown, onImageTap: { _ in imageTapCount += 1 },
+                                   styleSheet: .light(), plugins: plugins)
+            }
+        } else {
         VStack(spacing: 0) {
             HStack {
                 Button(showEditor ? "Read" : "Open editor") { showEditor.toggle() }
@@ -260,6 +307,7 @@ private struct DemoContentView: View {
                                    (showStructured ? structuredMarkdown : controller.text), enableHTML: enableHTML,
                                    styleSheet: themes[themeIndex].1, plugins: plugins)
             }
+        }
         }
     }
 }

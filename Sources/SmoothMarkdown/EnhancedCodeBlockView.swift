@@ -22,7 +22,7 @@ struct EnhancedCodeBlockView: View {
                 HStack(spacing: 8) {
                     if options.showLanguageTag, let language, !language.isEmpty {
                         Text(language.uppercased())
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.caption2.weight(.semibold))
                             .foregroundStyle(styleSheet.linkColor ?? Color.accentColor)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
@@ -32,12 +32,13 @@ struct EnhancedCodeBlockView: View {
                     if options.showCopyButton {
                         Button(action: copyCode) {
                             Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.caption.weight(.medium))
                                 .foregroundStyle(copied ? Color.green : (styleSheet.linkColor ?? Color.secondary))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 5)
                                 .background(copied ? Color.green.opacity(0.16) : (styleSheet.linkColor ?? Color.secondary).opacity(0.1),
                                             in: RoundedRectangle(cornerRadius: 4))
+                                .frame(minWidth: 44, minHeight: 44)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(copied ? "Copied!" : "Copy code")

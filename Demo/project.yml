@@ -23,3 +23,15 @@ targets:
         UILaunchScreen: {}
     dependencies:
       - package: SmoothMarkdown
+  SmoothMarkdownDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - SmoothMarkdownDemoUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.uitests
+        SWIFT_VERSION: '5.9'
+        CODE_SIGNING_ALLOWED: NO
+    dependencies:
+      - target: SmoothMarkdownDemo

@@ -145,11 +145,12 @@ public struct SmoothMarkdownView: View {
             inlineView(heading)
                 .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
                       ? styleSheet.headingFonts![heading.level - 1]
-                      : .system(size: CGFloat(32 - (heading.level - 1) * 3), weight: .bold))
+                      : headingFont(heading.level))
                 .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
                 .multilineTextAlignment(alignment ?? .leading)
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                 .textSelection(.enabled)
+                .accessibilityAddTraits(.isHeader)
         } else if let paragraph = node as? Paragraph {
             let meaningful = Array(paragraph.children).filter { child in
                 guard let text = child as? Markdown.Text else { return true }
@@ -191,6 +192,11 @@ public struct SmoothMarkdownView: View {
         } else {
             SwiftUI.Text(plainText(node)).textSelection(.enabled)
         }
+    }
+
+    private func headingFont(_ level: Int) -> Font {
+        let styles: [Font.TextStyle] = [.largeTitle, .title, .title2, .title3, .headline, .subheadline]
+        return .system(styles[min(max(level - 1, 0), styles.count - 1)], weight: .bold)
     }
 
     @ViewBuilder
@@ -259,12 +265,13 @@ public struct SmoothMarkdownView: View {
 
     @ViewBuilder
     private func tableView(_ table: Markdown.Table) -> some View {
-        let rows = [Array(table.head.children)] + table.body.children.map { Array($0.children) }
+        let headers = Array(table.head.children)
+        let rows = [headers] + table.body.children.map { Array($0.children) }
         ScrollView(.horizontal) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, cells in
                     HStack(spacing: 0) {
-                        ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
+                        ForEach(Array(cells.enumerated()), id: \.offset) { columnIndex, cell in
                             inlineView(cell)
                                 .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
                                       : (styleSheet.tableCellFont ?? .body))
@@ -273,6 +280,9 @@ public struct SmoothMarkdownView: View {
                                 .padding(styleSheet.tableCellPadding)
                                 .border(styleSheet.tableBorderColor ?? .secondary.opacity(0.4), width: 0.5)
                                 .textSelection(.enabled)
+                                .accessibilityAddTraits(rowIndex == 0 ? .isHeader : [])
+                                .accessibilityHint(rowIndex == 0 ? "Column header" :
+                                    "Row \(rowIndex), column \(columnIndex + 1), \(headers.indices.contains(columnIndex) ? plainText(headers[columnIndex]) : "")")
                         }
                     }
                 }
@@ -297,7 +307,7 @@ public struct SmoothMarkdownView: View {
         guard let source = ImageSource.parse(image.source) else { return AnyView(SwiftUI.Text(label)) }
         switch source {
         case let .remote(url, svg: true):
-            return AnyView(
+            return accessibleImage(
                 AsyncSVGView(url: url) { phase in
                     switch phase {
                     case .success(let svg): svgContent(svg, resizable: resizableSVG)
@@ -305,12 +315,9 @@ public struct SmoothMarkdownView: View {
                     case .empty: ProgressView()
                     }
                 }
-                .frame(width: width, height: height)
-                .onTapGesture { onImageTap?(url) }
-                .accessibilityLabel(label)
-            )
+                .frame(width: width, height: height), url: url, label: label, inline: inline)
         case let .remote(url, svg: false):
-            return AnyView(
+            return accessibleImage(
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let loaded): loaded.resizable().scaledToFit()
@@ -319,23 +326,27 @@ public struct SmoothMarkdownView: View {
                     @unknown default: SwiftUI.Text(label)
                     }
                 }
-                .frame(width: width, height: height)
-                .onTapGesture { onImageTap?(url) }
-                .accessibilityLabel(label)
-            )
+                .frame(width: width, height: height), url: url, label: label, inline: inline)
         case let .bundled(name, svg: true):
             guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
-            return AnyView(svgContent(svg, resizable: resizableSVG)
-                .frame(width: width, height: height)
-                .onTapGesture { if let url = URL(string: name) { onImageTap?(url) } }
-                .accessibilityLabel(label))
+            return accessibleImage(svgContent(svg, resizable: resizableSVG)
+                .frame(width: width, height: height), url: URL(string: name), label: label, inline: inline)
         case let .bundled(name, svg: false):
-            return AnyView(SwiftUI.Image(name)
+            return accessibleImage(SwiftUI.Image(name)
                 .resizable().scaledToFit()
-                .frame(width: width, height: height)
-                .onTapGesture { if let url = URL(string: name) { onImageTap?(url) } }
+                .frame(width: width, height: height), url: URL(string: name), label: label, inline: inline)
+        }
+    }
+
+    private func accessibleImage<Content: View>(_ content: Content, url: URL?, label: String, inline: Bool) -> AnyView {
+        if let url, let onImageTap {
+            return AnyView(Button { onImageTap(url) } label: {
+                content.frame(minWidth: inline ? 44 : nil, minHeight: inline ? 44 : nil)
+            }
+                .buttonStyle(.plain)
                 .accessibilityLabel(label))
         }
+        return AnyView(content.accessibilityLabel(label))
     }
 
     private func svgContent(_ svg: SVG, resizable: Bool) -> AnyView {
@@ -440,7 +451,7 @@ public struct SmoothMarkdownView: View {
     }
 
     private func footnoteReference(_ label: String) -> SwiftUI.Text {
-        SwiftUI.Text("[\(label)]").font(.system(size: 12)).baselineOffset(5)
+        SwiftUI.Text("[\(label)]").font(.footnote).baselineOffset(5)
             .foregroundColor(styleSheet.footnoteColor ?? .blue)
     }
 
@@ -601,11 +612,13 @@ private struct DetailsBlockView: View {
                     summary.frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(12)
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(summaryLabel)
             .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            .accessibilityHint(isExpanded ? "Double tap to collapse" : "Double tap to expand")
             if isExpanded && !details.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Divider().overlay(styleSheet.ruleColor ?? Color.clear)
                 content.padding(.horizontal, 12).padding(.bottom, 12)
