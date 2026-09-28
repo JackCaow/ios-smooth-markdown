@@ -19,7 +19,21 @@ enum MermaidLayout {
         switch diagram.kind {
         case .flowchart: flowchart(diagram)
         case .sequence: sequence(diagram)
+        case .pie: pie(diagram)
+        case .timeline: timeline(diagram)
         }
+    }
+
+    private static func pie(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        let legendHeight = CGFloat(diagram.pieSlices.count) * 24
+        return .init(size: CGSize(width: 440, height: max(270, 90 + legendHeight)), nodes: [:], edges: [])
+    }
+
+    private static func timeline(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+        let count = diagram.timelineSections.count
+        let eventRows = diagram.timelineSections.map { $0.events.count }.max() ?? 0
+        return .init(size: CGSize(width: max(320, CGFloat(count) * 180 + 64),
+                                  height: CGFloat(200 + eventRows * 30)), nodes: [:], edges: [])
     }
 
     private static func flowchart(_ diagram: MermaidDiagram) -> MermaidLayoutResult {

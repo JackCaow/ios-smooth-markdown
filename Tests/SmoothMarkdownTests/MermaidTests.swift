@@ -25,7 +25,7 @@ final class MermaidTests: XCTestCase {
         XCTAssertEqual(diagram?.edges[3].line, .thick)
         XCTAssertEqual(MermaidParser.parse("graph BT\nA --> B")?.direction, .bottomToTop)
         XCTAssertEqual(MermaidParser.parse("graph RL\nA --> B")?.direction, .rightToLeft)
-        XCTAssertNil(MermaidParser.parse("pie\nA: 2"))
+        XCTAssertNil(MermaidParser.parse("pie\ntitle Empty"))
     }
 
     func testFlowchartChainAndLayoutAreDeterministic() {
@@ -61,6 +61,48 @@ final class MermaidTests: XCTestCase {
         let layout = MermaidLayout.compute(diagram)
         XCTAssertGreaterThan(layout.nodes["S"]!.midX, layout.nodes["U"]!.midX)
         XCTAssertGreaterThan(layout.edges[1].start.y, layout.edges[0].start.y)
+    }
+
+    func testPieFixturesOptionsValuesAndUnsupportedFallback() {
+        let diagram = MermaidParser.parse("""
+        pie showData
+          title Favorite Pets
+          %% ignored
+          "Dogs" : 386
+          'Cats' : 85
+          Rats : 15.5
+          Zero : 0
+          Negative : -10
+        """)!
+        XCTAssertEqual(diagram.kind, .pie)
+        XCTAssertEqual(diagram.title, "Favorite Pets")
+        XCTAssertTrue(diagram.showData)
+        XCTAssertEqual(diagram.pieSlices.map(\.label), ["Dogs", "Cats", "Rats"])
+        XCTAssertEqual(diagram.pieSlices.map(\.value), [386, 85, 15.5])
+        XCTAssertEqual(MermaidLayout.compute(diagram).edges.count, 0)
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.height, 0)
+        XCTAssertNil(MermaidParser.parse("pie\ntitle Empty Pie"))
+        XCTAssertNil(MermaidParser.parse("pie\nInvalid : nope"))
+    }
+
+    func testTimelineFixturesContinuationsDescriptionsAndLayout() {
+        let diagram = MermaidParser.parse("""
+        timeline
+          title Product History
+          2002 : LinkedIn
+          2004 : Facebook
+               : Google
+               : MySpace
+          2005-2006 : YouTube
+                      Major update
+        """)!
+        XCTAssertEqual(diagram.kind, .timeline)
+        XCTAssertEqual(diagram.title, "Product History")
+        XCTAssertEqual(diagram.timelineSections.map(\.title), ["2002", "2004", "2005-2006"])
+        XCTAssertEqual(diagram.timelineSections[1].events.map(\.title), ["Facebook", "Google", "MySpace"])
+        XCTAssertEqual(diagram.timelineSections[2].events[0].description, "Major update")
+        XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.width, 500)
+        XCTAssertNil(MermaidParser.parse("timeline\ntitle Empty Timeline"))
     }
 
     func testMermaidFencePluginAndOrdinaryFenceFallback() throws {

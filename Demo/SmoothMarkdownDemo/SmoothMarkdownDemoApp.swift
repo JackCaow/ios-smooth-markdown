@@ -40,6 +40,23 @@ sequenceDiagram
   S-->>U: Response
 ```
 
+```mermaid
+pie showData
+  title Native chart
+  "Swift" : 45
+  "Kotlin" : 35
+  "Dart" : 20
+```
+
+```mermaid
+timeline
+  title Project milestones
+  2024 : Research
+  2025 : Native readers
+       : More Markdown
+  2026 : Diagram support
+```
+
 Inline math: $E=mc^2$ and $\\frac{a}{b}$.
 
 $$

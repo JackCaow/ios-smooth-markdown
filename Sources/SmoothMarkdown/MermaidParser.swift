@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MermaidKind: Equatable { case flowchart, sequence }
+public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
 public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder }
 public enum MermaidLine: Equatable { case solid, dotted, thick }
@@ -39,16 +39,45 @@ public struct MermaidEdge: Equatable {
     }
 }
 
+public struct MermaidPieSlice: Equatable {
+    public let label: String
+    public let value: Double
+    public init(label: String, value: Double) { self.label = label; self.value = value }
+}
+
+public struct MermaidTimelineEvent: Equatable {
+    public let title: String
+    public let description: String?
+    public init(title: String, description: String? = nil) { self.title = title; self.description = description }
+}
+
+public struct MermaidTimelineSection: Equatable {
+    public let title: String
+    public let events: [MermaidTimelineEvent]
+    public init(title: String, events: [MermaidTimelineEvent]) { self.title = title; self.events = events }
+}
+
 public struct MermaidDiagram: Equatable {
     public let kind: MermaidKind
     public let direction: MermaidDirection
     public let nodes: [MermaidNode]
     public let edges: [MermaidEdge]
+    public let title: String?
+    public let showData: Bool
+    public let pieSlices: [MermaidPieSlice]
+    public let timelineSections: [MermaidTimelineSection]
+
+    public init(kind: MermaidKind, direction: MermaidDirection, nodes: [MermaidNode] = [], edges: [MermaidEdge] = [],
+                title: String? = nil, showData: Bool = false, pieSlices: [MermaidPieSlice] = [],
+                timelineSections: [MermaidTimelineSection] = []) {
+        self.kind = kind; self.direction = direction; self.nodes = nodes; self.edges = edges
+        self.title = title; self.showData = showData; self.pieSlices = pieSlices; self.timelineSections = timelineSections
+    }
 
     public func node(_ id: String) -> MermaidNode? { nodes.first { $0.id == id } }
 }
 
-/// Parses the documented native flowchart and sequence subset.
+/// Parses the documented native flowchart, sequence, pie, and timeline subset.
 public enum MermaidParser {
     public static func parse(_ source: String) -> MermaidDiagram? {
         let lines = source.components(separatedBy: "\n")
@@ -65,7 +94,60 @@ public enum MermaidParser {
             return flowchart(Array(lines.dropFirst()), direction: direction)
         }
         if header.lowercased() == "sequencediagram" { return sequence(Array(lines.dropFirst())) }
+        if header.lowercased() == "pie" || header.lowercased() == "pie showdata" {
+            return pie(Array(lines.dropFirst()), showData: header.lowercased().contains("showdata"))
+        }
+        if header.lowercased() == "timeline" { return timeline(Array(lines.dropFirst())) }
         return nil
+    }
+
+    private static func pie(_ lines: [String], showData: Bool) -> MermaidDiagram? {
+        var title: String?
+        var slices: [MermaidPieSlice] = []
+        for line in lines {
+            if line.lowercased().hasPrefix("title ") {
+                title = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            guard let groups = RegexCapture.first(#"^(?:\"([^\"]+)\"|'([^']+)'|([^:]+))\s*:\s*([0-9]+(?:\.[0-9]+)?)$"#, in: line),
+                  let value = Double(groups[4]), value.isFinite, value > 0 else { continue }
+            let label = [groups[1], groups[2], groups[3]].first { !$0.isEmpty }?.trimmingCharacters(in: .whitespaces) ?? ""
+            if !label.isEmpty { slices.append(.init(label: label, value: value)) }
+        }
+        guard !slices.isEmpty else { return nil }
+        return .init(kind: .pie, direction: .leftToRight, title: title, showData: showData, pieSlices: slices)
+    }
+
+    private static func timeline(_ lines: [String]) -> MermaidDiagram? {
+        var title: String?
+        var sections: [MermaidTimelineSection] = []
+        var period: String?
+        var events: [MermaidTimelineEvent] = []
+        func flush() {
+            if let period, !events.isEmpty { sections.append(.init(title: period, events: events)) }
+            events = []
+        }
+        for line in lines {
+            if line.lowercased().hasPrefix("title ") {
+                title = String(line.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+                continue
+            }
+            if let colon = line.firstIndex(of: ":") {
+                let left = String(line[..<colon]).trimmingCharacters(in: .whitespaces)
+                let right = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+                if !left.isEmpty {
+                    flush()
+                    period = left
+                }
+                if !right.isEmpty, period != nil { events.append(.init(title: right)) }
+            } else if !events.isEmpty {
+                let previous = events.removeLast()
+                events.append(.init(title: previous.title, description: line))
+            }
+        }
+        flush()
+        guard !sections.isEmpty else { return nil }
+        return .init(kind: .timeline, direction: .leftToRight, title: title, timelineSections: sections)
     }
 
     private static func flowchart(_ lines: [String], direction: MermaidDirection) -> MermaidDiagram {
