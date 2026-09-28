@@ -145,7 +145,14 @@ public struct SmoothMarkdownView: View {
                         ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                 onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
                     }
-                case let .individual(node): block(node)
+                case let .individual(node):
+                    if let onTextLongPress,
+                       let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
+                        ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
+                    } else {
+                        block(node)
+                    }
                 }
             }
             #else

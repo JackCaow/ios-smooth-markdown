@@ -14,7 +14,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         let view = QuoteTextView()
         view.backgroundColor = .clear
         view.isEditable = false
-        view.isSelectable = true
+        // Conversation bubbles own the first long press. Enabling UITextView's
+        // selection at this point lets its private recognizers win first.
+        view.isSelectable = onTextLongPress == nil
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -51,6 +53,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         let built = attributedContent()
         if !view.attributedText.isEqual(to: built.text) {
             view.attributedText = built.text
+            view.isSelectable = onTextLongPress == nil
             view.invalidateIntrinsicContentSize()
         }
         view.quoteRanges = built.quoteRanges
@@ -95,6 +98,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             guard paragraph.length > 0 else { return }
             onTextLongPress { [weak self, weak textView] in
                 guard let textView, textView.window != nil else { return }
+                textView.isSelectable = true
                 textView.becomeFirstResponder()
                 textView.selectedRange = paragraph
                 textView.scrollRangeToVisible(paragraph)
@@ -182,6 +186,7 @@ final class QuoteTextView: UITextView {
 
     @objc func selectAllReaderText() -> Bool {
         guard textStorage.length > 0 else { return false }
+        isSelectable = true
         becomeFirstResponder()
         selectedRange = NSRange(location: 0, length: textStorage.length)
         return true

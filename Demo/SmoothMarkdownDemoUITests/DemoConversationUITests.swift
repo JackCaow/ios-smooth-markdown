@@ -26,9 +26,7 @@ final class DemoConversationUITests: XCTestCase {
         actions.tap()
         app.buttons["复制"].tap()
 
-        let renderedText = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "SmoothMarkdown 缓存策略更新了吗")
-        ).firstMatch
+        let renderedText = app.textViews.firstMatch
         XCTAssertTrue(renderedText.exists)
         renderedText.press(forDuration: 1)
         XCTAssertTrue(app.buttons["复制"].waitForExistence(timeout: 5))
