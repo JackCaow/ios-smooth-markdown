@@ -32,17 +32,31 @@ struct DemoPluginView: View {
 
                     Divider()
 
-                    DisclosureGroup("查看 Markdown 源码", isExpanded: $sourceExpanded) {
-                        Text(markdown)
-                            .font(.system(.caption, design: .monospaced))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .textSelection(.enabled)
-                            .padding(.top, 12)
-                            .accessibilityIdentifier("plugin-demo-source")
+                    VStack(alignment: .leading, spacing: 0) {
+                        Button {
+                            sourceExpanded.toggle()
+                        } label: {
+                            HStack {
+                                Text("查看 Markdown 源码")
+                                Spacer()
+                                Image(systemName: sourceExpanded ? "chevron.up" : "chevron.down")
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("plugin-demo-source-toggle")
+
+                        if sourceExpanded {
+                            Text(markdown)
+                                .font(.system(.caption, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .textSelection(.enabled)
+                                .padding(.top, 12)
+                                .accessibilityIdentifier("plugin-demo-source")
+                        }
                     }
                     .font(.subheadline)
                     .padding(16)
-                    .accessibilityIdentifier("plugin-demo-source-toggle")
                 }
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
                 .overlay {

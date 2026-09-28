@@ -24,11 +24,12 @@ final class DemoPluginUITests: XCTestCase {
         hashtag.tap()
         XCTAssertEqual(app.staticTexts["plugin-demo-feedback"].label, "点击了标签: #flutter")
 
-        let source = app.descendants(matching: .any).matching(identifier: "plugin-demo-source-toggle").firstMatch
+        let source = app.buttons["plugin-demo-source-toggle"]
         for _ in 0..<15 where !source.isHittable { app.swipeUp() }
         XCTAssertTrue(source.isHittable)
         source.tap()
-        XCTAssertTrue(app.staticTexts["plugin-demo-source"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["plugin-demo-source"].label.contains("::: danger 危险"))
+        let markdown = app.descendants(matching: .any).matching(identifier: "plugin-demo-source").firstMatch
+        XCTAssertTrue(markdown.waitForExistence(timeout: 5))
+        XCTAssertTrue(markdown.label.contains("::: danger 危险"))
     }
 }
