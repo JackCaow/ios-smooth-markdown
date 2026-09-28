@@ -32,31 +32,10 @@ public struct SmoothMarkdownView: View {
     }
 
     public var body: some View {
-        let sections = DetailsSyntax.sections(markdown)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-                ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
-                    switch section {
-                    case let .markdown(source):
-                        ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, footnoteSection in
-                            switch footnoteSection {
-                            case let .markdown(content):
-                                ForEach(Array(MathSyntax.sections(content).enumerated()), id: \.offset) { _, mathSection in
-                                    switch mathSection {
-                                    case let .markdown(text):
-                                        ForEach(Array(MarkdownSyntax.parse(text).children.enumerated()), id: \.offset) { _, node in
-                                            block(node)
-                                        }
-                                    case let .block(latex): blockMath(latex)
-                                    }
-                                }
-                            case let .definition(definition):
-                                footnoteDefinition(definition)
-                            }
-                        }
-                    case let .details(details):
-                        detailsBlock(details)
-                    }
+                ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
+                    detailsSection(section)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,6 +57,39 @@ public struct SmoothMarkdownView: View {
         AnyView(blockContent(node, alignment: alignment))
     }
 
+    @ViewBuilder
+    private func detailsSection(_ section: DetailsSyntax.Section) -> some View {
+        switch section {
+        case let .markdown(source):
+            ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, item in
+                footnoteSection(item)
+            }
+        case let .details(details): detailsBlock(details)
+        }
+    }
+
+    @ViewBuilder
+    private func footnoteSection(_ section: FootnoteSyntax.Section) -> some View {
+        switch section {
+        case let .markdown(source):
+            ForEach(Array(MathSyntax.sections(source).enumerated()), id: \.offset) { _, item in
+                mathSection(item)
+            }
+        case let .definition(definition): footnoteDefinition(definition)
+        }
+    }
+
+    @ViewBuilder
+    private func mathSection(_ section: MathSyntax.Section) -> some View {
+        switch section {
+        case let .markdown(source):
+            ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in
+                block(node)
+            }
+        case let .block(latex): blockMath(latex)
+        }
+    }
+
     private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
         let summary = MarkdownSyntax.parse(details.summary)
         let summaryNode = summary.child(at: 0)
@@ -86,20 +98,7 @@ public struct SmoothMarkdownView: View {
             if let summaryNode { inlineView(summaryNode) }
         }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
             ForEach(Array(FootnoteSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
-                switch section {
-                case let .markdown(source):
-                    ForEach(Array(MathSyntax.sections(source).enumerated()), id: \.offset) { _, mathSection in
-                        switch mathSection {
-                        case let .markdown(text):
-                            ForEach(Array(MarkdownSyntax.parse(text).children.enumerated()), id: \.offset) { _, child in
-                                block(child)
-                            }
-                        case let .block(latex): blockMath(latex)
-                        }
-                    }
-                case let .definition(definition):
-                    footnoteDefinition(definition)
-                }
+                footnoteSection(section)
             }
         }))
     }

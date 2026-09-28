@@ -33,10 +33,10 @@ struct EnhancedCodeBlockView: View {
                         Button(action: copyCode) {
                             Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(copied ? Color.green : Color.secondary)
+                                .foregroundStyle(copied ? Color.green : (styleSheet.linkColor ?? Color.secondary))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 5)
-                                .background(copied ? Color.green.opacity(0.16) : Color.secondary.opacity(0.1),
+                                .background(copied ? Color.green.opacity(0.16) : (styleSheet.linkColor ?? Color.secondary).opacity(0.1),
                                             in: RoundedRectangle(cornerRadius: 4))
                         }
                         .buttonStyle(.plain)
