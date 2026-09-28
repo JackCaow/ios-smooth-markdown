@@ -11,7 +11,7 @@ struct DemoEditorView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Scratch-style editor preview")
                 .font(.title3.weight(.semibold))
-            Text("Edit Markdown in Blocks or Source mode, preview the result, and try the demo's image, import, and export callbacks.")
+            Text("Try the toolbar, slash commands at the start of a paragraph, wikilinks, Find, Focus, and the demo's image, import, and export callbacks.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             SmoothMarkdownEditor(

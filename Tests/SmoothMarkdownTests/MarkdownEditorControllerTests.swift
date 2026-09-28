@@ -45,6 +45,53 @@ final class MarkdownEditorControllerTests: XCTestCase {
         XCTAssertEqual(controller.selectNextMatch("alpha"), NSRange(location: 11, length: 5))
     }
 
+    func testFormattedSlashCommandUsesSourceRangeAndOneUndoStep() {
+        let controller = MarkdownEditorController(text: "😀\n\n/h2")
+        let block = try! XCTUnwrap(controller.semanticDocument.blocks.last)
+        let match = try! XCTUnwrap(controller.slashCommandMatch(
+            inBlock: block.id, selection: NSRange(location: 3, length: 0)))
+        XCTAssertEqual(match.range, NSRange(location: 4, length: 3))
+        XCTAssertEqual(match.query, "h2")
+
+        XCTAssertTrue(controller.applySlashCommand(.heading2, match: match))
+        XCTAssertEqual(controller.text, "😀\n\n## ")
+        XCTAssertEqual(controller.selection, NSRange(location: 7, length: 0))
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "😀\n\n/h2")
+        XCTAssertEqual(controller.selection, NSRange(location: 7, length: 0))
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, "😀\n\n## ")
+        XCTAssertEqual(controller.selection, NSRange(location: 7, length: 0))
+    }
+
+    func testSlashCommandRejectsNonPrefixAndStaleTrigger() {
+        let controller = MarkdownEditorController(text: "Before /h2\n\n```\n/h2\n```\n\n/task")
+        let blocks = controller.semanticDocument.blocks
+        XCTAssertNil(controller.slashCommandMatch(inBlock: blocks[0].id,
+                                                  selection: NSRange(location: 10, length: 0)))
+        XCTAssertNil(controller.slashCommandMatch(inBlock: blocks[1].id,
+                                                  selection: NSRange(location: 3, length: 0)))
+        let match = try! XCTUnwrap(controller.slashCommandMatch(inBlock: blocks[2].id,
+                                                                selection: NSRange(location: 5, length: 0)))
+        controller.replaceRange(match.range, with: "/changed")
+        let changed = controller.text
+        XCTAssertFalse(controller.applySlashCommand(.taskList, match: match))
+        XCTAssertEqual(controller.text, changed)
+    }
+
+    func testSlashWikilinkLeavesCaretInsideOpeningBrackets() {
+        let controller = MarkdownEditorController(text: "/wiki")
+        let block = try! XCTUnwrap(controller.semanticDocument.blocks.first)
+        let match = try! XCTUnwrap(controller.slashCommandMatch(
+            inBlock: block.id, selection: NSRange(location: 5, length: 0)))
+        XCTAssertTrue(controller.applySlashCommand(.wikilink, match: match))
+        XCTAssertEqual(controller.text, "[[")
+        XCTAssertEqual(controller.selection, NSRange(location: 2, length: 0))
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "/wiki")
+    }
+
     func testParagraphRemovesTaskMarker() {
         let controller = MarkdownEditorController(text: "- [x] done")
         controller.applyCommand(.paragraph)

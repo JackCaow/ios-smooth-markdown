@@ -7,6 +7,12 @@ import UIKit
 public struct SmoothMarkdownEditor: View {
     @ObservedObject private var controller: MarkdownEditorController
     @State private var hostIOBusy = false
+    @State private var searchOpen = false
+    @State private var searchQuery = ""
+    @State private var searchIndex = 0
+    @State private var searchHasNavigated = false
+    @State private var focusMode = false
+    @FocusState private var searchFieldFocused: Bool
     private let onSave: ((String) -> Void)?
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
@@ -41,53 +47,105 @@ public struct SmoothMarkdownEditor: View {
     public var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Picker("Mode", selection: $controller.mode) {
-                    ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
-                        Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
+                if !focusMode {
+                    Picker("Mode", selection: $controller.mode) {
+                        ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
+                            Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Button(focusMode ? "Exit Focus" : "Focus",
+                       systemImage: focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") {
+                    focusMode.toggle()
+                    if focusMode {
+                        searchOpen = false
+                        searchFieldFocused = false
                     }
                 }
-                .pickerStyle(.segmented)
-                Menu("File") {
-                    if hasImagePicker {
-                        Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
+                    .labelStyle(.iconOnly)
+                    .accessibilityIdentifier("editor-focus-toggle")
+                if !focusMode {
+                    Menu("File") {
+                        if hasImagePicker {
+                            Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
+                        }
+                        if hasMarkdownImporter {
+                            Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
+                        }
+                        Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
+                        Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
                     }
-                    if hasMarkdownImporter {
-                        Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
+                    .disabled(hostIOBusy)
+                    if let onSave {
+                        Button("Save") {
+                            onSave(controller.text)
+                            controller.markSaved()
+                        }
+                        .disabled(!controller.isDirty)
                     }
-                    Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
-                    Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
-                }
-                .disabled(hostIOBusy)
-                if let onSave {
-                    Button("Save") {
-                        onSave(controller.text)
-                        controller.markSaved()
-                    }
-                    .disabled(!controller.isDirty)
                 }
             }
             .padding(.horizontal)
 
-            ScrollView(.horizontal) {
-                HStack(spacing: 2) {
-                    Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
-                    Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
-                    if controller.mode != .formatted {
-                        commandButton("B", .bold)
-                        commandButton("I", .italic)
-                        commandButton("H1", .heading1)
-                        commandButton("List", .unorderedList)
-                        commandButton("Task", .taskList)
-                        commandButton("Code", .codeBlock)
-                        commandButton("Link", .link)
-                        commandButton("Table", .table)
-                        if enableWikilinks { commandButton("Wiki", .wikilink) }
+            if !focusMode {
+                ScrollView(.horizontal) {
+                    HStack(spacing: 2) {
+                        Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
+                        Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
+                        if controller.mode != .formatted {
+                            commandButton("B", .bold)
+                            commandButton("I", .italic)
+                            commandButton("H1", .heading1)
+                            commandButton("List", .unorderedList)
+                            commandButton("Task", .taskList)
+                            commandButton("Code", .codeBlock)
+                            commandButton("Link", .link)
+                            commandButton("Table", .table)
+                            if enableWikilinks { commandButton("Wiki", .wikilink) }
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .padding(.horizontal)
+                }
+                .frame(height: 44)
+            }
+
+            if !focusMode {
+                HStack {
+                    if searchOpen {
+                        TextField("Find in note...", text: $searchQuery)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($searchFieldFocused)
+                            .submitLabel(.search)
+                            .onSubmit { selectSearchMatch(forward: true) }
+                            .accessibilityIdentifier("editor-find-field")
+                        Text(searchMatches.isEmpty ? "Not found" : "\(min(searchIndex + 1, searchMatches.count))/\(searchMatches.count)")
+                            .font(.caption.monospacedDigit())
+                            .accessibilityIdentifier("editor-find-count")
+                        Button("Previous", systemImage: "chevron.up") { selectSearchMatch(forward: false) }
+                            .disabled(searchMatches.isEmpty)
+                            .labelStyle(.iconOnly)
+                            .accessibilityIdentifier("editor-find-previous")
+                        Button("Next", systemImage: "chevron.down") { selectSearchMatch(forward: true) }
+                            .disabled(searchMatches.isEmpty)
+                            .labelStyle(.iconOnly)
+                            .accessibilityIdentifier("editor-find-next")
+                        Button("Close", systemImage: "xmark") { searchOpen = false; searchFieldFocused = false }
+                            .labelStyle(.iconOnly)
+                            .accessibilityIdentifier("editor-find-close")
+                    } else {
+                        Spacer()
+                        Button("Find", systemImage: "magnifyingglass") {
+                            searchOpen = true
+                            searchFieldFocused = true
+                        }
+                        .accessibilityIdentifier("editor-find-open")
                     }
                 }
-                .buttonStyle(.borderless)
                 .padding(.horizontal)
+                .padding(.vertical, 4)
             }
-            .frame(height: 44)
 
             Divider()
             switch controller.mode {
@@ -110,6 +168,24 @@ public struct SmoothMarkdownEditor: View {
                 }
             }
         }
+        .onChange(of: searchQuery) { _, _ in searchIndex = 0; searchHasNavigated = false }
+        .onChange(of: controller.text) { _, _ in searchIndex = 0; searchHasNavigated = false }
+    }
+
+    private var searchMatches: [NSRange] { controller.findMatches(searchQuery) }
+
+    private func selectSearchMatch(forward: Bool) {
+        let matches = searchMatches
+        guard !matches.isEmpty else { return }
+        if searchHasNavigated {
+            searchIndex = (searchIndex + (forward ? 1 : matches.count - 1)) % matches.count
+        } else {
+            searchIndex = forward ? 0 : matches.count - 1
+            searchHasNavigated = true
+        }
+        controller.mode = .source
+        controller.setSelection(matches[searchIndex])
+        searchFieldFocused = false
     }
 
     private var previewPlugins: ParserPluginRegistry? {
@@ -132,6 +208,34 @@ public struct SmoothMarkdownEditor: View {
             hostIOBusy = false
         }
     }
+}
+
+@available(iOS 17.0, *)
+private struct EditorSlashCommand {
+    let title: String
+    let searchText: String
+    let command: MarkdownEditorCommand
+
+    static let builtIns: [Self] = [
+        .init(title: "Text", searchText: "paragraph body plain normal", command: .paragraph),
+        .init(title: "Heading 1", searchText: "heading h1 title", command: .heading1),
+        .init(title: "Heading 2", searchText: "heading h2 subtitle", command: .heading2),
+        .init(title: "Heading 3", searchText: "heading h3", command: .heading3),
+        .init(title: "Heading 4", searchText: "heading h4", command: .heading4),
+        .init(title: "Heading 5", searchText: "heading h5", command: .heading5),
+        .init(title: "Heading 6", searchText: "heading h6", command: .heading6),
+        .init(title: "Bullet List", searchText: "bullet unordered list", command: .unorderedList),
+        .init(title: "Numbered List", searchText: "number ordered list", command: .orderedList),
+        .init(title: "Task List", searchText: "todo checklist checkbox", command: .taskList),
+        .init(title: "Blockquote", searchText: "quote", command: .blockquote),
+        .init(title: "Code Block", searchText: "code fenced block", command: .codeBlock),
+        .init(title: "Mermaid Diagram", searchText: "mermaid flowchart chart", command: .mermaidDiagram),
+        .init(title: "Block Math", searchText: "math equation", command: .blockMath),
+        .init(title: "Horizontal Rule", searchText: "divider separator hr", command: .horizontalRule),
+        .init(title: "Image", searchText: "picture photo", command: .image),
+        .init(title: "Table", searchText: "grid", command: .table),
+        .init(title: "Wikilink", searchText: "wiki note link", command: .wikilink),
+    ]
 }
 
 @available(iOS 17.0, *)
@@ -167,6 +271,7 @@ private struct FormattedBlockRow: View {
     let wikilinkSuggestions: [String]
     @State private var inlineSelection = NSRange(location: 0, length: 0)
     @State private var wikilinkSelectedIndex = 0
+    @State private var slashSelectedIndex = 0
     @State private var linkDestination = "https://"
     @State private var showLinkEditor = false
 
@@ -179,11 +284,13 @@ private struct FormattedBlockRow: View {
                 inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
                                identifier: "heading-\(block.id)")
                 wikilinkSuggestionPanel
+                slashSuggestionPanel
             case .paragraph:
                 blockLabel("Paragraph")
                 inlineActions
                 inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
                 wikilinkSuggestionPanel
+                slashSuggestionPanel
             case let .fencedCode(_, info, _):
                 blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
                 TextEditor(text: contentBinding)
@@ -225,7 +332,54 @@ private struct FormattedBlockRow: View {
         } message: {
             Text("Only http, https, mailto, and tel links are accepted.")
         }
-        .onChange(of: controller.text) { _, _ in wikilinkSelectedIndex = 0 }
+        .onChange(of: controller.text) { _, _ in
+            wikilinkSelectedIndex = 0
+            slashSelectedIndex = 0
+        }
+    }
+
+    private var activeSlashMatch: MarkdownSlashCommandMatch? {
+        controller.slashCommandMatch(inBlock: block.id, selection: inlineSelection)
+    }
+
+    private var visibleSlashCommands: [EditorSlashCommand] {
+        guard let match = activeSlashMatch else { return [] }
+        return EditorSlashCommand.builtIns.filter {
+            match.query.isEmpty || $0.title.localizedCaseInsensitiveContains(match.query)
+                || $0.searchText.localizedCaseInsensitiveContains(match.query)
+        }
+    }
+
+    @ViewBuilder
+    private var slashSuggestionPanel: some View {
+        if activeSlashMatch != nil, !visibleSlashCommands.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Slash command suggestions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(Array(visibleSlashCommands.enumerated()), id: \.offset) { index, item in
+                            Button(item.title) { selectSlashCommand(item) }
+                                .fontWeight(index == min(slashSelectedIndex, visibleSlashCommands.count - 1) ? .semibold : .regular)
+                                .accessibilityIdentifier("slash-suggestion-\(index)")
+                        }
+                    }
+                }
+                .frame(maxHeight: 220)
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func selectSlashCommand(_ item: EditorSlashCommand) {
+        guard let match = activeSlashMatch else { return }
+        if controller.applySlashCommand(item.command, match: match) {
+            slashSelectedIndex = 0
+        }
     }
 
     private var activeWikilinkMatch: WikilinkTrigger.Match? {
@@ -273,8 +427,8 @@ private struct FormattedBlockRow: View {
             }
             return controller.replaceSemanticBlockContent(id: block.id, with: value)
         }, onSelection: { inlineSelection = $0 },
-                               suggestionsVisible: !visibleWikilinkSuggestions.isEmpty,
-                               onSuggestionKey: handleWikilinkKey)
+                               suggestionsVisible: !visibleWikilinkSuggestions.isEmpty || !visibleSlashCommands.isEmpty,
+                               onSuggestionKey: handleSuggestionKey)
         .frame(minHeight: 44)
     }
 
@@ -293,6 +447,16 @@ private struct FormattedBlockRow: View {
         case .next: wikilinkSelectedIndex = (wikilinkSelectedIndex + 1) % suggestions.count
         case .previous: wikilinkSelectedIndex = (wikilinkSelectedIndex - 1 + suggestions.count) % suggestions.count
         case .accept: selectWikilink(suggestions[min(wikilinkSelectedIndex, suggestions.count - 1)])
+        }
+    }
+
+    private func handleSuggestionKey(_ key: WikilinkSuggestionKey) {
+        let commands = visibleSlashCommands
+        guard !commands.isEmpty else { handleWikilinkKey(key); return }
+        switch key {
+        case .next: slashSelectedIndex = (slashSelectedIndex + 1) % commands.count
+        case .previous: slashSelectedIndex = (slashSelectedIndex - 1 + commands.count) % commands.count
+        case .accept: selectSlashCommand(commands[min(slashSelectedIndex, commands.count - 1)])
         }
     }
 
@@ -594,7 +758,10 @@ private struct SourceTextView: UIViewRepresentable {
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
         if view.text != controller.text { view.text = controller.text }
-        if view.selectedRange != controller.selection { view.selectedRange = controller.selection }
+        if view.selectedRange != controller.selection {
+            view.selectedRange = controller.selection
+            view.scrollRangeToVisible(controller.selection)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }

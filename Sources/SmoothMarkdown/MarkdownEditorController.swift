@@ -334,6 +334,60 @@ public final class MarkdownEditorController: ObservableObject {
         return next
     }
 
+    /// Resolves a slash trigger at the start of a formatted paragraph's visible text.
+    /// The returned range is in source UTF-16 coordinates so it can be checked again
+    /// when a suggestion is selected.
+    public func slashCommandMatch(inBlock id: String, selection: NSRange) -> MarkdownSlashCommandMatch? {
+        guard selection.length == 0,
+              let block = semanticDocument.blockById(id),
+              let blockRange = semanticDocument.sourceRange(of: id),
+              case .paragraph = block.kind else { return nil }
+        let body = block.plainText as NSString
+        guard selection.location <= body.length else { return nil }
+        let prefix = body.substring(to: selection.location)
+        guard prefix.hasPrefix("/"),
+              !prefix.dropFirst().contains(where: { $0.isWhitespace || $0.isNewline }) else { return nil }
+        let range = NSRange(location: blockRange.location, length: selection.location)
+        guard isValidSourceRange(range),
+              (text as NSString).substring(with: range) == prefix else { return nil }
+        return MarkdownSlashCommandMatch(range: range, query: String(prefix.dropFirst()))
+    }
+
+    /// Consumes a still-current trigger and applies a built-in command as one undo step.
+    @discardableResult
+    public func applySlashCommand(_ command: MarkdownEditorCommand, match: MarkdownSlashCommandMatch) -> Bool {
+        guard isValidSourceRange(match.range),
+              (text as NSString).substring(with: match.range) == "/" + match.query else { return false }
+        setSelection(NSRange(location: NSMaxRange(match.range), length: 0))
+        transaction {
+            replaceRange(match.range, with: "")
+            if case .wikilink = command {
+                insertMarkdown("[[")
+            } else {
+                applyCommand(command)
+            }
+            let prefixLength: Int?
+            switch command {
+            case .paragraph: prefixLength = 0
+            case .heading1: prefixLength = 2
+            case .heading2: prefixLength = 3
+            case .heading3: prefixLength = 4
+            case .heading4: prefixLength = 5
+            case .heading5: prefixLength = 6
+            case .heading6: prefixLength = 7
+            case .unorderedList: prefixLength = 2
+            case .orderedList: prefixLength = 3
+            case .taskList: prefixLength = 6
+            case .blockquote: prefixLength = 2
+            default: prefixLength = nil
+            }
+            if let prefixLength {
+                setSelection(NSRange(location: match.range.location + prefixLength, length: 0))
+            }
+        }
+        return true
+    }
+
     public func applyCommand(_ command: MarkdownEditorCommand, argument: String? = nil) {
         if let level = command.headingLevel {
             transformLines { _, line in
@@ -462,6 +516,11 @@ public final class MarkdownEditorController: ObservableObject {
 }
 
 public enum MarkdownEditorMode: String, CaseIterable { case source, formatted, preview, split }
+
+public struct MarkdownSlashCommandMatch {
+    public let range: NSRange
+    public let query: String
+}
 
 public enum MarkdownEditorCommand {
     case paragraph, bold, italic, strikethrough, inlineCode

@@ -1,6 +1,30 @@
 import XCTest
 
 final class DemoEditorUITests: XCTestCase {
+    func testFindAndFocusControlsOnFlutterEditorDemo() {
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["open-demo-editor"].tap()
+
+        let focus = app.buttons["editor-focus-toggle"]
+        XCTAssertTrue(focus.waitForExistence(timeout: 10))
+        focus.tap()
+        XCTAssertFalse(app.segmentedControls.buttons["Blocks"].exists)
+        focus.tap()
+        XCTAssertTrue(app.segmentedControls.buttons["Blocks"].exists)
+
+        app.buttons["editor-find-open"].tap()
+        let find = app.textFields["editor-find-field"]
+        XCTAssertTrue(find.waitForExistence(timeout: 5))
+        find.tap()
+        find.typeText("Mermaid")
+        XCTAssertEqual(app.staticTexts["editor-find-count"].label, "1/2")
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue(app.textViews["markdown-source"].waitForExistence(timeout: 5))
+        app.buttons["editor-find-close"].tap()
+        XCTAssertFalse(find.exists)
+    }
+
     func testFlutterEditorDemoHostCallbacksAndSource() {
         let app = XCUIApplication()
         app.launch()
