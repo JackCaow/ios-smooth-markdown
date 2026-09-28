@@ -56,6 +56,21 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("English"))
     }
 
+    func testMermaidGalleryUsesFlutterFortyExamples() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("feature-mermaid", in: app)
+        XCTAssertEqual(app.staticTexts["mermaid-position"].label, "1/40")
+        XCTAssertEqual(app.staticTexts["mermaid-title"].label, "基础流程图 (TD)")
+        XCTAssertFalse(app.buttons["mermaid-previous"].isEnabled)
+        app.buttons["mermaid-next"].tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].label, "2/40")
+        XCTAssertTrue(app.staticTexts["mermaid-source"].exists)
+        app.buttons["mermaid-copy"].tap()
+        app.buttons["mermaid-theme"].tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].label, "2/40")
+    }
+
     private func choose(_ identifier: String, in app: XCUIApplication) {
         app.buttons["open-examples"].tap()
         let entry = app.buttons[identifier]
