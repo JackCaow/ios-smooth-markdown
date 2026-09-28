@@ -187,10 +187,10 @@ struct DemoHomeView: View {
 
     private func featurePage(_ feature: DemoFeature) -> some View {
         VStack(spacing: 0) {
-            header(title: feature.localizedTitle(in: language))
+            header(title: feature.pageTitle(in: language))
             featureContent(feature)
         }
-        .navigationTitle(feature.localizedTitle(in: language))
+        .navigationTitle(feature.pageTitle(in: language))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()
         .toolbar {

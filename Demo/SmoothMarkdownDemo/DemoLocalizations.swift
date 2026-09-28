@@ -345,6 +345,18 @@ extension DemoTheme {
 }
 
 extension DemoFeature {
+    func pageTitle(in language: DemoLanguage) -> String {
+        switch self {
+        case .math: "Math Formula Demo"
+        case .streaming: "Streaming Markdown Demo"
+        case .footnotes: "Footnotes Demo"
+        case .html: "HTML Tags Demo"
+        case .plugins: "Plugin System Demo"
+        case .mermaid: "Mermaid 图表测试"
+        default: localizedTitle(in: language)
+        }
+    }
+
     func localizedTitle(in language: DemoLanguage) -> String {
         let key: String
         switch self {

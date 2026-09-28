@@ -57,11 +57,11 @@ final class DemoExamplesUITests: XCTestCase {
         app.launch()
         choose("language-en", in: app)
         let features: [(String, String)] = [
-            ("math", "Math Formulas"), ("streaming", "Streaming"),
-            ("footnotes", "Footnotes"), ("html", "HTML Tags"),
+            ("math", "Math Formula Demo"), ("streaming", "Streaming Markdown Demo"),
+            ("footnotes", "Footnotes Demo"), ("html", "HTML Tags Demo"),
             ("chatList", "Chat List"), ("aiChat", "AI Chat"),
-            ("conversationList", "Conversation List"), ("plugins", "Plugin System"),
-            ("mermaid", "Mermaid Diagrams"), ("structured", "Structured Mermaid"),
+            ("conversationList", "Conversation List"), ("plugins", "Plugin System Demo"),
+            ("mermaid", "Mermaid 图表测试"), ("structured", "Structured Mermaid"),
             ("selection", "Selection"), ("performance", "Performance"),
         ]
         for (id, title) in features {
@@ -109,7 +109,7 @@ final class DemoExamplesUITests: XCTestCase {
         app.buttons["VS Code Dark"].tap()
 
         choose("feature-math", in: app)
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Math Formulas")
+        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Math Formula Demo")
         app.buttons["demo-feature-back"].tap()
 
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Headers")

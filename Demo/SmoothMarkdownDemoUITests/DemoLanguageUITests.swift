@@ -35,7 +35,7 @@ final class DemoLanguageUITests: XCTestCase {
         }
 
         choosePage("feature-math", app: app)
-        XCTAssertEqual(title.label, "数学公式")
+        XCTAssertEqual(title.label, "Math Formula Demo")
         app.buttons["demo-feature-back"].tap()
         choosePage("example-headers", app: app)
         XCTAssertEqual(title.label, "Headers")
