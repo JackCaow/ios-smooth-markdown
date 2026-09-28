@@ -30,4 +30,16 @@ final class CustomImageBuilderTests: XCTestCase {
         XCTAssertNotNil(renderer.nsImage)
         XCTAssertTrue(received.isEmpty)
     }
+
+    func testFencedCodeCanUseHostBuilder() {
+        var received: [String] = []
+        let view = SmoothMarkdownView(markdown: "```swift\nprint(1)\n```", codeBuilder: { code, language in
+            received.append("\(language ?? "")|\(code)")
+            return AnyView(Text("Custom code"))
+        })
+        let renderer = ImageRenderer(content: view.frame(width: 400, height: 200))
+        XCTAssertNotNil(renderer.nsImage)
+        XCTAssertFalse(received.isEmpty)
+        XCTAssertTrue(received.allSatisfy { $0.hasPrefix("swift|print(1)") })
+    }
 }

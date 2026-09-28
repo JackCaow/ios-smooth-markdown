@@ -15,6 +15,7 @@ public struct SmoothMarkdownView: View {
     public let imageBuilder: ((String, String?, String?) -> AnyView)?
     public let enableHTML: Bool
     public let codeBlockOptions: CodeBlockOptions
+    public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
@@ -28,6 +29,7 @@ public struct SmoothMarkdownView: View {
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         enableHTML: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
@@ -40,6 +42,7 @@ public struct SmoothMarkdownView: View {
         self.imageBuilder = imageBuilder
         self.enableHTML = enableHTML
         self.codeBlockOptions = codeBlockOptions
+        self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
         self.styleSheet = styleSheet
         self.plugins = plugins
@@ -179,8 +182,12 @@ public struct SmoothMarkdownView: View {
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
             }
         } else if let code = node as? CodeBlock {
-            EnhancedCodeBlockView(code: code.code, language: code.language,
-                                  options: codeBlockOptions, onCopy: onCodeCopy, styleSheet: styleSheet)
+            if let codeBuilder {
+                codeBuilder(code.code, code.language)
+            } else {
+                EnhancedCodeBlockView(code: code.code, language: code.language,
+                                      options: codeBlockOptions, onCopy: onCodeCopy, styleSheet: styleSheet)
+            }
         } else if let quote = node as? BlockQuote {
             VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in

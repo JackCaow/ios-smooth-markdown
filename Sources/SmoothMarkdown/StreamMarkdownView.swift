@@ -14,6 +14,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let throttleMillis: Int64
     public let enableHTML: Bool
     public let codeBlockOptions: CodeBlockOptions
+    public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
@@ -30,6 +31,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil,
         onComplete: ((String) -> Void)? = nil,
@@ -47,6 +49,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.onError = onError
         self.onComplete = onComplete
         self.codeBlockOptions = codeBlockOptions
+        self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
         self.styleSheet = styleSheet
         self.plugins = plugins
@@ -57,7 +60,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
                            onImageTapWithMetadata: onImageTapWithMetadata,
                            imageBuilder: imageBuilder,
-                           enableHTML: enableHTML, codeBlockOptions: codeBlockOptions,
+                           enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
                            onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins)
             .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {
                 accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
