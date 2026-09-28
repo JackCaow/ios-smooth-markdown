@@ -62,7 +62,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                            imageBuilder: imageBuilder,
                            enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
                            onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins)
-            .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {
+            .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis)) {
                 accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
                 do {
                     for try await chunk in chunks {
@@ -80,6 +80,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                     onError?(error)
                 }
             }
+            .onChange(of: enableHTML) { _, enabled in accumulator.setHTML(enabled) }
             .onDisappear { accumulator.cancel() }
     }
 }
@@ -87,5 +88,4 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
 private struct StreamTaskIdentity: Hashable {
     let streamID: String?
     let throttleMillis: Int64
-    let enableHTML: Bool
 }

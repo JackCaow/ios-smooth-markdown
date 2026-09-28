@@ -38,6 +38,20 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Complex Example")
     }
 
+    func testDrawerEditorEntryOpensEditor() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("language-en", in: app)
+        app.buttons["open-examples"].tap()
+        let editor = app.buttons["navigation-editor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        editor.tap()
+        XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["editor-find-open"].exists)
+        app.buttons["Close"].tap()
+        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
+    }
+
     func testFlutterSpecialPagesAndNativeExtrasOpen() {
         let app = XCUIApplication()
         app.launch()

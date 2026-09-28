@@ -6,7 +6,8 @@ public struct StreamMarkdownBuffer {
     public private(set) var fullText = ""
     public private(set) var visibleText = ""
     private let intervalMillis: Int64
-    private let enableHTML: Bool
+    private var enableHTML: Bool
+    private var isFinished = false
     private var lastUpdateMillis: Int64
 
     public init(intervalMillis: Int64 = 50, startMillis: Int64 = 0, enableHTML: Bool = false) {
@@ -32,13 +33,22 @@ public struct StreamMarkdownBuffer {
     }
 
     public mutating func finish(nowMillis: Int64) {
+        isFinished = true
         visibleText = fullText
         lastUpdateMillis = nowMillis
+    }
+
+    /// Re-render the accumulated prefix without losing chunks or restarting the stream.
+    public mutating func setHTML(_ enabled: Bool) {
+        guard enableHTML != enabled else { return }
+        enableHTML = enabled
+        visibleText = isFinished ? fullText : (enabled ? SafeHTML.safeRenderPrefix(fullText) : fullText)
     }
 
     public mutating func reset(nowMillis: Int64) {
         fullText = ""
         visibleText = ""
+        isFinished = false
         lastUpdateMillis = nowMillis
     }
 }
@@ -87,6 +97,12 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         pending?.cancel()
         pending = nil
         buffer.finish(nowMillis: Self.nowMillis())
+        visibleText = buffer.visibleText
+    }
+
+    public func setHTML(_ enabled: Bool) {
+        enableHTML = enabled
+        buffer.setHTML(enabled)
         visibleText = buffer.visibleText
     }
 

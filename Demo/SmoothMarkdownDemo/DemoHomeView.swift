@@ -16,6 +16,7 @@ struct DemoHomeView: View {
     @State private var showNavigation = false
     @State private var showSource = false
     @State private var editorSession: EditorSession?
+    @State private var openEditorAfterNavigation = false
     @State private var linkMessage: String?
     private let plugins = ParserPluginRegistry.builtIns()
 
@@ -61,9 +62,7 @@ struct DemoHomeView: View {
                         }
                         .accessibilityIdentifier("view-markdown-source")
                         Button(DemoLocalizations.text("open_editor", in: language), systemImage: "square.and.pencil") {
-                            let controller = MarkdownEditorController(text: pageCatalog.pages["editor"] ?? markdown ?? "")
-                            controller.mode = .formatted
-                            editorSession = .init(controller: controller)
+                            openEditor()
                         }
                         .accessibilityIdentifier("open-demo-editor")
                     }
@@ -77,8 +76,17 @@ struct DemoHomeView: View {
                     .accessibilityIdentifier("theme-menu")
                 }
             }
-            .sheet(isPresented: $showNavigation) {
-                DemoNavigationSheet(catalog: catalog, selected: $selected, language: $language)
+            .sheet(isPresented: $showNavigation, onDismiss: {
+                if openEditorAfterNavigation {
+                    openEditorAfterNavigation = false
+                    openEditor()
+                }
+            }) {
+                DemoNavigationSheet(catalog: catalog, selected: $selected, language: $language,
+                                    onOpenEditor: {
+                                        openEditorAfterNavigation = true
+                                        showNavigation = false
+                                    })
                     .presentationDetents([.large])
             }
             .sheet(isPresented: $showSource) {
@@ -98,6 +106,12 @@ struct DemoHomeView: View {
             }
         }
         .preferredColorScheme(theme.isDark ? .dark : .light)
+    }
+
+    private func openEditor() {
+        let controller = MarkdownEditorController(text: pageCatalog.pages["editor"] ?? markdown ?? "")
+        controller.mode = .formatted
+        editorSession = .init(controller: controller)
     }
 
     private var header: some View {
@@ -171,13 +185,21 @@ private struct DemoNavigationSheet: View {
     let catalog: DemoExampleCatalog
     @Binding var selected: DemoPage
     @Binding var language: DemoLanguage
+    let onOpenEditor: () -> Void
 
     var body: some View {
         NavigationStack {
             List {
-                Section(DemoLocalizations.text("editor", in: language)) {
-                    Text(DemoLocalizations.text("editor_hint", in: language))
-                        .foregroundStyle(.secondary)
+                Section {
+                    Button(action: onOpenEditor) {
+                        VStack(alignment: .leading) {
+                            Text(DemoLocalizations.text("editor", in: language))
+                            Text("Scratch-style editing preview")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityIdentifier("navigation-editor")
                 }
                 Section(DemoLocalizations.text("drawer_header_title", in: language)) {
                     ForEach(catalog.examples) { example in

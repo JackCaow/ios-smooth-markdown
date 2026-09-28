@@ -64,11 +64,6 @@ struct DemoHTMLView: View {
             }
             .accessibilityIdentifier("html-demo-reader")
         }
-        .onChange(of: enableHTML) { _, _ in
-            // The stream has a single consumer; show the full document with the
-            // new renderer configuration instead of restarting from mid-stream.
-            if stream != nil { stop() }
-        }
         .onDisappear { stop() }
     }
 

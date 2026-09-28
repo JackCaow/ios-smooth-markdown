@@ -37,4 +37,20 @@ final class StreamMarkdownBufferTests: XCTestCase {
         buffer.finish(nowMillis: 51)
         XCTAssertEqual(buffer.visibleText, "lead <font colo")
     }
+
+    func testHTMLToggleReRendersAccumulatedPrefixAndPreservesStream() {
+        var buffer = StreamMarkdownBuffer(startMillis: 0, enableHTML: true)
+        XCTAssertNil(buffer.append("lead <font colo", nowMillis: 50))
+        XCTAssertEqual(buffer.visibleText, "lead ")
+        buffer.setHTML(false)
+        XCTAssertEqual(buffer.visibleText, "lead <font colo")
+        buffer.setHTML(true)
+        XCTAssertEqual(buffer.visibleText, "lead ")
+        XCTAssertEqual(buffer.fullText, "lead <font colo")
+        buffer.append("r=red>red</font>", nowMillis: 100)
+        XCTAssertEqual(buffer.visibleText, "lead <font color=red>red</font>")
+        buffer.finish(nowMillis: 101)
+        buffer.setHTML(false)
+        XCTAssertEqual(buffer.visibleText, buffer.fullText)
+    }
 }
