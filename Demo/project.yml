@@ -1,0 +1,22 @@
+name: SmoothMarkdownDemo
+options:
+  bundleIdPrefix: com.jackcaow
+  deploymentTarget:
+    iOS: '17.0'
+packages:
+  SmoothMarkdown:
+    path: ..
+targets:
+  SmoothMarkdownDemo:
+    type: application
+    platform: iOS
+    sources:
+      - SmoothMarkdownDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: '5.9'
+        CODE_SIGNING_ALLOWED: NO
+    dependencies:
+      - package: SmoothMarkdown
