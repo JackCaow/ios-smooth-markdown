@@ -6,6 +6,18 @@ private let demoMarkdown = """
 
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+<details>
+<summary>Tap to expand **features**</summary>
+Hidden **formatted** content.
+- First item
+- Second item
+</details>
+
+<details open>
+<summary>Already expanded</summary>
+Visible content by default.
+</details>
+
 > The source editor now supports formatting commands and preview.
 
 Footnotes have named[^note] and numeric[^2] references.

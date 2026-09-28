@@ -21,17 +21,24 @@ public struct SmoothMarkdownView: View {
     }
 
     public var body: some View {
-        let sections = FootnoteSyntax.sections(markdown)
+        let sections = DetailsSyntax.sections(markdown)
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 ForEach(Array(sections.enumerated()), id: \.offset) { _, section in
                     switch section {
                     case let .markdown(source):
-                        ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in
-                            block(node)
+                        ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, footnoteSection in
+                            switch footnoteSection {
+                            case let .markdown(content):
+                                ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, node in
+                                    block(node)
+                                }
+                            case let .definition(definition):
+                                footnoteDefinition(definition)
+                            }
                         }
-                    case let .definition(definition):
-                        footnoteDefinition(definition)
+                    case let .details(details):
+                        detailsBlock(details)
                     }
                 }
             }
@@ -50,6 +57,26 @@ public struct SmoothMarkdownView: View {
 
     private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {
         AnyView(blockContent(node, alignment: alignment))
+    }
+
+    private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
+        let summary = MarkdownSyntax.parse(details.summary)
+        let summaryNode = summary.child(at: 0)
+        let summaryLabel = summaryNode.map(plainText).flatMap { $0.isEmpty ? nil : $0 } ?? "Details"
+        return DetailsBlockView(details: details, summaryLabel: summaryLabel, summary: AnyView(Group {
+            if let summaryNode { inlineView(summaryNode) }
+        }), content: AnyView(VStack(alignment: .leading, spacing: 12) {
+            ForEach(Array(FootnoteSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
+                switch section {
+                case let .markdown(source):
+                    ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, child in
+                        block(child)
+                    }
+                case let .definition(definition):
+                    footnoteDefinition(definition)
+                }
+            }
+        }))
     }
 
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
@@ -447,4 +474,43 @@ public struct SmoothMarkdownView: View {
         return node.children.map(plainText).joined()
     }
 
+}
+
+private struct DetailsBlockView: View {
+    let details: DetailsSyntax.Block
+    let summaryLabel: String
+    let summary: AnyView
+    let content: AnyView
+    @State private var isExpanded: Bool
+
+    init(details: DetailsSyntax.Block, summaryLabel: String, summary: AnyView, content: AnyView) {
+        self.details = details
+        self.summaryLabel = summaryLabel
+        self.summary = summary
+        self.content = content
+        _isExpanded = State(initialValue: details.isOpen)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { isExpanded.toggle() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .frame(width: 20)
+                    summary.frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(12)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(summaryLabel)
+            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+            if isExpanded && !details.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Divider()
+                content.padding(.horizontal, 12).padding(.bottom, 12)
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.gray.opacity(0.35)))
+        .padding(.vertical, 8)
+    }
 }
