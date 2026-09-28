@@ -20,6 +20,8 @@ public struct SmoothMarkdownView: View {
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
     public let enableCrossBlockSelection: Bool
+    /// Set to false when a host scroll view owns vertical scrolling, such as a chat list.
+    public let scrollable: Bool
 
     public init(
         markdown: String,
@@ -33,7 +35,8 @@ public struct SmoothMarkdownView: View {
         onCodeCopy: ((String, String?) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
-        enableCrossBlockSelection: Bool = true
+        enableCrossBlockSelection: Bool = true,
+        scrollable: Bool = true
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
@@ -47,17 +50,16 @@ public struct SmoothMarkdownView: View {
         self.styleSheet = styleSheet
         self.plugins = plugins
         self.enableCrossBlockSelection = enableCrossBlockSelection
+        self.scrollable = scrollable
     }
 
     public var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-                ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
-                    detailsSection(section)
-                }
+        Group {
+            if scrollable {
+                ScrollView { renderedBlocks }
+            } else {
+                renderedBlocks
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(styleSheet.contentPadding)
         }
         .foregroundColor(styleSheet.textColor)
         .background(styleSheet.backgroundColor ?? Color.clear)
@@ -69,6 +71,16 @@ public struct SmoothMarkdownView: View {
             }
             return .systemAction
         })
+    }
+
+    private var renderedBlocks: some View {
+        LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
+            ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
+                detailsSection(section)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(styleSheet.contentPadding)
     }
 
     private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {

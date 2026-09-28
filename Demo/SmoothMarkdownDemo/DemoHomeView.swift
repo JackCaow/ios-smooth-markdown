@@ -126,6 +126,8 @@ struct DemoHomeView: View {
             DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
         } else if currentFeature == .html, let markdown {
             DemoHTMLView(markdown: markdown, styleSheet: theme.styleSheet, plugins: plugins)
+        } else if currentFeature == .chatList {
+            DemoChatListView(parentIsDark: theme.isDark)
         } else if currentFeature == .conversationList {
             ContentUnavailableView(DemoFeature.conversationList.localizedTitle(in: language),
                                    systemImage: "bubble.left.and.bubble.right",

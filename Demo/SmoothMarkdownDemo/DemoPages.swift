@@ -62,7 +62,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     var subtitle: String? {
         switch self {
         case .aiChat: "Local plugin fixture; no Qwen API"
-        case .chatList: "Static messages"
+        case .chatList: "Interactive local chat"
         case .conversationList: "Interaction demo not ported"
         case .performance: "68 KB reader fixture"
         default: nil
@@ -70,22 +70,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var markdown: String? {
         switch self {
-        case .math, .footnotes, .html, .plugins, .mermaid: return nil
-        case .chatList:
-            return """
-            # Chat List
-
-            **User:** Show a Markdown sample.
-
-            **Assistant:** Here is a native rendered answer with **emphasis**, a list, and code:
-
-            - First item
-            - Second item
-
-            ```swift
-            print("Hello")
-            ```
-            """
+        case .math, .footnotes, .html, .plugins, .mermaid, .chatList: return nil
         case .aiChat:
             return """
             # AI Chat Plugin Fixture
