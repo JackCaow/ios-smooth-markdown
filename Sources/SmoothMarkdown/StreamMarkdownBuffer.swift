@@ -6,10 +6,12 @@ public struct StreamMarkdownBuffer {
     public private(set) var fullText = ""
     public private(set) var visibleText = ""
     private let intervalMillis: Int64
+    private let enableHTML: Bool
     private var lastUpdateMillis: Int64
 
-    public init(intervalMillis: Int64 = 50, startMillis: Int64 = 0) {
+    public init(intervalMillis: Int64 = 50, startMillis: Int64 = 0, enableHTML: Bool = false) {
         self.intervalMillis = max(0, intervalMillis)
+        self.enableHTML = enableHTML
         self.lastUpdateMillis = startMillis
     }
 
@@ -25,11 +27,14 @@ public struct StreamMarkdownBuffer {
     }
 
     public mutating func flush(nowMillis: Int64) {
-        visibleText = fullText
+        visibleText = enableHTML ? SafeHTML.safeRenderPrefix(fullText) : fullText
         lastUpdateMillis = nowMillis
     }
 
-    public mutating func finish(nowMillis: Int64) { flush(nowMillis: nowMillis) }
+    public mutating func finish(nowMillis: Int64) {
+        visibleText = fullText
+        lastUpdateMillis = nowMillis
+    }
 
     public mutating func reset(nowMillis: Int64) {
         fullText = ""
@@ -44,17 +49,20 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     private var buffer: StreamMarkdownBuffer
     private var pending: Task<Void, Never>?
     private var throttleMillis: Int64
+    private var enableHTML: Bool
 
-    public init(throttleMillis: Int64 = 50) {
+    public init(throttleMillis: Int64 = 50, enableHTML: Bool = false) {
         self.throttleMillis = max(0, throttleMillis)
-        buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis())
+        self.enableHTML = enableHTML
+        buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis(), enableHTML: enableHTML)
     }
 
-    public func reset(throttleMillis: Int64? = nil) {
+    public func reset(throttleMillis: Int64? = nil, enableHTML: Bool? = nil) {
         pending?.cancel()
         pending = nil
         if let throttleMillis { self.throttleMillis = max(0, throttleMillis) }
-        buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis())
+        if let enableHTML { self.enableHTML = enableHTML }
+        buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis(), enableHTML: self.enableHTML)
         visibleText = ""
     }
 

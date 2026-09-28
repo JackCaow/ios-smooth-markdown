@@ -8,6 +8,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let onError: ((Error) -> Void)?
     public let streamID: String?
     public let throttleMillis: Int64
+    public let enableHTML: Bool
 
     @StateObject private var accumulator: StreamMarkdownAccumulator
 
@@ -15,6 +16,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         chunks: Chunks,
         streamID: String? = nil,
         throttleMillis: Int64 = 50,
+        enableHTML: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil
@@ -22,16 +24,17 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.chunks = chunks
         self.streamID = streamID
         self.throttleMillis = throttleMillis
+        self.enableHTML = enableHTML
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onError = onError
-        _accumulator = StateObject(wrappedValue: StreamMarkdownAccumulator(throttleMillis: throttleMillis))
+        _accumulator = StateObject(wrappedValue: StreamMarkdownAccumulator(throttleMillis: throttleMillis, enableHTML: enableHTML))
     }
 
     public var body: some View {
-        SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap)
-            .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis)) {
-                accumulator.reset(throttleMillis: throttleMillis)
+        SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap, enableHTML: enableHTML)
+            .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {
+                accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
                 do {
                     for try await chunk in chunks {
                         if Task.isCancelled { break }
@@ -52,4 +55,5 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
 private struct StreamTaskIdentity: Hashable {
     let streamID: String?
     let throttleMillis: Int64
+    let enableHTML: Bool
 }

@@ -8,6 +8,10 @@ A **native** renderer with *inline formatting* and [links](https://github.com/Ja
 
 > The source editor now supports formatting commands and preview.
 
+HTML: <b>bold</b> and <span style="color:red">red</span>.
+
+<div align="center">Centered **Markdown**</div>
+
 - [x] Render headings and emphasis
 - [ ] Complete formatted-block editing
 
@@ -32,11 +36,15 @@ struct SmoothMarkdownDemoApp: App {
 private struct DemoContentView: View {
     @StateObject private var controller = MarkdownEditorController(text: demoMarkdown)
     @State private var showEditor = false
+    @State private var enableHTML = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Button(showEditor ? "Read" : "Open editor") { showEditor.toggle() }
+                if !showEditor {
+                    Button(enableHTML ? "HTML on" : "Enable HTML") { enableHTML.toggle() }
+                }
                 Spacer()
             }
             .padding(.horizontal)
@@ -44,7 +52,7 @@ private struct DemoContentView: View {
             if showEditor {
                 SmoothMarkdownEditor(controller: controller)
             } else {
-                SmoothMarkdownView(markdown: controller.text)
+                SmoothMarkdownView(markdown: controller.text, enableHTML: enableHTML)
             }
         }
     }

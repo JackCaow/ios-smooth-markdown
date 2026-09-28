@@ -6,15 +6,18 @@ public struct SmoothMarkdownView: View {
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
+    public let enableHTML: Bool
 
     public init(
         markdown: String,
         onLinkTap: ((URL) -> Void)? = nil,
-        onImageTap: ((URL) -> Void)? = nil
+        onImageTap: ((URL) -> Void)? = nil,
+        enableHTML: Bool = false
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
+        self.enableHTML = enableHTML
     }
 
     public var body: some View {
@@ -38,21 +41,24 @@ public struct SmoothMarkdownView: View {
         })
     }
 
-    private func block(_ node: Markup) -> AnyView {
-        AnyView(blockContent(node))
+    private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {
+        AnyView(blockContent(node, alignment: alignment))
     }
 
     @ViewBuilder
-    private func blockContent(_ node: Markup) -> some View {
+    private func blockContent(_ node: Markup, alignment: TextAlignment? = nil) -> some View {
         if let heading = node as? Heading {
             inline(heading)
                 .font(.system(size: CGFloat(32 - (heading.level - 1) * 3), weight: .bold))
+                .multilineTextAlignment(alignment ?? .leading)
+                .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                 .textSelection(.enabled)
         } else if let paragraph = node as? Paragraph {
             if let image = paragraph.childCount == 1 ? paragraph.child(at: 0) as? Markdown.Image : nil {
                 imageView(image)
             } else {
-                inline(paragraph).font(.body).textSelection(.enabled)
+                inline(paragraph).font(.body).multilineTextAlignment(alignment ?? .leading)
+                    .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
             }
         } else if let code = node as? CodeBlock {
             VStack(alignment: .leading, spacing: 6) {
@@ -69,7 +75,7 @@ public struct SmoothMarkdownView: View {
         } else if let quote = node as? BlockQuote {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in
-                    block(child)
+                    block(child, alignment: alignment)
                 }
             }
             .padding(.leading, 14)
@@ -85,9 +91,42 @@ public struct SmoothMarkdownView: View {
         } else if node is ThematicBreak {
             Divider().padding(.vertical, 8)
         } else if let html = node as? HTMLBlock {
-            SwiftUI.Text(html.rawHTML).textSelection(.enabled)
+            htmlBlock(html, alignment: alignment)
         } else {
             SwiftUI.Text(plainText(node)).textSelection(.enabled)
+        }
+    }
+
+    @ViewBuilder
+    private func htmlBlock(_ html: HTMLBlock, alignment: TextAlignment?) -> some View {
+        if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
+            switch parsed {
+            case .rule:
+                Divider().padding(.vertical, 8)
+            case let .container(name, content, declared, trailing):
+                let childAlignment: TextAlignment? = switch declared {
+                case "left": .leading
+                case "center": .center
+                case "right": .trailing
+                default: alignment
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
+                        block(child, alignment: childAlignment)
+                    }
+                }
+                .padding(.leading, name == "blockquote" ? 14 : 0)
+                .overlay(alignment: .leading) {
+                    if name == "blockquote" { Rectangle().fill(Color.accentColor).frame(width: 3) }
+                }
+                if !trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    ForEach(Array(MarkdownSyntax.parse(trailing).children.enumerated()), id: \.offset) { _, child in
+                        block(child, alignment: alignment)
+                    }
+                }
+            }
+        } else {
+            SwiftUI.Text(html.rawHTML).textSelection(.enabled)
         }
     }
 
@@ -154,41 +193,120 @@ public struct SmoothMarkdownView: View {
         }
     }
 
-    private func inline(_ node: Markup) -> SwiftUI.Text {
-        node.children.reduce(SwiftUI.Text("")) { result, child in
-            result + inlineNode(child)
-        }
+    private struct InlineStyle {
+        var bold = false
+        var italic = false
+        var strike = false
+        var link: URL?
     }
 
-    private func inlineNode(_ node: Markup) -> SwiftUI.Text {
-        if let text = node as? Markdown.Text {
-            return SwiftUI.Text(text.string)
-        }
-        if let code = node as? InlineCode {
-            return SwiftUI.Text(code.code).font(.system(.body, design: .monospaced))
-        }
-        if node is SoftBreak || node is LineBreak {
-            return SwiftUI.Text("\n")
-        }
-        if let link = node as? Markdown.Link {
-            let label = plainText(link)
-            guard let destination = link.destination,
-                  let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) else {
-                return SwiftUI.Text(label)
+    private func inline(_ node: Markup) -> SwiftUI.Text {
+        var tags: [SafeHTML.Tag] = []
+        return inlineChildren(node, style: InlineStyle(), tags: &tags)
+    }
+
+    private func inlineChildren(_ node: Markup, style: InlineStyle, tags: inout [SafeHTML.Tag]) -> SwiftUI.Text {
+        var output = SwiftUI.Text("")
+        for child in node.children {
+            if let html = child as? InlineHTML {
+                if enableHTML, let tag = SafeHTML.lexTag(html.rawHTML), tag.end == (html.rawHTML as NSString).length {
+                    if tag.isClosing {
+                        if let match = tags.lastIndex(where: { $0.name == tag.name }) { tags.removeSubrange(match...) }
+                    } else if SafeHTML.voidTags.contains(tag.name) {
+                        if tag.name == "br" { output = output + segment("\n", style: style, tags: tags) }
+                        if tag.name == "img" { output = output + segment(tag.attributes["alt"] ?? "", style: style, tags: tags) }
+                    } else if !tag.isSelfClosing {
+                        tags.append(tag)
+                    }
+                } else {
+                    output = output + segment(html.rawHTML, style: style, tags: tags)
+                }
+                continue
             }
-            var attributed = AttributedString(label)
-            attributed.link = url
-            attributed.foregroundColor = .blue
-            return SwiftUI.Text(attributed)
+            if let text = child as? Markdown.Text {
+                output = output + segment(text.string, style: style, tags: tags)
+            } else if let code = child as? InlineCode {
+                output = output + segment(code.code, style: style, tags: tags, code: true)
+            } else if child is SoftBreak || child is LineBreak {
+                output = output + segment("\n", style: style, tags: tags)
+            } else if let image = child as? Markdown.Image {
+                output = output + segment(plainText(image), style: style, tags: tags)
+            } else {
+                var nested = style
+                if child is Strong { nested.bold = true }
+                if child is Emphasis { nested.italic = true }
+                if child is Strikethrough { nested.strike = true }
+                if let link = child as? Markdown.Link, let destination = link.destination,
+                   let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) { nested.link = url }
+                output = output + inlineChildren(child, style: nested, tags: &tags)
+            }
         }
-        if let image = node as? Markdown.Image {
-            return SwiftUI.Text(plainText(image))
+        return output
+    }
+
+    private func segment(_ value: String, style: InlineStyle, tags: [SafeHTML.Tag], code: Bool = false) -> SwiftUI.Text {
+        var bold = style.bold
+        var italic = style.italic
+        var strike = style.strike
+        var underline = false
+        var monospaced = code
+        var baseline: CGFloat = 0
+        var foreground: Color?
+        var background: Color?
+        var fontSize: CGFloat?
+        var link = style.link
+        if enableHTML {
+            for tag in tags {
+                switch tag.name {
+                case "b", "strong": bold = true
+                case "i", "em": italic = true
+                case "s", "del", "strike": strike = true
+                case "u", "ins": underline = true
+                case "mark": background = .yellow.opacity(0.4)
+                case "sub": baseline = -4
+                case "sup": baseline = 4
+                case "code", "kbd": monospaced = true
+                case "a":
+                    if let href = tag.attributes["href"], SafeHTML.isSafeLink(href) { link = URL(string: href) }
+                case "font", "span":
+                    let css = tag.name == "span" ? SafeHTML.cssDeclarations(tag.attributes["style"] ?? "") : [:]
+                    if let value = tag.name == "font" ? tag.attributes["color"] : css["color"],
+                       let color = SafeHTML.color(value) { foreground = colorFromARGB(color) }
+                    if let value = css["background-color"], let color = SafeHTML.color(value) { background = colorFromARGB(color) }
+                    if let size = tag.name == "font" ? tag.attributes["size"].flatMap(SafeHTML.legacyFontSize)
+                        : css["font-size"].flatMap(SafeHTML.fontSize) { fontSize = CGFloat(size) }
+                default: break
+                }
+            }
         }
-        let content = inline(node)
-        if node is Strong { return content.bold() }
-        if node is Emphasis { return content.italic() }
-        if node is Strikethrough { return content.strikethrough() }
-        return content
+        var attributed = AttributedString(value)
+        if let background { attributed.backgroundColor = background }
+        if let link { attributed.link = link }
+        var result = SwiftUI.Text(attributed)
+        if bold { result = result.bold() }
+        if italic { result = result.italic() }
+        if strike { result = result.strikethrough() }
+        if underline { result = result.underline() }
+        if monospaced { result = result.font(.system(.body, design: .monospaced)) }
+        if baseline != 0 { result = result.baselineOffset(baseline) }
+        if let fontSize { result = result.font(.system(size: fontSize)) }
+        if let foreground { result = result.foregroundColor(foreground) }
+        else if link != nil { result = result.foregroundColor(.blue) }
+        return result
+    }
+
+    private func colorFromARGB(_ value: UInt32) -> Color {
+        Color(.sRGB, red: Double((value >> 16) & 0xFF) / 255,
+              green: Double((value >> 8) & 0xFF) / 255,
+              blue: Double(value & 0xFF) / 255, opacity: 1)
+    }
+
+    private func frameAlignment(_ alignment: TextAlignment?) -> Alignment {
+        switch alignment {
+        case .center: .center
+        case .trailing: .trailing
+        default: .leading
+        }
     }
 
     private func plainText(_ node: Markup) -> String {

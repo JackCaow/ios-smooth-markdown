@@ -29,4 +29,12 @@ final class StreamMarkdownBufferTests: XCTestCase {
         XCTAssertNil(buffer.append("lead <font colo", nowMillis: 50))
         XCTAssertEqual(buffer.visibleText, "lead <font colo")
     }
+
+    func testHTMLModeWithholdsPartialTagThenFlushesOnCompletion() {
+        var buffer = StreamMarkdownBuffer(startMillis: 0, enableHTML: true)
+        XCTAssertNil(buffer.append("lead <font colo", nowMillis: 50))
+        XCTAssertEqual(buffer.visibleText, "lead ")
+        buffer.finish(nowMillis: 51)
+        XCTAssertEqual(buffer.visibleText, "lead <font colo")
+    }
 }
