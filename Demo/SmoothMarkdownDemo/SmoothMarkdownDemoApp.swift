@@ -247,6 +247,8 @@ title Work split
 ```
 """
 
+private let inlineEditorFixture = "Alpha"
+
 @main
 struct SmoothMarkdownDemoApp: App {
     var body: some Scene {
@@ -255,8 +257,9 @@ struct SmoothMarkdownDemoApp: App {
 }
 
 private struct DemoContentView: View {
-    @StateObject private var controller = MarkdownEditorController(text: demoMarkdown)
-    @State private var showEditor = false
+    @StateObject private var controller = MarkdownEditorController(
+        text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture : demoMarkdown)
+    @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
     @State private var showSelection = false
@@ -316,6 +319,11 @@ private struct DemoContentView: View {
                 SmoothMarkdownView(markdown: showSelection ? selectionMarkdown :
                                    (showStructured ? structuredMarkdown : controller.text), enableHTML: enableHTML,
                                    styleSheet: themes[themeIndex].1, plugins: plugins)
+            }
+        }
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") {
+                controller.mode = .formatted
             }
         }
         }

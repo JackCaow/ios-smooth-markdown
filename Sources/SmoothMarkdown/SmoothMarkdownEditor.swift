@@ -114,13 +114,13 @@ private struct FormattedBlockRow: View {
             switch block.kind {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
+                inlineActions
                 inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
                                identifier: "heading-\(block.id)")
-                inlineActions
             case .paragraph:
                 blockLabel("Paragraph")
-                inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
                 inlineActions
+                inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
             case let .fencedCode(_, info, _):
                 blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
                 TextEditor(text: contentBinding)
@@ -152,7 +152,6 @@ private struct FormattedBlockRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
-        .accessibilityIdentifier("block-\(block.id)")
         .alert("Link URL", isPresented: $showLinkEditor) {
             TextField("https://example.com", text: $linkDestination)
                 .textInputAutocapitalization(.never)
@@ -385,6 +384,7 @@ private struct SourceTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
         view.delegate = context.coordinator
+        view.accessibilityIdentifier = "markdown-source"
         view.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
         view.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         view.autocapitalizationType = .none
