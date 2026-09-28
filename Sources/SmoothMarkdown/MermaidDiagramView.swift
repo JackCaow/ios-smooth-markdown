@@ -542,6 +542,14 @@ public struct MermaidDiagramView: View {
             path.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
             path.closeSubpath()
             return path
+        case .asymmetric:
+            var path = Path()
+            path.move(to: CGPoint(x: frame.minX + 12, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX - 12, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            path.closeSubpath()
+            return path
         case .cylinder:
             return Path(roundedRect: frame, cornerRadius: 10)
         }

@@ -2,7 +2,7 @@ import Foundation
 
 public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart, classDiagram, stateDiagram, erDiagram }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
-public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder, stateStart, stateEnd }
+public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder, asymmetric, stateStart, stateEnd }
 public enum MermaidLine: Equatable { case solid, dotted, thick }
 public enum MermaidArrow: Equatable { case none, arrow, cross }
 public enum MermaidParticipantType: Equatable { case participant, actor }
@@ -321,6 +321,7 @@ public enum MermaidParser {
             (#"^([A-Za-z_]\w*)\[\((.+)\)\]$"#, .cylinder),
             (#"^([A-Za-z_]\w*)\(\[(.+)\]\)$"#, .stadium),
             (#"^([A-Za-z_]\w*)\[(.+)\]$"#, .rectangle),
+            (#"^([A-Za-z_]\w*)>(.+)\]$"#, .asymmetric),
             (#"^([A-Za-z_]\w*)\((.+)\)$"#, .rounded),
             (#"^([A-Za-z_]\w*)\{(.+)\}$"#, .diamond),
         ]
