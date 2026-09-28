@@ -80,5 +80,4 @@ enum DemoFeature: String, CaseIterable, Identifiable {
 
 enum DemoPage: Hashable {
     case example(String)
-    case feature(DemoFeature)
 }

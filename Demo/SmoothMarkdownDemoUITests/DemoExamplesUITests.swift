@@ -34,7 +34,7 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("VS Code Dark"))
         app.buttons["open-demo-editor"].tap()
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
-        app.buttons["Close"].tap()
+        app.buttons["demo-editor-back"].tap()
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Complex Example")
     }
 
@@ -48,7 +48,7 @@ final class DemoExamplesUITests: XCTestCase {
         editor.tap()
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["editor-find-open"].exists)
-        app.buttons["Close"].tap()
+        app.buttons["demo-editor-back"].tap()
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
     }
 
@@ -67,6 +67,9 @@ final class DemoExamplesUITests: XCTestCase {
         for (id, title) in features {
             choose("feature-\(id)", in: app)
             XCTAssertEqual(app.staticTexts["demo-current-title"].label, title)
+            XCTAssertTrue(app.buttons["demo-feature-back"].exists)
+            app.buttons["demo-feature-back"].tap()
+            XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
         }
         choose("language-en", in: app)
         XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("English"))
@@ -95,6 +98,24 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertTrue(node.waitForExistence(timeout: 5))
         node.tap()
         XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+    }
+
+    func testFeatureBackKeepsExampleThemeAndSource() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("language-en", in: app)
+        choose("example-headers", in: app)
+        app.buttons["theme-menu"].tap()
+        app.buttons["VS Code Dark"].tap()
+
+        choose("feature-math", in: app)
+        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Math Formulas")
+        app.buttons["demo-feature-back"].tap()
+
+        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Headers")
+        XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("VS Code Dark"))
+        app.buttons["view-markdown-source"].tap()
+        XCTAssertTrue(app.staticTexts["markdown-source-content"].label.contains("# Header 1"))
     }
 
     private func choose(_ identifier: String, in app: XCUIApplication) {

@@ -36,6 +36,7 @@ final class DemoLanguageUITests: XCTestCase {
 
         choosePage("feature-math", app: app)
         XCTAssertEqual(title.label, "数学公式")
+        app.buttons["demo-feature-back"].tap()
         choosePage("example-headers", app: app)
         XCTAssertEqual(title.label, "标题")
         XCTAssertTrue(status.label.contains("默认暗色"))

@@ -6,6 +6,11 @@ private struct EditorSession: Identifiable {
     let controller: MarkdownEditorController
 }
 
+private enum DemoRoute: Hashable {
+    case feature(DemoFeature)
+    case editor(UUID)
+}
+
 /// Native companion to the Flutter example's sample drawer and feature pages.
 struct DemoHomeView: View {
     @State private var catalog = DemoExampleCatalog.load()
@@ -17,6 +22,8 @@ struct DemoHomeView: View {
     @State private var showSource = false
     @State private var editorSession: EditorSession?
     @State private var openEditorAfterNavigation = false
+    @State private var openFeatureAfterNavigation: DemoFeature?
+    @State private var routePath: [DemoRoute] = []
     @State private var linkMessage: String?
     private let plugins = ParserPluginRegistry.builtIns()
 
@@ -24,23 +31,18 @@ struct DemoHomeView: View {
         guard case let .example(id) = selected else { return nil }
         return catalog.examples.first { $0.id == id }
     }
-    private var currentFeature: DemoFeature? {
-        guard case let .feature(feature) = selected else { return nil }
-        return feature
-    }
     private var title: String {
         if let currentExample { return DemoLocalizations.exampleTitle(currentExample, in: language) }
-        if let currentFeature { return currentFeature.localizedTitle(in: language) }
         return DemoLocalizations.text("examples", in: language)
     }
     private var markdown: String? {
-        currentExample?.markdown ?? currentFeature.flatMap { pageCatalog.markdown(for: $0) ?? $0.markdown }
+        currentExample?.markdown
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $routePath) {
             VStack(spacing: 0) {
-                header
+                header(title: title)
                 if let error = catalog.error {
                     ContentUnavailableView(DemoLocalizations.text("examples_unavailable", in: language),
                                            systemImage: "doc.questionmark", description: Text(error))
@@ -48,7 +50,7 @@ struct DemoHomeView: View {
                     pageContent
                 }
             }
-            .navigationTitle(DemoLocalizations.text("app_title", in: language))
+            .navigationTitle("Smooth Markdown Demo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -80,11 +82,18 @@ struct DemoHomeView: View {
                 if openEditorAfterNavigation {
                     openEditorAfterNavigation = false
                     openEditor()
+                } else if let feature = openFeatureAfterNavigation {
+                    openFeatureAfterNavigation = nil
+                    routePath.append(.feature(feature))
                 }
             }) {
                 DemoNavigationSheet(catalog: catalog, selected: $selected, language: $language,
                                     onOpenEditor: {
                                         openEditorAfterNavigation = true
+                                        showNavigation = false
+                                    },
+                                    onOpenFeature: { feature in
+                                        openFeatureAfterNavigation = feature
                                         showNavigation = false
                                     })
                     .presentationDetents([.large])
@@ -92,16 +101,14 @@ struct DemoHomeView: View {
             .sheet(isPresented: $showSource) {
                 DemoSourceSheet(markdown: markdown ?? "", language: language)
             }
-            .sheet(item: $editorSession) { session in
-                NavigationStack {
-                    DemoEditorView(controller: session.controller)
-                        .navigationTitle(DemoLocalizations.text("editor", in: language))
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button(DemoLocalizations.text("close", in: language)) { editorSession = nil }
-                            }
-                        }
+            .navigationDestination(for: DemoRoute.self) { route in
+                switch route {
+                case let .feature(feature):
+                    featurePage(feature)
+                case let .editor(id):
+                    if let session = editorSession, session.id == id {
+                        editorPage(session)
+                    }
                 }
             }
         }
@@ -111,10 +118,29 @@ struct DemoHomeView: View {
     private func openEditor() {
         let controller = MarkdownEditorController(text: pageCatalog.pages["editor"] ?? markdown ?? "")
         controller.mode = .formatted
-        editorSession = .init(controller: controller)
+        let session = EditorSession(controller: controller)
+        editorSession = session
+        routePath.append(.editor(session.id))
     }
 
-    private var header: some View {
+    private func editorPage(_ session: EditorSession) -> some View {
+        DemoEditorView(controller: session.controller)
+            .navigationTitle(DemoLocalizations.text("editor", in: language))
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden()
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        routePath.removeLast()
+                    } label: {
+                        Label(DemoLocalizations.text("back", in: language), systemImage: "chevron.left")
+                    }
+                    .accessibilityIdentifier("demo-editor-back")
+                }
+            }
+    }
+
+    private func header(title: String) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline).accessibilityIdentifier("demo-current-title")
@@ -132,23 +158,7 @@ struct DemoHomeView: View {
 
     @ViewBuilder
     private var pageContent: some View {
-        if currentFeature == .performance {
-            PerformanceDemoView().accessibilityIdentifier("demo-performance")
-        } else if currentFeature == .mermaid {
-            MermaidGalleryView().accessibilityIdentifier("demo-mermaid-gallery")
-        } else if currentFeature == .streaming {
-            DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
-        } else if currentFeature == .html, let markdown {
-            DemoHTMLView(markdown: markdown, styleSheet: theme.styleSheet, plugins: plugins)
-        } else if currentFeature == .chatList {
-            DemoChatListView(parentIsDark: theme.isDark)
-        } else if currentFeature == .aiChat {
-            DemoAIChatView(parentIsDark: theme.isDark)
-        } else if currentFeature == .conversationList {
-            DemoConversationListView()
-        } else if currentFeature == .plugins, let markdown {
-            DemoPluginView(markdown: markdown, styleSheet: theme.styleSheet)
-        } else if let markdown {
+        if let markdown {
             SmoothMarkdownView(markdown: markdown,
                                onLinkTap: { url in
                                    let tapped = url.absoluteString
@@ -163,15 +173,63 @@ struct DemoHomeView: View {
                 .id(selected)
                 .accessibilityIdentifier("demo-reader")
                 .overlay(alignment: .bottom) {
-                if let linkMessage {
-                    Text("\(DemoLocalizations.text("link_tapped", in: language)): \(linkMessage)")
-                        .font(.caption)
-                        .padding(10)
-                        .background(.regularMaterial, in: Capsule())
-                        .padding(.bottom, 12)
-                        .accessibilityIdentifier("demo-link-message")
+                    if let linkMessage {
+                        Text("\(DemoLocalizations.text("link_tapped", in: language)): \(linkMessage)")
+                            .font(.caption)
+                            .padding(10)
+                            .background(.regularMaterial, in: Capsule())
+                            .padding(.bottom, 12)
+                            .accessibilityIdentifier("demo-link-message")
+                    }
                 }
+        }
+    }
+
+    private func featurePage(_ feature: DemoFeature) -> some View {
+        VStack(spacing: 0) {
+            header(title: feature.localizedTitle(in: language))
+            featureContent(feature)
+        }
+        .navigationTitle(feature.localizedTitle(in: language))
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    routePath.removeLast()
+                } label: {
+                    Label(DemoLocalizations.text("back", in: language), systemImage: "chevron.left")
                 }
+                .accessibilityIdentifier("demo-feature-back")
+            }
+        }
+        .accessibilityIdentifier("demo-feature-page")
+    }
+
+    @ViewBuilder
+    private func featureContent(_ feature: DemoFeature) -> some View {
+        let featureMarkdown = pageCatalog.markdown(for: feature) ?? feature.markdown
+        if feature == .performance {
+            PerformanceDemoView().accessibilityIdentifier("demo-performance")
+        } else if feature == .mermaid {
+            MermaidGalleryView().accessibilityIdentifier("demo-mermaid-gallery")
+        } else if feature == .streaming {
+            DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
+        } else if feature == .html, let featureMarkdown {
+            DemoHTMLView(markdown: featureMarkdown, styleSheet: theme.styleSheet, plugins: plugins)
+        } else if feature == .chatList {
+            DemoChatListView(parentIsDark: theme.isDark)
+        } else if feature == .aiChat {
+            DemoAIChatView(parentIsDark: theme.isDark)
+        } else if feature == .conversationList {
+            DemoConversationListView()
+        } else if feature == .plugins, let featureMarkdown {
+            DemoPluginView(markdown: featureMarkdown, styleSheet: theme.styleSheet)
+        } else if let featureMarkdown {
+            SmoothMarkdownView(markdown: featureMarkdown,
+                               enableHTML: false,
+                               styleSheet: theme.styleSheet, plugins: plugins)
+                .accessibilityIdentifier("demo-reader")
         } else if let error = pageCatalog.error {
             ContentUnavailableView(DemoLocalizations.text("demo_page_unavailable", in: language),
                                    systemImage: "doc.questionmark",
@@ -186,6 +244,7 @@ private struct DemoNavigationSheet: View {
     @Binding var selected: DemoPage
     @Binding var language: DemoLanguage
     let onOpenEditor: () -> Void
+    let onOpenFeature: (DemoFeature) -> Void
 
     var body: some View {
         NavigationStack {
@@ -210,7 +269,7 @@ private struct DemoNavigationSheet: View {
                 Section(DemoLocalizations.text("drawer_demos", in: language)) {
                     ForEach(DemoFeature.allCases) { feature in
                         Button {
-                            choose(.feature(feature))
+                            onOpenFeature(feature)
                         } label: {
                             VStack(alignment: .leading) {
                                 Text(feature.localizedTitle(in: language))

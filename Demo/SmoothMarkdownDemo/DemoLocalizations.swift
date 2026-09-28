@@ -180,7 +180,7 @@ enum DemoLocalizations {
         .zh: [
             "examples": "示例", "examples_demos": "示例与演示", "editor": "Markdown 编辑器",
             "editor_hint": "在当前示例中点编辑按钮。", "source": "查看 Markdown 源码",
-            "source_title": "Markdown 源码", "open_editor": "打开编辑器", "close": "关闭",
+            "source_title": "Markdown 源码", "open_editor": "打开编辑器", "close": "关闭", "back": "返回",
             "theme_status": "主题", "html_enabled": "启用 HTML",
             "example_quotes_rules": "引用与分隔线", "example_links_images": "链接与图片",
             "example_details_summary": "详情与摘要", "example_complex": "复杂示例",
@@ -197,7 +197,7 @@ enum DemoLocalizations {
         .en: [
             "examples": "Examples", "examples_demos": "Examples & Demos", "editor": "Markdown Editor",
             "editor_hint": "Use the editor button on the selected example.", "source": "View Markdown Source",
-            "source_title": "Markdown Source", "open_editor": "Open Editor", "close": "Close",
+            "source_title": "Markdown Source", "open_editor": "Open Editor", "close": "Close", "back": "Back",
             "theme_status": "Theme", "html_enabled": "Enable HTML",
             "example_quotes_rules": "Quotes & Rules", "example_links_images": "Links & Images",
             "example_details_summary": "Details & Summary", "example_complex": "Complex Example",
@@ -214,7 +214,7 @@ enum DemoLocalizations {
         .ja: [
             "examples": "サンプル", "examples_demos": "サンプルとデモ", "editor": "Markdown エディター",
             "editor_hint": "選択したサンプルの編集ボタンを使ってください。", "source": "Markdown ソースを表示",
-            "source_title": "Markdown ソース", "open_editor": "エディターを開く", "close": "閉じる",
+            "source_title": "Markdown ソース", "open_editor": "エディターを開く", "close": "閉じる", "back": "戻る",
             "theme_status": "テーマ", "html_enabled": "HTML を有効にする",
             "example_quotes_rules": "引用と区切り線", "example_links_images": "リンクと画像",
             "example_details_summary": "詳細と概要", "example_complex": "複合サンプル",
@@ -231,7 +231,7 @@ enum DemoLocalizations {
         .es: [
             "examples": "Ejemplos", "examples_demos": "Ejemplos y Demos", "editor": "Editor Markdown",
             "editor_hint": "Usa el botón de edición del ejemplo seleccionado.", "source": "Ver fuente Markdown",
-            "source_title": "Fuente Markdown", "open_editor": "Abrir editor", "close": "Cerrar",
+            "source_title": "Fuente Markdown", "open_editor": "Abrir editor", "close": "Cerrar", "back": "Volver",
             "theme_status": "Tema", "html_enabled": "Activar HTML",
             "example_quotes_rules": "Citas y separadores", "example_links_images": "Enlaces e imágenes",
             "example_details_summary": "Detalles y resumen", "example_complex": "Ejemplo complejo",
@@ -248,7 +248,7 @@ enum DemoLocalizations {
         .fr: [
             "examples": "Exemples", "examples_demos": "Exemples et démos", "editor": "Éditeur Markdown",
             "editor_hint": "Utilisez le bouton d’édition de l’exemple sélectionné.", "source": "Voir la source Markdown",
-            "source_title": "Source Markdown", "open_editor": "Ouvrir l’éditeur", "close": "Fermer",
+            "source_title": "Source Markdown", "open_editor": "Ouvrir l’éditeur", "close": "Fermer", "back": "Retour",
             "theme_status": "Thème", "html_enabled": "Activer HTML",
             "example_quotes_rules": "Citations et séparateurs", "example_links_images": "Liens et images",
             "example_details_summary": "Détails et résumé", "example_complex": "Exemple complexe",
@@ -265,7 +265,7 @@ enum DemoLocalizations {
         .ko: [
             "examples": "예제", "examples_demos": "예제 및 데모", "editor": "Markdown 편집기",
             "editor_hint": "선택한 예제에서 편집 버튼을 사용하세요.", "source": "Markdown 원본 보기",
-            "source_title": "Markdown 원본", "open_editor": "편집기 열기", "close": "닫기",
+            "source_title": "Markdown 원본", "open_editor": "편집기 열기", "close": "닫기", "back": "뒤로",
             "theme_status": "테마", "html_enabled": "HTML 사용",
             "example_quotes_rules": "인용 및 구분선", "example_links_images": "링크 및 이미지",
             "example_details_summary": "세부 정보 및 요약", "example_complex": "복합 예제",
