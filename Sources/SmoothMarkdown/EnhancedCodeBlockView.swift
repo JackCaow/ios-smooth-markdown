@@ -55,11 +55,19 @@ struct EnhancedCodeBlockView: View {
                     .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
                     .fixedSize(horizontal: true, vertical: false)
                     .textSelection(.enabled)
-                    .padding(styleSheet.codePadding)
+                    .padding(styleSheet.resolvedCodeBlockPadding)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(styleSheet.codeBackground ?? Color.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background {
+            let decoration = styleSheet.resolvedCodeBlockDecoration
+            RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                .fill(decoration.backgroundColor ?? .clear)
+                .overlay {
+                    RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                        .strokeBorder(decoration.borderColor ?? .clear, lineWidth: decoration.borderWidth)
+                }
+        }
         .onDisappear { resetTask?.cancel() }
     }
 

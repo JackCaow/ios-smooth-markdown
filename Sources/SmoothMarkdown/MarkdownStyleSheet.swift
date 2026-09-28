@@ -13,6 +13,22 @@ public struct MarkdownBlockquoteDecoration {
     }
 }
 
+/// Fill, outline, and corner radius of a fenced code block.
+public struct MarkdownCodeBlockDecoration {
+    public var backgroundColor: Color?
+    public var borderColor: Color?
+    public var borderWidth: CGFloat
+    public var cornerRadius: CGFloat
+
+    public init(backgroundColor: Color? = nil, borderColor: Color? = nil,
+                borderWidth: CGFloat = 0, cornerRadius: CGFloat = 0) {
+        self.backgroundColor = backgroundColor
+        self.borderColor = borderColor
+        self.borderWidth = max(0, borderWidth)
+        self.cornerRadius = max(0, cornerRadius)
+    }
+}
+
 /// Visual settings for `SmoothMarkdownView` and `StreamMarkdownView`.
 /// Nil colors and fonts inherit the host application's SwiftUI appearance.
 public struct MarkdownStyleSheet {
@@ -21,6 +37,10 @@ public struct MarkdownStyleSheet {
     public var headingColor: Color?
     public var linkColor: Color?
     public var codeBackground: Color?
+    /// Overrides the legacy code background and default rounded shape when provided.
+    public var codeBlockDecoration: MarkdownCodeBlockDecoration?
+    /// Four-sided padding inside fenced code blocks; nil uses `codePadding` on all sides.
+    public var codeBlockPadding: EdgeInsets?
     public var codeTextColor: Color?
     public var inlineCodeBackground: Color?
     public var inlineCodeTextColor: Color?
@@ -89,13 +109,18 @@ public struct MarkdownStyleSheet {
         tableCellPadding: CGFloat = 8,
         darkCodeHighlighting: Bool? = nil,
         blockquoteDecoration: MarkdownBlockquoteDecoration? = nil,
-        blockquotePadding: EdgeInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16)
+        blockquotePadding: EdgeInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16),
+        codeBlockDecoration: MarkdownCodeBlockDecoration? = nil,
+        codeBlockPadding: EdgeInsets? = nil
     ) {
         self.backgroundColor = backgroundColor
         self.textColor = textColor
         self.headingColor = headingColor
         self.linkColor = linkColor
         self.codeBackground = codeBackground
+        self.codeBlockDecoration = codeBlockDecoration
+        self.codeBlockPadding = codeBlockPadding.map { EdgeInsets(top: max(0, $0.top), leading: max(0, $0.leading),
+                                                                 bottom: max(0, $0.bottom), trailing: max(0, $0.trailing)) }
         self.codeTextColor = codeTextColor
         self.inlineCodeBackground = inlineCodeBackground
         self.inlineCodeTextColor = inlineCodeTextColor
@@ -140,7 +165,8 @@ public struct MarkdownStyleSheet {
              tableHeaderBackgroundColor: rgb(0xEEEEEE),
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
-             blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false)
+             blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false,
+             codeBlockDecoration: .init(borderColor: rgb(0xE0E0E0), borderWidth: 1, cornerRadius: 4))
     }
 
     public static func dark() -> Self {
@@ -152,7 +178,8 @@ public struct MarkdownStyleSheet {
              tableHeaderBackgroundColor: rgb(0x303030),
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
-             blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true)
+             blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true,
+             codeBlockDecoration: .init(borderColor: rgb(0x616161), borderWidth: 1, cornerRadius: 4))
     }
 
     public static func github(dark: Bool = false) -> Self {
@@ -162,6 +189,7 @@ public struct MarkdownStyleSheet {
         style.headingColor = style.textColor
         style.linkColor = rgb(dark ? 0x58A6FF : 0x0969DA)
         style.codeBackground = rgb(dark ? 0x161B22 : 0xF6F8FA)
+        style.codeBlockDecoration = .init(cornerRadius: 6)
         style.codeTextColor = style.textColor
         return style
     }
@@ -173,6 +201,8 @@ public struct MarkdownStyleSheet {
         style.headingColor = style.textColor
         style.linkColor = rgb(dark ? 0x4FC1FF : 0x0066BF)
         style.codeBackground = rgb(dark ? 0x1E1E1E : 0xF5F5F5)
+        style.codeBlockDecoration = .init(borderColor: rgb(dark ? 0x404040 : 0xE0E0E0),
+                                          borderWidth: 1, cornerRadius: 4)
         style.codeTextColor = rgb(dark ? 0xD4D4D4 : 0x1E1E1E)
         style.tableBorderColor = rgb(dark ? 0x404040 : 0xE0E0E0)
         return style
@@ -198,5 +228,20 @@ public struct MarkdownStyleSheet {
         }
         return MarkdownBlockquoteDecoration(backgroundColor: quoteBackground,
                                             borderColor: quoteBarColor ?? .accentColor)
+    }
+
+    internal var resolvedCodeBlockDecoration: MarkdownCodeBlockDecoration {
+        if let codeBlockDecoration {
+            return .init(backgroundColor: codeBlockDecoration.backgroundColor ?? codeBackground ?? Color.secondary.opacity(0.1),
+                         borderColor: codeBlockDecoration.borderColor,
+                         borderWidth: codeBlockDecoration.borderWidth,
+                         cornerRadius: codeBlockDecoration.cornerRadius)
+        }
+        return .init(backgroundColor: codeBackground ?? Color.secondary.opacity(0.1), cornerRadius: 8)
+    }
+
+    internal var resolvedCodeBlockPadding: EdgeInsets {
+        codeBlockPadding ?? EdgeInsets(top: codePadding, leading: codePadding,
+                                       bottom: codePadding, trailing: codePadding)
     }
 }
