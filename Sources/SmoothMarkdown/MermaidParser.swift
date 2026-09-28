@@ -73,11 +73,23 @@ public struct MermaidTimelineSection: Equatable {
     public init(title: String, events: [MermaidTimelineEvent]) { self.title = title; self.events = events }
 }
 
+public struct MermaidSubgraph: Equatable, Identifiable {
+    public let id: String
+    public let label: String
+    public let nodeIDs: [String]
+    public let parentID: String?
+
+    public init(id: String, label: String, nodeIDs: [String], parentID: String? = nil) {
+        self.id = id; self.label = label; self.nodeIDs = nodeIDs; self.parentID = parentID
+    }
+}
+
 public struct MermaidDiagram: Equatable {
     public let kind: MermaidKind
     public let direction: MermaidDirection
     public let nodes: [MermaidNode]
     public let edges: [MermaidEdge]
+    public let subgraphs: [MermaidSubgraph]
     public let title: String?
     public let showData: Bool
     public let pieSlices: [MermaidPieSlice]
@@ -107,6 +119,7 @@ public struct MermaidDiagram: Equatable {
     public let xyYAxisMaximum: Double?
 
     public init(kind: MermaidKind, direction: MermaidDirection, nodes: [MermaidNode] = [], edges: [MermaidEdge] = [],
+                subgraphs: [MermaidSubgraph] = [],
                 title: String? = nil, showData: Bool = false, pieSlices: [MermaidPieSlice] = [],
                 timelineSections: [MermaidTimelineSection] = [], ganttTasks: [MermaidGanttTask] = [],
                 ganttDateFormat: String = "YYYY-MM-DD", ganttAxisFormat: String? = nil,
@@ -120,6 +133,7 @@ public struct MermaidDiagram: Equatable {
                 xyXAxisMinimum: Double? = nil, xyXAxisMaximum: Double? = nil,
                 xyYAxisMinimum: Double? = nil, xyYAxisMaximum: Double? = nil) {
         self.kind = kind; self.direction = direction; self.nodes = nodes; self.edges = edges
+        self.subgraphs = subgraphs
         self.title = title; self.showData = showData; self.pieSlices = pieSlices; self.timelineSections = timelineSections
         self.ganttTasks = ganttTasks; self.ganttDateFormat = ganttDateFormat; self.ganttAxisFormat = ganttAxisFormat
         self.ganttExcludes = ganttExcludes; self.ganttTodayMarker = ganttTodayMarker
@@ -219,15 +233,43 @@ public enum MermaidParser {
         return .init(kind: .timeline, direction: .leftToRight, title: title, timelineSections: sections)
     }
 
-    private static func flowchart(_ lines: [String], direction: MermaidDirection) -> MermaidDiagram {
+    private static func flowchart(_ lines: [String], direction: MermaidDirection) -> MermaidDiagram? {
         var nodes: [MermaidNode] = []
         var edges: [MermaidEdge] = []
+        var subgraphs: [MermaidSubgraph] = []
+        var openGroups: [Int] = []
         let arrowPattern = try! NSRegularExpression(pattern: #"\s*(==>|-->|-\.->|---)\s*(\|[^|]*\|)?\s*"#)
         for line in lines {
+            if let groups = RegexCapture.first(#"^subgraph\s+(.+)$"#, in: line, options: [.caseInsensitive]) {
+                let declaration = groups[1].trimmingCharacters(in: .whitespaces)
+                let named = RegexCapture.first(#"^([^\s\[]+)\s*\[(.+)\]$"#, in: declaration)
+                let id = named?[1] ?? declaration.components(separatedBy: .whitespaces).first ?? ""
+                let label = named?[2] ?? declaration
+                guard !id.isEmpty, !label.isEmpty, openGroups.count < 16,
+                      !subgraphs.contains(where: { $0.id == id }) else { return nil }
+                nodes.removeAll { $0.id == id }
+                subgraphs.append(.init(id: id, label: label, nodeIDs: [],
+                                       parentID: openGroups.last.map { subgraphs[$0].id }))
+                openGroups.append(subgraphs.count - 1)
+                continue
+            }
+            if line.lowercased() == "end" {
+                guard !openGroups.isEmpty else { return nil }
+                openGroups.removeLast()
+                continue
+            }
             let source = line as NSString
             let matches = arrowPattern.matches(in: line, range: NSRange(location: 0, length: source.length))
             if matches.isEmpty {
-                if let node = parseNode(line) { save(node, in: &nodes) }
+                if let node = parseNode(line) {
+                    if subgraphs.contains(where: { $0.id == node.id }) { continue }
+                    save(node, in: &nodes)
+                    for index in openGroups where !subgraphs[index].nodeIDs.contains(node.id) {
+                        let group = subgraphs[index]
+                        subgraphs[index] = .init(id: group.id, label: group.label,
+                                                 nodeIDs: group.nodeIDs + [node.id], parentID: group.parentID)
+                    }
+                }
                 continue
             }
             var parts: [String] = []
@@ -238,7 +280,17 @@ public enum MermaidParser {
             }
             parts.append(source.substring(from: cursor).trimmingCharacters(in: .whitespaces))
             guard parts.count == matches.count + 1, parts.allSatisfy({ !$0.isEmpty }) else { continue }
-            for part in parts { if let node = parseNode(part) { save(node, in: &nodes) } }
+            for part in parts {
+                if let node = parseNode(part) {
+                    if subgraphs.contains(where: { $0.id == node.id }) { continue }
+                    save(node, in: &nodes)
+                    for index in openGroups where !subgraphs[index].nodeIDs.contains(node.id) {
+                        let group = subgraphs[index]
+                        subgraphs[index] = .init(id: group.id, label: group.label,
+                                                 nodeIDs: group.nodeIDs + [node.id], parentID: group.parentID)
+                    }
+                }
+            }
             for (index, match) in matches.enumerated() {
                 guard let from = extractID(parts[index]), let to = extractID(parts[index + 1]) else { continue }
                 let token = source.substring(with: match.range(at: 1))
@@ -249,7 +301,9 @@ public enum MermaidParser {
                                    arrow: token.contains(">") ? .arrow : .none))
             }
         }
-        return .init(kind: .flowchart, direction: direction, nodes: nodes, edges: edges)
+        guard openGroups.isEmpty, subgraphs.allSatisfy({ !$0.nodeIDs.isEmpty }) else { return nil }
+        return .init(kind: .flowchart, direction: direction, nodes: nodes, edges: edges,
+                     subgraphs: subgraphs)
     }
 
     private static func save(_ node: MermaidNode, in nodes: inout [MermaidNode]) {
@@ -275,12 +329,12 @@ public enum MermaidParser {
                 return .init(id: groups[1], label: groups[2].trimmingCharacters(in: CharacterSet(charactersIn: "\"'")), shape: shape)
             }
         }
-        guard let groups = RegexCapture.first(#"^([A-Za-z_]\w*)$"#, in: source) else { return nil }
+        guard let groups = RegexCapture.first(#"^([\p{L}_][\p{L}\p{N}_]*)$"#, in: source) else { return nil }
         return .init(id: groups[1], label: groups[1])
     }
 
     private static func extractID(_ source: String) -> String? {
-        RegexCapture.first(#"^([A-Za-z_]\w*)"#, in: source)?[1]
+        RegexCapture.first(#"^([\p{L}_][\p{L}\p{N}_]*)"#, in: source)?[1]
     }
 
     private static func sequence(_ lines: [String]) -> MermaidDiagram {

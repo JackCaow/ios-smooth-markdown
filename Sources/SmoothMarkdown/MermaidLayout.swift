@@ -11,6 +11,12 @@ struct MermaidLayoutResult {
     let size: CGSize
     let nodes: [String: CGRect]
     let edges: [MermaidPlacedEdge]
+    let subgraphs: [String: CGRect]
+
+    init(size: CGSize, nodes: [String: CGRect], edges: [MermaidPlacedEdge],
+         subgraphs: [String: CGRect] = [:]) {
+        self.size = size; self.nodes = nodes; self.edges = edges; self.subgraphs = subgraphs
+    }
 }
 
 /// Deterministic layered placement for the native Mermaid subset.
@@ -97,9 +103,17 @@ enum MermaidLayout {
         let ids = Set(diagram.nodes.map(\.id))
         var outgoing = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, [String]()) })
         var indegree = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, 0) })
-        for edge in diagram.edges where edge.from != edge.to && ids.contains(edge.from) && ids.contains(edge.to) {
-            outgoing[edge.from, default: []].append(edge.to)
-            indegree[edge.to, default: 0] += 1
+        func members(_ endpoint: String) -> [String] {
+            if ids.contains(endpoint) { return [endpoint] }
+            return diagram.subgraphs.first { $0.id == endpoint }?.nodeIDs.filter { ids.contains($0) } ?? []
+        }
+        for edge in diagram.edges where edge.from != edge.to {
+            for from in members(edge.from) {
+                for to in members(edge.to) where from != to {
+                    outgoing[from, default: []].append(to)
+                    indegree[to, default: 0] += 1
+                }
+            }
         }
         var rank = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, 0) })
         var queue = diagram.nodes.filter { indegree[$0.id] == 0 }.map(\.id)
@@ -117,8 +131,10 @@ enum MermaidLayout {
         let grouped = Dictionary(grouping: diagram.nodes) { rank[$0.id] ?? 0 }
         let layers = grouped.keys.sorted().compactMap { grouped[$0] }
         let horizontal = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
-        let margin: CGFloat = diagram.kind == .flowchart ? 24 : 64
-        let mainGap: CGFloat = 72, crossGap: CGFloat = 40
+        let hasSubgraphs = !diagram.subgraphs.isEmpty
+        let margin: CGFloat = hasSubgraphs ? 72 : diagram.kind == .flowchart ? 24 : 64
+        let mainGap: CGFloat = hasSubgraphs ? 100 : 72
+        let crossGap: CGFloat = hasSubgraphs ? 80 : 40
         // In a horizontal graph the main axis uses node width, and the cross axis uses height.
         func axisSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeWidth(node) : nodeHeight(node) }
         func laneSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeHeight(node) : nodeWidth(node) }
@@ -128,7 +144,7 @@ enum MermaidLayout {
         }
         let crossExtent = layerCross.max() ?? 0
         let mainExtent = layerMain.reduce(0, +) + CGFloat(max(0, layers.count - 1)) * mainGap
-        let size = horizontal
+        var size = horizontal
             ? CGSize(width: mainExtent + margin * 2, height: crossExtent + margin * 2)
             : CGSize(width: crossExtent + margin * 2, height: mainExtent + margin * 2)
         var positions: [String: CGRect] = [:]
@@ -152,8 +168,28 @@ enum MermaidLayout {
                     : CGRect(x: frame.minX, y: size.height - frame.maxY, width: frame.width, height: frame.height)
             }
         }
+        var groupFrames: [String: CGRect] = [:]
+        for group in diagram.subgraphs.reversed() {
+            let memberFrames = group.nodeIDs.compactMap { positions[$0] } +
+                diagram.subgraphs.filter { $0.parentID == group.id }.compactMap { groupFrames[$0.id] }
+            guard let first = memberFrames.first else { continue }
+            let bounds = memberFrames.dropFirst().reduce(first) { $0.union($1) }
+            groupFrames[group.id] = CGRect(x: bounds.minX - 20, y: bounds.minY - 38,
+                                           width: bounds.width + 40, height: bounds.height + 58)
+        }
+        if !groupFrames.isEmpty {
+            let minX = groupFrames.values.map(\.minX).min() ?? 16
+            let minY = groupFrames.values.map(\.minY).min() ?? 16
+            let shiftX = max(0, 16 - minX)
+            let shiftY = max(0, 16 - minY)
+            positions = positions.mapValues { $0.offsetBy(dx: shiftX, dy: shiftY) }
+            groupFrames = groupFrames.mapValues { $0.offsetBy(dx: shiftX, dy: shiftY) }
+            size.width = max(size.width + shiftX, (groupFrames.values.map(\.maxX).max() ?? 0) + 16)
+            size.height = max(size.height + shiftY, (groupFrames.values.map(\.maxY).max() ?? 0) + 16)
+        }
         let placed = diagram.edges.compactMap { edge -> MermaidPlacedEdge? in
-            guard let from = positions[edge.from], let to = positions[edge.to] else { return nil }
+            guard let from = positions[edge.from] ?? groupFrames[edge.from],
+                  let to = positions[edge.to] ?? groupFrames[edge.to] else { return nil }
             let start: CGPoint, end: CGPoint
             switch diagram.direction {
             case .topToBottom:
@@ -167,7 +203,7 @@ enum MermaidLayout {
             }
             return .init(edge: edge, start: start, end: end)
         }
-        return .init(size: size, nodes: positions, edges: placed)
+        return .init(size: size, nodes: positions, edges: placed, subgraphs: groupFrames)
     }
 
     private static func sequence(_ diagram: MermaidDiagram) -> MermaidLayoutResult {

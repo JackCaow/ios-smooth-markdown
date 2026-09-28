@@ -20,6 +20,7 @@ extension MermaidDiagram {
         if let title, !title.isEmpty { parts.append(title) }
         switch kind {
         case .flowchart, .sequence, .classDiagram, .stateDiagram, .erDiagram:
+            if !subgraphs.isEmpty { parts.append("Groups: \(spokenList(subgraphs.map(\.label)))") }
             let names = nodes.filter { $0.shape != .stateStart && $0.shape != .stateEnd }
                 .map(\.label).filter { !$0.isEmpty }
             if !names.isEmpty { parts.append("Nodes: \(spokenList(names))") }

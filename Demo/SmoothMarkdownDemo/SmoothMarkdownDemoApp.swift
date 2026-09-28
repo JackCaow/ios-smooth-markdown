@@ -163,6 +163,15 @@ private let structuredMarkdown = """
 # Structured Mermaid
 
 ```mermaid
+graph LR
+  A[Outside] --> B[Done]
+  subgraph group [Grouped work]
+    C[Inside]
+    C --> D[Review]
+  end
+```
+
+```mermaid
 stateDiagram-v2
   [*] --> Pending
   Pending --> Paid: payment

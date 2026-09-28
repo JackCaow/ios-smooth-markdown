@@ -46,6 +46,15 @@ public struct MermaidDiagramView: View {
                         context.stroke(line, with: .color(ink.opacity(0.4)), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     }
                 }
+                for group in diagram.subgraphs {
+                    guard let frame = layout.subgraphs[group.id] else { continue }
+                    let box = Path(roundedRect: frame, cornerRadius: 8)
+                    context.fill(box, with: .color(fill.opacity(0.35)))
+                    context.stroke(box, with: .color(ink.opacity(0.65)),
+                                   style: StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
+                    context.draw(Text(group.label).font(.system(size: 13, weight: .semibold)).foregroundColor(ink),
+                                 at: CGPoint(x: frame.midX, y: frame.minY + 15))
+                }
                 for placed in layout.edges {
                     if placed.edge.from == placed.edge.to, let frame = layout.nodes[placed.edge.from] {
                         drawSelfEdge(placed.edge, frame: frame, in: context, ink: ink)

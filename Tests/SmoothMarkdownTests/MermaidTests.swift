@@ -2,6 +2,73 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class MermaidTests: XCTestCase {
+    func testFlutterIssue46SubgraphFixtureKeepsContainerAndNodes() {
+        let diagram = MermaidParser.parse("""
+        graph LR
+            %% node definitions
+            A[矩形] --> B(圆角矩形)
+            B --> C{菱形}
+            C -->|条件| D[(圆柱形)]
+            E==>|粗线|F
+            F-.->|虚线|G
+            subgraph 子图
+                H[内部节点]
+            end
+        """)!
+        XCTAssertEqual(diagram.kind, .flowchart)
+        XCTAssertEqual(diagram.subgraphs, [.init(id: "子图", label: "子图", nodeIDs: ["H"])])
+        XCTAssertEqual(diagram.node("H")?.label, "内部节点")
+        let layout = MermaidLayout.compute(diagram)
+        XCTAssertTrue(layout.subgraphs["子图"]!.contains(layout.nodes["H"]!))
+        for node in diagram.nodes where node.id != "H" {
+            XCTAssertFalse(layout.subgraphs["子图"]!.intersects(layout.nodes[node.id]!))
+        }
+        XCTAssertTrue(diagram.voiceOverSummary.contains("Groups: 子图"))
+    }
+
+    func testNestedFlowchartSubgraphsContainChildrenAndRejectUnclosedGroups() {
+        let source = """
+        flowchart TB
+        subgraph outer [Outer]
+          A[Alpha]
+          subgraph inner [Inner]
+            B[Beta]
+          end
+          A --> B
+        end
+        """
+        let diagram = MermaidParser.parse(source)!
+        XCTAssertEqual(diagram.subgraphs.map(\.id), ["outer", "inner"])
+        XCTAssertEqual(diagram.subgraphs[0].nodeIDs, ["A", "B"])
+        XCTAssertEqual(diagram.subgraphs[1].parentID, "outer")
+        let layout = MermaidLayout.compute(diagram)
+        XCTAssertTrue(layout.subgraphs["outer"]!.contains(layout.subgraphs["inner"]!))
+        XCTAssertTrue(layout.subgraphs["inner"]!.contains(layout.nodes["B"]!))
+        let canvas = CGRect(origin: .zero, size: layout.size)
+        XCTAssertTrue(canvas.contains(layout.subgraphs["outer"]!))
+        XCTAssertNil(MermaidParser.parse("flowchart TB\nsubgraph A\nB[Beta]"))
+        XCTAssertNil(MermaidParser.parse("flowchart TB\nend"))
+    }
+
+    func testFlowchartEdgeCanConnectAGroupWithoutCreatingAFalseNode() {
+        let diagram = MermaidParser.parse("""
+        graph LR
+        subgraph work [Work]
+          A[Build]
+          B[Test]
+          A --> B
+        end
+        work --> C[Ship]
+        """)!
+        XCTAssertNil(diagram.node("work"))
+        XCTAssertEqual(diagram.edges.last?.from, "work")
+        XCTAssertEqual(diagram.edges.last?.to, "C")
+        let layout = MermaidLayout.compute(diagram)
+        XCTAssertEqual(layout.edges.count, 2)
+        XCTAssertEqual(layout.edges.last?.start.x, layout.subgraphs["work"]?.maxX)
+        XCTAssertGreaterThan(layout.nodes["C"]!.minX, layout.subgraphs["work"]!.maxX)
+    }
+
     func testFlowchartShapesEdgesDirectionsAndComments() {
         let source = """
         flowchart LR
