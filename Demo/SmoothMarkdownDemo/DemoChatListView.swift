@@ -171,6 +171,7 @@ struct DemoChatListView: View {
                 Text(message.timestamp, style: .time)
                     .font(.system(size: 11))
                     .foregroundStyle(message.isUser ? Color.white.opacity(0.7) : .secondary)
+                    .accessibilityIdentifier(message.isUser ? "chat-user-bubble" : "chat-assistant-bubble")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -178,7 +179,6 @@ struct DemoChatListView: View {
                         in: RoundedRectangle(cornerRadius: 20))
             .frame(maxWidth: 310,
                    alignment: message.isUser ? .trailing : .leading)
-            .accessibilityIdentifier(message.isUser ? "chat-user-bubble" : "chat-assistant-bubble")
             if !message.isUser { Spacer(minLength: 36) }
             if message.isUser { avatar("person.fill", color: .gray) }
         }
