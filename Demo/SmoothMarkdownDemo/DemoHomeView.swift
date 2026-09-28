@@ -62,8 +62,9 @@ struct DemoHomeView: View {
                         }
                         .accessibilityIdentifier("view-markdown-source")
                         Button(DemoLocalizations.text("open_editor", in: language), systemImage: "square.and.pencil") {
-                            editorSession = .init(controller: MarkdownEditorController(
-                                text: pageCatalog.pages["editor"] ?? markdown ?? ""))
+                            let controller = MarkdownEditorController(text: pageCatalog.pages["editor"] ?? markdown ?? "")
+                            controller.mode = .formatted
+                            editorSession = .init(controller: controller)
                         }
                         .accessibilityIdentifier("open-demo-editor")
                     }
