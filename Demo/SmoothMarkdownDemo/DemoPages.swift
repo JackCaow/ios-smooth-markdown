@@ -61,7 +61,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var subtitle: String? {
         switch self {
-        case .aiChat: "Local plugin fixture; no Qwen API"
+        case .aiChat: "Interactive mock chat with Flutter's six prompts"
         case .chatList: "Interactive local chat"
         case .conversationList: "12 conversations from Flutter example"
         case .performance: "68 KB reader fixture"
@@ -70,19 +70,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var markdown: String? {
         switch self {
-        case .math, .footnotes, .html, .plugins, .mermaid, .chatList: return nil
-        case .aiChat:
-            return """
-            # AI Chat Plugin Fixture
-
-            This page renders local AI syntax. No model request is made.
-
-            <thinking>Compare the available options before answering.</thinking>
-
-            <artifact identifier="demo" type="code" language="swift" title="Hello.swift">print("Hello")</artifact>
-
-            <tool_use><tool_name>search</tool_name><tool_id>demo-1</tool_id><input>{"query":"Markdown"}</input></tool_use>
-            """
+        case .math, .footnotes, .html, .plugins, .mermaid, .chatList, .aiChat: return nil
         case .structured: return structuredMarkdown
         case .selection: return selectionMarkdown
         case .streaming, .conversationList, .performance: return nil

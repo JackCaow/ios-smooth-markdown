@@ -128,6 +128,8 @@ struct DemoHomeView: View {
             DemoHTMLView(markdown: markdown, styleSheet: theme.styleSheet, plugins: plugins)
         } else if currentFeature == .chatList {
             DemoChatListView(parentIsDark: theme.isDark)
+        } else if currentFeature == .aiChat {
+            DemoAIChatView(parentIsDark: theme.isDark)
         } else if currentFeature == .conversationList {
             DemoConversationListView()
         } else if let markdown {
