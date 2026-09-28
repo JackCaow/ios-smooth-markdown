@@ -9,6 +9,7 @@ private struct EditorSession: Identifiable {
 /// Native companion to the Flutter example's sample drawer and feature pages.
 struct DemoHomeView: View {
     @State private var catalog = DemoExampleCatalog.load()
+    private let pageCatalog = DemoPageCatalog.load()
     @State private var selected: DemoPage = .example("basic-formatting")
     @State private var theme: DemoTheme = .defaultLight
     @State private var language: DemoLanguage = .zh
@@ -28,7 +29,9 @@ struct DemoHomeView: View {
         return feature
     }
     private var title: String { currentExample?.title ?? currentFeature?.title ?? "Examples unavailable" }
-    private var markdown: String? { currentExample?.markdown ?? currentFeature?.markdown }
+    private var markdown: String? {
+        currentExample?.markdown ?? currentFeature.flatMap { pageCatalog.markdown(for: $0) ?? $0.markdown }
+    }
 
     var body: some View {
         NavigationStack {
@@ -54,7 +57,8 @@ struct DemoHomeView: View {
                         }
                         .accessibilityIdentifier("view-markdown-source")
                         Button("Open Editor", systemImage: "square.and.pencil") {
-                            editorSession = .init(controller: MarkdownEditorController(text: markdown ?? ""))
+                            editorSession = .init(controller: MarkdownEditorController(
+                                text: pageCatalog.pages["editor"] ?? markdown ?? ""))
                         }
                         .accessibilityIdentifier("open-demo-editor")
                     }
@@ -115,6 +119,8 @@ struct DemoHomeView: View {
     private var pageContent: some View {
         if currentFeature == .performance {
             PerformanceDemoView().accessibilityIdentifier("demo-performance")
+        } else if currentFeature == .mermaid {
+            MermaidGalleryView().accessibilityIdentifier("demo-mermaid-gallery")
         } else if currentFeature == .streaming {
             DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
                 .accessibilityIdentifier("demo-streaming")
@@ -133,6 +139,9 @@ struct DemoHomeView: View {
                     .id(selected)
                     .accessibilityIdentifier("demo-reader")
             }
+        } else if let error = pageCatalog.error {
+            ContentUnavailableView("Demo page unavailable", systemImage: "doc.questionmark",
+                                   description: Text(error))
         }
     }
 }

@@ -70,35 +70,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var markdown: String? {
         switch self {
-        case .math:
-            return """
-            # Math Formulas
-
-            Inline: $a^2 + b^2 = c^2$ and $E = mc^2$.
-
-            $$
-            \\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}
-            $$
-            """
-        case .footnotes:
-            return """
-            # Footnotes
-
-            A named reference[^note] and a repeated reference[^note].
-
-            [^note]: **Formatted** footnote definition.
-                A continuation line.
-            """
-        case .html:
-            return """
-            # HTML Tags
-
-            **Markdown** beside <b>bold HTML</b>, <u>underline</u>, and <kbd>⌘K</kbd>.
-
-            <div align="center">Centered **content**</div>
-
-            <img src="native-vector.svg" alt="Bundled vector" width="64" height="64">
-            """
+        case .math, .footnotes, .html, .plugins, .mermaid: return nil
         case .chatList:
             return """
             # Chat List
@@ -125,34 +97,6 @@ enum DemoFeature: String, CaseIterable, Identifiable {
             <artifact identifier="demo" type="code" language="swift" title="Hello.swift">print("Hello")</artifact>
 
             <tool_use><tool_name>search</tool_name><tool_id>demo-1</tool_id><input>{"query":"Markdown"}</input></tool_use>
-            """
-        case .plugins:
-            return """
-            # Plugin System
-
-            Hello @john_doe. Explore #swiftui and :wave:.
-
-            ::: tip Native plugins
-            Mention, hashtag, emoji, and admonition plugins are enabled here.
-            :::
-            """
-        case .mermaid:
-            return """
-            # Mermaid Diagrams
-
-            ```mermaid
-            flowchart TD
-              A[Start] --> B{Ready?}
-              B -->|Yes| C[Done]
-            ```
-
-            ```mermaid
-            sequenceDiagram
-              participant U as User
-              participant S as Server
-              U->>S: Request
-              S-->>U: Response
-            ```
             """
         case .structured: return structuredMarkdown
         case .selection: return selectionMarkdown
