@@ -147,6 +147,9 @@ private struct DemoConversationDetailView: View {
     let isDark: Bool
     let referenceTime: Date
     @State private var copied = false
+    @State private var showMessageActions = false
+    @State private var messageToCopy = ""
+    @State private var selectPressedParagraph: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -182,6 +185,15 @@ private struct DemoConversationDetailView: View {
             }
         }
         .preferredColorScheme(isDark ? .dark : .light)
+        .confirmationDialog("消息操作", isPresented: $showMessageActions, titleVisibility: .visible) {
+            Button("复制") { copy(messageToCopy) }
+            Button("选择文字") {
+                let select = selectPressedParagraph
+                selectPressedParagraph = nil
+                // The native action sheet must leave before UITextView becomes first responder.
+                DispatchQueue.main.async { select?() }
+            }
+        }
     }
 
     private func bubble(_ message: DemoChatMessage, index: Int) -> some View {
@@ -190,6 +202,11 @@ private struct DemoConversationDetailView: View {
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
             VStack(alignment: .leading, spacing: 4) {
                 SmoothMarkdownView(markdown: message.content,
+                                   onTextLongPress: { selectParagraph in
+                                       messageToCopy = message.content
+                                       selectPressedParagraph = selectParagraph
+                                       showMessageActions = true
+                                   },
                                    styleSheet: messageStyle(isMe: message.isMe),
                                    scrollable: false)
                     .accessibilityIdentifier("conversation-message-\(index)")

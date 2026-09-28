@@ -23,6 +23,9 @@ public struct SmoothMarkdownView: View {
     public let codeBlockOptions: CodeBlockOptions
     public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
+    /// When provided, intercepts a rendered-text long press and supplies an action that
+    /// selects the paragraph under the press in the native text view.
+    public let onTextLongPress: ((@escaping () -> Void) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
     public let enableCrossBlockSelection: Bool
@@ -39,6 +42,7 @@ public struct SmoothMarkdownView: View {
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
+        onTextLongPress: ((@escaping () -> Void) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
         enableCrossBlockSelection: Bool = true,
@@ -53,6 +57,7 @@ public struct SmoothMarkdownView: View {
         self.codeBlockOptions = codeBlockOptions
         self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
+        self.onTextLongPress = onTextLongPress
         self.styleSheet = styleSheet
         self.plugins = plugins
         self.enableCrossBlockSelection = enableCrossBlockSelection
@@ -137,7 +142,8 @@ public struct SmoothMarkdownView: View {
                 switch group {
                 case let .selectable(nodes):
                     if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
-                        ReaderSelectionTextView(document: document, styleSheet: styleSheet, onLinkTap: onLinkTap)
+                        ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
                     }
                 case let .individual(node): block(node)
                 }

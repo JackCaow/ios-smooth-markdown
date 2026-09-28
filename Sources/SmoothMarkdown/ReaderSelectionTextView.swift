@@ -8,6 +8,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     let document: ReaderSelectionDocument
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
+    let onTextLongPress: ((@escaping () -> Void) -> Void)?
 
     func makeUIView(context: Context) -> QuoteTextView {
         let view = QuoteTextView()
@@ -19,6 +20,23 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         view.textContainer.lineFragmentPadding = 0
         view.dataDetectorTypes = []
         view.delegate = context.coordinator
+        let longPress = UILongPressGestureRecognizer(target: context.coordinator,
+                                                    action: #selector(Coordinator.didLongPress(_:)))
+        longPress.minimumPressDuration = 0.35
+        longPress.isEnabled = onTextLongPress != nil
+        // The message menu takes the long press before UITextView's built-in word
+        // selection. Ordinary taps, links and drag gestures remain native.
+        for recognizer in view.gestureRecognizers ?? [] where recognizer is UILongPressGestureRecognizer {
+            recognizer.require(toFail: longPress)
+        }
+        view.addGestureRecognizer(longPress)
+        context.coordinator.longPress = longPress
+        context.coordinator.textView = view
+        if onTextLongPress != nil {
+            let editMenu = UIEditMenuInteraction(delegate: context.coordinator)
+            view.addInteraction(editMenu)
+            context.coordinator.editMenu = editMenu
+        }
         view.accessibilityCustomActions = [UIAccessibilityCustomAction(
             name: "Select all reader text", target: view, selector: #selector(QuoteTextView.selectAllReaderText)
         )]
@@ -28,6 +46,8 @@ struct ReaderSelectionTextView: UIViewRepresentable {
 
     func updateUIView(_ view: QuoteTextView, context: Context) {
         context.coordinator.onLinkTap = onLinkTap
+        context.coordinator.onTextLongPress = onTextLongPress
+        context.coordinator.longPress?.isEnabled = onTextLongPress != nil
         let built = attributedContent()
         if !view.attributedText.isEqual(to: built.text) {
             view.attributedText = built.text
@@ -43,11 +63,59 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         return CGSize(width: width, height: ceil(measured.height))
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onLinkTap: onLinkTap) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
+    }
 
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIEditMenuInteractionDelegate {
         var onLinkTap: ((URL) -> Void)?
-        init(onLinkTap: ((URL) -> Void)?) { self.onLinkTap = onLinkTap }
+        var onTextLongPress: ((@escaping () -> Void) -> Void)?
+        weak var textView: QuoteTextView?
+        weak var longPress: UILongPressGestureRecognizer?
+        weak var editMenu: UIEditMenuInteraction?
+        init(onLinkTap: ((URL) -> Void)?, onTextLongPress: ((@escaping () -> Void) -> Void)?) {
+            self.onLinkTap = onLinkTap
+            self.onTextLongPress = onTextLongPress
+        }
+
+        @objc func didLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began, let textView,
+                  let onTextLongPress, textView.textStorage.length > 0 else { return }
+            let point = recognizer.location(in: textView)
+            guard let position = textView.closestPosition(to: point) else { return }
+            let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+            let source = textView.text as NSString
+            let index = min(max(0, offset), source.length - 1)
+            var paragraph = source.paragraphRange(for: NSRange(location: index, length: 0))
+            while paragraph.length > 0 {
+                let last = source.character(at: NSMaxRange(paragraph) - 1)
+                guard last == 10 || last == 13 else { break }
+                paragraph.length -= 1
+            }
+            guard paragraph.length > 0 else { return }
+            onTextLongPress { [weak self, weak textView] in
+                guard let textView, textView.window != nil else { return }
+                textView.becomeFirstResponder()
+                textView.selectedRange = paragraph
+                textView.scrollRangeToVisible(paragraph)
+                if let editMenu = self?.editMenu,
+                   let start = textView.position(from: textView.beginningOfDocument,
+                                                 offset: paragraph.location) {
+                    let caret = textView.caretRect(for: start)
+                    editMenu.presentEditMenu(with: UIEditMenuConfiguration(
+                        identifier: nil, sourcePoint: CGPoint(x: caret.midX, y: caret.midY)))
+                }
+            }
+        }
+
+        func editMenuInteraction(_ interaction: UIEditMenuInteraction,
+                                 menuFor configuration: UIEditMenuConfiguration,
+                                 suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard let textView, textView.selectedRange.length > 0 else { return nil }
+            return UIMenu(children: [UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) {
+                [weak textView] _ in textView?.copy(nil)
+            }])
+        }
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
             guard case let .link(url) = textItem.content else { return defaultAction }

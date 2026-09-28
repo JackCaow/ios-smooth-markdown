@@ -31,6 +31,9 @@ final class DemoConversationUITests: XCTestCase {
         ).firstMatch
         XCTAssertTrue(renderedText.exists)
         renderedText.press(forDuration: 1)
+        XCTAssertTrue(app.buttons["复制"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["选择文字"].exists)
+        app.buttons["选择文字"].tap()
         let nativeCopy = app.descendants(matching: .any).matching(
             NSPredicate(format: "label == %@ OR label == %@", "Copy", "复制")
         ).firstMatch
