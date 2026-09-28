@@ -111,7 +111,7 @@ public struct SmoothMarkdownEditor: View {
 
     private var previewPlugins: ParserPluginRegistry? {
         guard enableWikilinks else { return nil }
-        let registry = ParserPluginRegistry()
+        let registry = ParserPluginRegistry.builtIns()
         try? registry.register(WikilinkPlugin(onTapWikilink: onTapWikilink))
         return registry
     }
@@ -523,7 +523,6 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         defer { context.coordinator.isUpdating = false }
         view.font = font
         if let view = view as? WikilinkInputTextView {
-            if view.suggestionsVisible != suggestionsVisible { view.setNeedsUpdateOfKeyCommands() }
             view.suggestionsVisible = suggestionsVisible
             view.onSuggestionKey = onSuggestionKey
         }

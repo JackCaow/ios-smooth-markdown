@@ -16,8 +16,6 @@ struct DemoEditorView: View {
                 .foregroundStyle(.secondary)
             SmoothMarkdownEditor(
                 controller: controller,
-                wikilinkSuggestions: ["Daily Notes", "Project Plan", "Research Index", "Scratch Reference"],
-                onTapWikilink: { target in hostMessage = "Wikilink: \(target)" },
                 onPickImage: {
                     MarkdownEditorImageSelection(url: "https://picsum.photos/640/360",
                                                  alt: "Sample image", title: "Demo image")
@@ -37,7 +35,9 @@ struct DemoEditorView: View {
                     case (_, .cancelled): hostMessage = "Editor action cancelled"
                     default: break
                     }
-                }
+                },
+                wikilinkSuggestions: ["Daily Notes", "Project Plan", "Research Index", "Scratch Reference"],
+                onTapWikilink: { target in hostMessage = "Wikilink: \(target)" }
             )
             if let hostMessage {
                 Text(hostMessage)
