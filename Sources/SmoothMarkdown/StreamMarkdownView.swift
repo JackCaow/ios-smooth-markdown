@@ -5,6 +5,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let chunks: Chunks
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
+    public let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
     public let onError: ((Error) -> Void)?
     /// Called after the final chunk has been published to the reader.
     public let onComplete: ((String) -> Void)?
@@ -25,6 +26,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         enableHTML: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
+        onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil,
@@ -38,6 +40,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.enableHTML = enableHTML
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
+        self.onImageTapWithMetadata = onImageTapWithMetadata
         self.onError = onError
         self.onComplete = onComplete
         self.codeBlockOptions = codeBlockOptions
@@ -49,6 +52,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
 
     public var body: some View {
         SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
+                           onImageTapWithMetadata: onImageTapWithMetadata,
                            enableHTML: enableHTML, codeBlockOptions: codeBlockOptions,
                            onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins)
             .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {

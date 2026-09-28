@@ -222,7 +222,7 @@ This paragraph has a [sample link](https://example.com).
 | --- | --- |
 | Alpha | 42 |
 
-![Bundled vector](native-vector.svg)
+![Bundled vector](native-vector.svg "Vector title")
 
 Inline ![Inline icon](native-vector.svg) in text.
 
@@ -263,6 +263,7 @@ private struct DemoContentView: View {
     @State private var showPerformance = false
     @State private var themeIndex = 0
     @State private var imageTapCount = 0
+    @State private var lastImageTap = ""
     private let plugins = ParserPluginRegistry.builtIns()
     private let themes: [(String, MarkdownStyleSheet)] = [
         ("System", .default()), ("Light", .light()), ("Dark", .dark()),
@@ -274,7 +275,12 @@ private struct DemoContentView: View {
         if ProcessInfo.processInfo.arguments.contains("--accessibility-fixture") {
             VStack(spacing: 0) {
                 Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
-                SmoothMarkdownView(markdown: accessibilityMarkdown, onImageTap: { _ in imageTapCount += 1 },
+                Text(lastImageTap).accessibilityIdentifier("image-tap-metadata")
+                SmoothMarkdownView(markdown: accessibilityMarkdown,
+                                   onImageTapWithMetadata: { source, alt, title in
+                                       imageTapCount += 1
+                                       lastImageTap = "\(source)|\(alt ?? "")|\(title ?? "")"
+                                   },
                                    styleSheet: .light(), plugins: plugins, enableCrossBlockSelection: false)
             }
         } else {

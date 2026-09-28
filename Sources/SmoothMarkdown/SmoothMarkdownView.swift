@@ -9,6 +9,8 @@ public struct SmoothMarkdownView: View {
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
+    /// Receives the original image source, alt text, and title, matching Flutter's image callback.
+    public let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
     public let enableHTML: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let onCodeCopy: ((String, String?) -> Void)?
@@ -20,6 +22,7 @@ public struct SmoothMarkdownView: View {
         markdown: String,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
+        onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
         enableHTML: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
@@ -30,6 +33,7 @@ public struct SmoothMarkdownView: View {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
+        self.onImageTapWithMetadata = onImageTapWithMetadata
         self.enableHTML = enableHTML
         self.codeBlockOptions = codeBlockOptions
         self.onCodeCopy = onCodeCopy
@@ -320,7 +324,7 @@ public struct SmoothMarkdownView: View {
                     case .empty: ProgressView()
                     }
                 }
-                .frame(width: width, height: height), url: url, label: label, inline: inline)
+                .frame(width: width, height: height), url: url, image: image, label: label, inline: inline)
         case let .remote(url, svg: false):
             return accessibleImage(
                 AsyncImage(url: url) { phase in
@@ -331,21 +335,24 @@ public struct SmoothMarkdownView: View {
                     @unknown default: SwiftUI.Text(label)
                     }
                 }
-                .frame(width: width, height: height), url: url, label: label, inline: inline)
+                .frame(width: width, height: height), url: url, image: image, label: label, inline: inline)
         case let .bundled(name, svg: true):
             guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
             return accessibleImage(svgContent(svg, resizable: resizableSVG)
-                .frame(width: width, height: height), url: URL(string: name), label: label, inline: inline)
+                .frame(width: width, height: height), url: URL(string: name), image: image, label: label, inline: inline)
         case let .bundled(name, svg: false):
             return accessibleImage(SwiftUI.Image(name)
                 .resizable().scaledToFit()
-                .frame(width: width, height: height), url: URL(string: name), label: label, inline: inline)
+                .frame(width: width, height: height), url: URL(string: name), image: image, label: label, inline: inline)
         }
     }
 
-    private func accessibleImage<Content: View>(_ content: Content, url: URL?, label: String, inline: Bool) -> AnyView {
-        if let url, let onImageTap {
-            return AnyView(Button { onImageTap(url) } label: {
+    private func accessibleImage<Content: View>(_ content: Content, url: URL?, image: SafeHTML.ImageSpec, label: String, inline: Bool) -> AnyView {
+        if onImageTapWithMetadata != nil || (url != nil && onImageTap != nil) {
+            return AnyView(Button {
+                onImageTapWithMetadata?(image.source, image.alt, image.title)
+                if let url { onImageTap?(url) }
+            } label: {
                 content.padding(inline ? 10 : 0)
                     .contentShape(Rectangle())
             }

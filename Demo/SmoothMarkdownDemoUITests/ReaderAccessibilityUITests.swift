@@ -22,6 +22,7 @@ final class ReaderAccessibilityUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(image.frame.height, 44)
         image.tap()
         XCTAssertTrue(app.staticTexts["Image taps: 1"].exists)
+        XCTAssertTrue(app.staticTexts["native-vector.svg|Bundled vector|Vector title"].exists)
         let inlineImage = app.buttons["Inline icon"]
         reveal(inlineImage, in: app)
         XCTAssertGreaterThanOrEqual(inlineImage.frame.width, 43.5)
