@@ -65,6 +65,24 @@ enum MermaidLayout {
         }
     }
 
+    /// Position of the current-day indicator on the same date scale as the task bars.
+    static func ganttTodayMarkerX(_ diagram: MermaidDiagram, today: Date,
+                                  timeZone: TimeZone = .current) -> CGFloat? {
+        guard diagram.ganttTodayMarker,
+              let first = diagram.ganttTasks.map(\.startDate).min(),
+              let last = diagram.ganttTasks.map(\.endDate).max() else { return nil }
+        var localCalendar = Calendar(identifier: .gregorian)
+        localCalendar.timeZone = timeZone
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = localCalendar.dateComponents([.year, .month, .day], from: today)
+        guard let day = calendar.date(from: parts) else { return nil }
+        guard day >= calendar.startOfDay(for: first),
+              day <= calendar.startOfDay(for: last) else { return nil }
+        let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: first), to: day).day ?? 0
+        return 180 + CGFloat(offset) * 12
+    }
+
     private static func kanban(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
         let rows = diagram.kanbanColumns.map { $0.tasks.count }.max() ?? 0
         return .init(size: CGSize(width: CGFloat(diagram.kanbanColumns.count) * 216 + 32,

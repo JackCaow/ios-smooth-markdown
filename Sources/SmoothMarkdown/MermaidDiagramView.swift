@@ -212,6 +212,15 @@ public struct MermaidDiagramView: View {
             context.fill(path, with: .color(color))
             context.stroke(path, with: .color(ink.opacity(0.35)), lineWidth: 1)
         }
+        if let x = MermaidLayout.ganttTodayMarkerX(diagram, today: Date()) {
+            let markerColor = Color(red: 233 / 255, green: 30 / 255, blue: 99 / 255)
+            var marker = Path()
+            marker.move(to: CGPoint(x: x, y: 82))
+            marker.addLine(to: CGPoint(x: x, y: bars.last?.maxY ?? 104))
+            context.stroke(marker, with: .color(markerColor), lineWidth: 2)
+            context.draw(Text("Today").font(.system(size: 10, weight: .bold)).foregroundColor(markerColor),
+                         at: CGPoint(x: x, y: 73))
+        }
     }
 
     private func drawKanban(in context: GraphicsContext, diagram: MermaidDiagram, size: CGSize, ink: Color) {

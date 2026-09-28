@@ -201,6 +201,28 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidParser.parse("gantt\ntitle Empty"))
     }
 
+    func testGanttTodayMarkerUsesTaskDateScaleAndDirective() {
+        let source = """
+        gantt
+          axisFormat %m/%d
+          excludes weekends
+          section Build
+            Plan :plan, 2024-06-01, 3d
+        """
+        let diagram = MermaidParser.parse(source)!
+        XCTAssertEqual(diagram.ganttAxisFormat, "%m/%d")
+        XCTAssertEqual(diagram.ganttExcludes, "weekends")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        let utc = TimeZone(secondsFromGMT: 0)!
+        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-01")!, timeZone: utc), 180)
+        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-02")!, timeZone: utc), 192)
+        XCTAssertNil(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-04")!, timeZone: utc))
+        let hidden = MermaidParser.parse(source.replacingOccurrences(of: "section Build", with: "todayMarker off\n          section Build"))!
+        XCTAssertNil(MermaidLayout.ganttTodayMarkerX(hidden, today: formatter.date(from: "2024-06-02")!, timeZone: utc))
+    }
+
     func testKanbanFixtureYAMLMetadataWIPAndFallback() {
         let diagram = MermaidParser.parse("""
         ---
