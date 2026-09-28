@@ -123,7 +123,6 @@ struct DemoHomeView: View {
             MermaidGalleryView().accessibilityIdentifier("demo-mermaid-gallery")
         } else if currentFeature == .streaming {
             DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
-                .accessibilityIdentifier("demo-streaming")
         } else if currentFeature == .conversationList {
             ContentUnavailableView("Conversation List", systemImage: "bubble.left.and.bubble.right",
                                    description: Text("Long-press actions, swipes, and multi-select from Flutter are not ported to this iOS demo."))
