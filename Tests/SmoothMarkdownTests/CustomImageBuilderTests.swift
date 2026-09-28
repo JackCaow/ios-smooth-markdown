@@ -15,7 +15,11 @@ final class CustomImageBuilderTests: XCTestCase {
             enableHTML: true
         )
         let renderer = ImageRenderer(content: view.frame(width: 400, height: 300))
+        #if canImport(UIKit)
+        XCTAssertNotNil(renderer.uiImage)
+        #else
         XCTAssertNotNil(renderer.nsImage)
+        #endif
         XCTAssertTrue(received.contains("asset.png|One|A"))
         XCTAssertTrue(received.contains("https://example.com/two.svg|Two|"))
     }
@@ -27,7 +31,11 @@ final class CustomImageBuilderTests: XCTestCase {
             return AnyView(Text("Should not render"))
         })
         let renderer = ImageRenderer(content: view.frame(width: 400, height: 200))
+        #if canImport(UIKit)
+        XCTAssertNotNil(renderer.uiImage)
+        #else
         XCTAssertNotNil(renderer.nsImage)
+        #endif
         XCTAssertTrue(received.isEmpty)
     }
 
@@ -38,7 +46,11 @@ final class CustomImageBuilderTests: XCTestCase {
             return AnyView(Text("Custom code"))
         })
         let renderer = ImageRenderer(content: view.frame(width: 400, height: 200))
+        #if canImport(UIKit)
+        XCTAssertNotNil(renderer.uiImage)
+        #else
         XCTAssertNotNil(renderer.nsImage)
+        #endif
         XCTAssertFalse(received.isEmpty)
         XCTAssertTrue(received.allSatisfy { $0.hasPrefix("swift|print(1)") })
     }
