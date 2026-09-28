@@ -16,7 +16,6 @@ struct DemoHomeView: View {
     @State private var showNavigation = false
     @State private var showSource = false
     @State private var editorSession: EditorSession?
-    @State private var htmlEnabled = true
     @State private var linkMessage: String?
     private let plugins = ParserPluginRegistry.builtIns()
 
@@ -110,10 +109,6 @@ struct DemoHomeView: View {
                     .accessibilityIdentifier("demo-current-theme")
             }
             Spacer()
-            if currentFeature == .html {
-                Toggle("HTML", isOn: $htmlEnabled).labelsHidden()
-                    .accessibilityLabel(DemoLocalizations.text("html_enabled", in: language))
-            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -129,6 +124,8 @@ struct DemoHomeView: View {
             MermaidGalleryView().accessibilityIdentifier("demo-mermaid-gallery")
         } else if currentFeature == .streaming {
             DemoStreamingView(styleSheet: theme.styleSheet, plugins: plugins)
+        } else if currentFeature == .html, let markdown {
+            DemoHTMLView(markdown: markdown, styleSheet: theme.styleSheet, plugins: plugins)
         } else if currentFeature == .conversationList {
             ContentUnavailableView(DemoFeature.conversationList.localizedTitle(in: language),
                                    systemImage: "bubble.left.and.bubble.right",
@@ -141,7 +138,7 @@ struct DemoHomeView: View {
                 }
                 SmoothMarkdownView(markdown: markdown,
                                    onLinkTap: { linkMessage = $0.absoluteString },
-                                   enableHTML: currentFeature == .html && htmlEnabled,
+                                   enableHTML: false,
                                    styleSheet: theme.styleSheet, plugins: plugins)
                     .id(selected)
                     .accessibilityIdentifier("demo-reader")
