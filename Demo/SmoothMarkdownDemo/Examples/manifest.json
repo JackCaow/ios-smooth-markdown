@@ -1,0 +1,66 @@
+{
+  "source": "flutter-smooth-markdown/example/lib/main.dart",
+  "sourceSha256": "6337e662f0b1554a00b30cb1dae5563e4cd645ab3258a5d5e8690cf4b215cd80",
+  "examples": [
+    {
+      "id": "basic-formatting",
+      "title": "Basic Formatting",
+      "file": "basic-formatting.md",
+      "sha256": "529faf2ab38a5c2ff8430d296a9b667fa24bd5b531e947aa1e6c15ce4a3d8e1c"
+    },
+    {
+      "id": "headers",
+      "title": "Headers",
+      "file": "headers.md",
+      "sha256": "7e40d998d03afe16cd2ac04a105a33ba55f9c865e53cb9eb660f2c79c4d689d2"
+    },
+    {
+      "id": "lists",
+      "title": "Lists",
+      "file": "lists.md",
+      "sha256": "e31bf2758cc616c59d8031af7d09c8f750dae46183ea8cf18e01cebf30ac71dc"
+    },
+    {
+      "id": "code-blocks",
+      "title": "Code Blocks",
+      "file": "code-blocks.md",
+      "sha256": "05f597133d274f40caa123d550c63281b29296f9f733fd086428c7f283c5fa63"
+    },
+    {
+      "id": "quotes-rules",
+      "title": "Quotes & Rules",
+      "file": "quotes-rules.md",
+      "sha256": "24cb05bd356c7eddd5383ac17293d628c0c32ad82379afb524c723393e6521d9"
+    },
+    {
+      "id": "links-images",
+      "title": "Links & Images",
+      "file": "links-images.md",
+      "sha256": "c6c8920ecaa2076bc443be32b6c7908499fba044f0922c773657012baaecb7aa"
+    },
+    {
+      "id": "enhanced-ui",
+      "title": "Enhanced UI",
+      "file": "enhanced-ui.md",
+      "sha256": "a570c26c1b2323a7046c76aade507a7904a4ce5745dfb9b616b76b145be7a8e4"
+    },
+    {
+      "id": "theme-showcase",
+      "title": "Theme Showcase",
+      "file": "theme-showcase.md",
+      "sha256": "3d116df3ece18efee91d3f3dd5e516f4eb3ceafcf1e127e7c69fd612b9b9ddd5"
+    },
+    {
+      "id": "details-summary",
+      "title": "Details & Summary",
+      "file": "details-summary.md",
+      "sha256": "996d77dc186256cc406172211a8c3caf1ea8e6f53c775f64236cd89e8da710fd"
+    },
+    {
+      "id": "complex-example",
+      "title": "Complex Example",
+      "file": "complex-example.md",
+      "sha256": "3c650d6cbfa9022e31d0a5bcc40f185d0008f4ef89b0230a3c632e2822339514"
+    }
+  ]
+}
