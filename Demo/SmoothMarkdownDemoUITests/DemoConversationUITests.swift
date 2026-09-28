@@ -18,12 +18,26 @@ final class DemoConversationUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Flutter Dev Team"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["conversation-copy-all"].exists)
         app.buttons["conversation-copy-all"].tap()
+        XCTAssertTrue(app.staticTexts["conversation-copy-feedback"].waitForExistence(timeout: 5))
 
         let bubble = app.descendants(matching: .any).matching(identifier: "conversation-bubble-0").firstMatch
         XCTAssertTrue(bubble.exists)
-        bubble.press(forDuration: 1)
-        XCTAssertTrue(app.buttons["选择文字"].waitForExistence(timeout: 5))
-        app.buttons["选择文字"].tap()
-        XCTAssertTrue(app.staticTexts["conversation-selectable-text"].waitForExistence(timeout: 5))
+        let actions = app.buttons["conversation-actions-0"]
+        XCTAssertTrue(actions.exists)
+        actions.tap()
+        app.buttons["复制"].tap()
+        XCTAssertTrue(app.staticTexts["conversation-copy-feedback"].waitForExistence(timeout: 5))
+
+        let renderedText = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "SmoothMarkdown 缓存策略更新了吗")
+        ).firstMatch
+        XCTAssertTrue(renderedText.exists)
+        renderedText.press(forDuration: 1)
+        let nativeCopy = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label == %@ OR label == %@", "Copy", "复制")
+        ).firstMatch
+        XCTAssertTrue(nativeCopy.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Flutter Dev Team"].exists)
+        XCTAssertFalse(app.navigationBars["选择文字"].exists)
     }
 }

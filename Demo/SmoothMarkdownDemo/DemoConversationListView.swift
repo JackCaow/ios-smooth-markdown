@@ -146,15 +146,7 @@ private struct DemoConversationDetailView: View {
     let conversation: DemoConversation
     let isDark: Bool
     let referenceTime: Date
-    @State private var selectedMessage: SelectedMessage?
-    @State private var actionMessage: String?
-    @State private var showMessageActions = false
     @State private var copied = false
-
-    private struct SelectedMessage: Identifiable {
-        let id = UUID()
-        let content: String
-    }
 
     var body: some View {
         ScrollView {
@@ -177,30 +169,6 @@ private struct DemoConversationDetailView: View {
                 .accessibilityLabel("复制全部文本")
                 .accessibilityIdentifier("conversation-copy-all")
             }
-        }
-        .sheet(item: $selectedMessage) { message in
-            NavigationStack {
-                ScrollView {
-                    Text(message.content)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .accessibilityIdentifier("conversation-selectable-text")
-                }
-                .navigationTitle("选择文字")
-                .toolbar { ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { selectedMessage = nil }
-                } }
-            }
-        }
-        .confirmationDialog("消息操作", isPresented: $showMessageActions, titleVisibility: .hidden) {
-            Button("复制") {
-                if let actionMessage { copy(actionMessage) }
-            }
-            Button("选择文字") {
-                if let actionMessage { selectedMessage = SelectedMessage(content: actionMessage) }
-            }
-            Button("取消", role: .cancel) {}
         }
         .overlay(alignment: .bottom) {
             if copied {
@@ -225,9 +193,22 @@ private struct DemoConversationDetailView: View {
                                    styleSheet: messageStyle(isMe: message.isMe),
                                    scrollable: false)
                     .accessibilityIdentifier("conversation-message-\(index)")
-                Text(DemoConversationTime.clock(message.secondsAgo, referenceTime: referenceTime))
-                    .font(.system(size: 11))
-                    .foregroundStyle(message.isMe ? Color.white.opacity(0.7) : Color.secondary)
+                HStack(spacing: 8) {
+                    Text(DemoConversationTime.clock(message.secondsAgo, referenceTime: referenceTime))
+                        .font(.system(size: 11))
+                        .foregroundStyle(message.isMe ? Color.white.opacity(0.7) : Color.secondary)
+                    Spacer(minLength: 0)
+                    Menu {
+                        Button("复制", systemImage: "doc.on.doc") { copy(message.content) }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(message.isMe ? Color.white.opacity(0.7) : Color.secondary)
+                            .frame(minWidth: 30, minHeight: 24)
+                    }
+                    .accessibilityLabel("消息操作")
+                    .accessibilityIdentifier("conversation-actions-\(index)")
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -235,11 +216,6 @@ private struct DemoConversationDetailView: View {
             .background(message.isMe ? Color(red: 0, green: 0.48, blue: 1) :
                         (isDark ? Color(uiColor: .secondarySystemBackground) : .white),
                         in: RoundedRectangle(cornerRadius: 16))
-            .contentShape(RoundedRectangle(cornerRadius: 16))
-            .highPriorityGesture(LongPressGesture(minimumDuration: 0.35).onEnded { _ in
-                actionMessage = message.content
-                showMessageActions = true
-            })
             .accessibilityIdentifier("conversation-bubble-\(index)")
             if !message.isMe { Spacer(minLength: 28) }
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
