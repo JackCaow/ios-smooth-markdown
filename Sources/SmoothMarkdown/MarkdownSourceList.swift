@@ -160,6 +160,13 @@ public struct MarkdownSourceList: Equatable {
         return shiftingSubtree(at: index, by: parentWidth - currentWidth)
     }
 
+    /// Distinguishes a nested item from a root item whose source starts with spaces.
+    func isNestedItem(at index: Int) -> Bool {
+        guard items.indices.contains(index) else { return false }
+        let currentWidth = Self.indentationWidth(items[index].indent)
+        return (0..<index).reversed().contains { Self.indentationWidth(items[$0].indent) < currentWidth }
+    }
+
     private func shiftingSubtree(at index: Int, by columns: Int) -> Self? {
         guard columns != 0 else { return nil }
         let baseWidth = Self.indentationWidth(items[index].indent)

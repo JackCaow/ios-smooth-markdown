@@ -644,19 +644,20 @@ private struct FormattedListView: View {
                         } else {
                             Text(item.marker).font(.system(.body, design: .monospaced))
                         }
-                        TextField("List item", text: Binding(get: {
+                        FormattedListItemField(text: Binding(get: {
                             guard let block = controller.semanticDocument.blockById(blockID),
                                   case let .list(current) = block.kind,
                                   current.items.indices.contains(index) else { return item.content }
                             return current.items[index].content
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
-                        }))
+                        }), onSubmit: {
+                            controller.submitSemanticListItem(id: blockID, at: index)
+                        }, onIndent: { outdent in
+                            _ = changeIndent(at: index, outdent: outdent)
+                        })
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
-                        .submitLabel(.return)
-                        .onSubmit {
-                            controller.updateSemanticList(id: blockID) { $0.insertingEmptyItem(after: index) }
-                        }
+                        .frame(maxWidth: .infinity)
                         Button { _ = changeIndent(at: index, outdent: true) } label: {
                             Image(systemName: "decrease.indent")
                         }
@@ -695,6 +696,68 @@ private struct FormattedListView: View {
     private func changeIndent(at index: Int, outdent: Bool) -> Bool {
         controller.updateSemanticList(id: blockID) { list in
             outdent ? list.outdentingItem(at: index) : list.indentingItem(at: index)
+        }
+    }
+
+}
+
+/// UITextField handles Tab before SwiftUI's focus traversal so the active list item stays focused.
+@available(iOS 17.0, *)
+final class FormattedListKeyboardTextField: UITextField {
+    var onIndent: ((Bool) -> Void)?
+
+    override var keyCommands: [UIKeyCommand]? {
+        let indent = UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(indentItem))
+        let outdent = UIKeyCommand(input: "\t", modifierFlags: [.shift], action: #selector(outdentItem))
+        indent.wantsPriorityOverSystemBehavior = true
+        outdent.wantsPriorityOverSystemBehavior = true
+        return [indent, outdent] + (super.keyCommands ?? [])
+    }
+
+    @objc private func indentItem() { onIndent?(false) }
+    @objc private func outdentItem() { onIndent?(true) }
+}
+
+@available(iOS 17.0, *)
+private struct FormattedListItemField: UIViewRepresentable {
+    @Binding var text: String
+    let onSubmit: () -> Void
+    let onIndent: (Bool) -> Void
+
+    func makeUIView(context: Context) -> FormattedListKeyboardTextField {
+        let field = FormattedListKeyboardTextField()
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        field.font = .preferredFont(forTextStyle: .body)
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.returnKeyType = .default
+        field.placeholder = "List item"
+        field.text = text
+        field.onIndent = onIndent
+        return field
+    }
+
+    func updateUIView(_ field: FormattedListKeyboardTextField, context: Context) {
+        context.coordinator.parent = self
+        field.onIndent = onIndent
+        if field.text != text { field.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: FormattedListItemField
+
+        init(parent: FormattedListItemField) { self.parent = parent }
+
+        @objc func textChanged(_ field: UITextField) {
+            parent.text = field.text ?? ""
+        }
+
+        func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            parent.onSubmit()
+            return false
         }
     }
 }

@@ -1,5 +1,8 @@
 import XCTest
 @testable import SmoothMarkdown
+#if canImport(UIKit)
+import UIKit
+#endif
 
 final class SourceListEditorTests: XCTestCase {
     func testMixedListRoundTripsMarkersIndentAndLineEndings() {
@@ -132,4 +135,53 @@ final class SourceListEditorTests: XCTestCase {
         let bullet = MarkdownSourceList.parse("* Last")!
         XCTAssertEqual(bullet.insertingEmptyItem(after: 0)?.toMarkdown(), "* Last\n* ")
     }
+
+    @MainActor
+    func testReturnOutdentsEmptyNestedItemAndKeepsUndoHistory() {
+        let source = "# Title\r\n\r\n- Parent\r\n  - \r\n- After\r\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-1", at: 1))
+        XCTAssertEqual(controller.text, "# Title\r\n\r\n- Parent\r\n- \r\n- After\r\n")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, "# Title\r\n\r\n- Parent\r\n- \r\n- After\r\n")
+    }
+
+    @MainActor
+    func testIndentedRootItemIsNotTreatedAsNestedOnReturn() {
+        let controller = MarkdownEditorController(text: "  - \n")
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-0", at: 0))
+        XCTAssertEqual(controller.text, "  - \n  - \n")
+    }
+
+    #if canImport(UIKit)
+    @MainActor
+    func testHardwareTabCommandsRouteIndentAndOutdentThroughSourceHistory() {
+        let source = "- Parent\n- Child\n"
+        let controller = MarkdownEditorController(text: source)
+        let field = FormattedListKeyboardTextField()
+        field.onIndent = { outdent in
+            controller.updateSemanticList(id: "block-0") { list in
+                outdent ? list.outdentingItem(at: 1) : list.indentingItem(at: 1)
+            }
+        }
+
+        let commands = field.keyCommands ?? []
+        guard let tab = commands.first(where: { $0.input == "\t" && $0.modifierFlags.isEmpty }),
+              let shiftTab = commands.first(where: { $0.input == "\t" && $0.modifierFlags == .shift }) else {
+            return XCTFail("List field must register Tab and Shift+Tab")
+        }
+        XCTAssertTrue(tab.wantsPriorityOverSystemBehavior)
+        XCTAssertTrue(shiftTab.wantsPriorityOverSystemBehavior)
+        _ = field.perform(tab.action)
+        XCTAssertEqual(controller.text, "- Parent\n  - Child\n")
+        _ = field.perform(shiftTab.action)
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "- Parent\n  - Child\n")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+    }
+    #endif
 }

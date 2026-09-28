@@ -90,6 +90,19 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Return outdents an empty nested item; other items continue as siblings.
+    @discardableResult
+    func submitSemanticListItem(id: String, at index: Int) -> Bool {
+        updateSemanticList(id: id) { list in
+            guard list.items.indices.contains(index) else { return nil }
+            if list.items[index].content.isEmpty, list.isNestedItem(at: index),
+               let outdented = list.outdentingItem(at: index) {
+                return outdented
+            }
+            return list.insertingEmptyItem(after: index)
+        }
+    }
+
     /// Keeps a Source-mode selection anchored when a Blocks edit changes text before it.
     /// Comparing Unicode scalars keeps the mapped endpoints outside UTF-16 surrogate pairs.
     private func replaceSemanticMarkdown(_ updated: String) -> Bool {
