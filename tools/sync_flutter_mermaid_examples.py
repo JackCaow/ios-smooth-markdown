@@ -44,7 +44,7 @@ def main() -> None:
                         "sha256": hashlib.sha256(content).hexdigest()})
     manifest = {"source": "flutter-smooth-markdown/example/lib/mermaid_demo.dart",
                 "sourceSha256": hashlib.sha256(data).hexdigest(), "examples": entries}
-    files[output / "manifest.json"] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    files[output / "gallery.json"] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     if args.check:
         stale = [str(path) for path, expected in files.items() if not path.exists() or path.read_bytes() != expected]
         if stale:
