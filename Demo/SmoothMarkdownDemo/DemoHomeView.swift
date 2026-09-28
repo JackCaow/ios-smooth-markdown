@@ -86,7 +86,7 @@ struct DemoHomeView: View {
             }
             .sheet(item: $editorSession) { session in
                 NavigationStack {
-                    SmoothMarkdownEditor(controller: session.controller)
+                    DemoEditorView(controller: session.controller)
                         .navigationTitle(DemoLocalizations.text("editor", in: language))
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
