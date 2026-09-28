@@ -6,7 +6,11 @@ public struct MermaidPlugin: BlockParserPlugin {
     public let id = "mermaid"
     public let name = "Mermaid Diagram Plugin"
     public let priority = 10
-    public init() {}
+    public let onNodeTap: ((String) -> Void)?
+
+    public init(onNodeTap: ((String) -> Void)? = nil) {
+        self.onNodeTap = onNodeTap
+    }
 
     public func canParse(_ line: String, lines: [String], at index: Int) -> Bool {
         opener(line) != nil
@@ -37,7 +41,7 @@ public struct MermaidPlugin: BlockParserPlugin {
 
     public func render(_ match: BlockPluginMatch) -> AnyView {
         if let diagram = MermaidParser.parse(match.content) {
-            return AnyView(MermaidDiagramView(diagram: diagram).padding(.vertical, 8))
+            return AnyView(MermaidDiagramView(diagram: diagram, onNodeTap: onNodeTap).padding(.vertical, 8))
         }
         return AnyView(VStack(alignment: .leading, spacing: 6) {
             SwiftUI.Text("Unsupported Mermaid diagram").font(.caption).foregroundColor(.secondary)

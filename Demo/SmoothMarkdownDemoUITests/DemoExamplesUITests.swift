@@ -73,6 +73,16 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["mermaid-position"].label, "2/40")
     }
 
+    func testMermaidGalleryReportsTappedNodeID() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("feature-mermaid", in: app)
+        let node = app.buttons["mermaid-node-A"]
+        XCTAssertTrue(node.waitForExistence(timeout: 5))
+        node.tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+    }
+
     private func choose(_ identifier: String, in app: XCUIApplication) {
         app.buttons["open-examples"].tap()
         let entry = app.buttons[identifier]

@@ -3,13 +3,18 @@ import SwiftUI
 /// Native Canvas rendering for the currently supported Mermaid diagrams.
 public struct MermaidDiagramView: View {
     public let diagram: MermaidDiagram
+    public let onNodeTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
 
-    public init(diagram: MermaidDiagram) { self.diagram = diagram }
+    public init(diagram: MermaidDiagram, onNodeTap: ((String) -> Void)? = nil) {
+        self.diagram = diagram
+        self.onNodeTap = onNodeTap
+    }
 
     public var body: some View {
         let layout = MermaidLayout.compute(diagram)
         ScrollView(.horizontal) {
+            ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 let ink: Color = colorScheme == .dark ? .white : Color(red: 0.15, green: 0.18, blue: 0.24)
                 let fill: Color = colorScheme == .dark ? Color(red: 0.18, green: 0.22, blue: 0.31) : Color(red: 0.92, green: 0.95, blue: 1)
@@ -85,13 +90,28 @@ public struct MermaidDiagramView: View {
                 }
             }
             .frame(width: max(layout.size.width, 180), height: max(layout.size.height, 100))
+                if let onNodeTap {
+                    ForEach(diagram.nodes) { node in
+                        if let frame = layout.nodes[node.id] {
+                            Button { onNodeTap(node.id) } label: {
+                                Color.clear.frame(width: frame.width, height: frame.height)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .position(x: frame.midX, y: frame.midY)
+                            .accessibilityLabel("Mermaid node \(node.label)")
+                            .accessibilityIdentifier("mermaid-node-\(node.id)")
+                        }
+                    }
+                }
+            }
+            .frame(width: max(layout.size.width, 180), height: max(layout.size.height, 100))
         }
         .background(colorScheme == .dark ? Color(red: 0.10, green: 0.12, blue: 0.17) : .white,
                     in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(diagram.voiceOverSummary)
-        .accessibilityIdentifier("mermaid-diagram")
+        .modifier(MermaidDiagramAccessibility(interactive: onNodeTap != nil,
+                                              summary: diagram.voiceOverSummary))
     }
 
     private func drawPie(in context: GraphicsContext, diagram: MermaidDiagram, size: CGSize, ink: Color) {
@@ -512,6 +532,21 @@ public struct MermaidDiagramView: View {
             return path
         case .cylinder:
             return Path(roundedRect: frame, cornerRadius: 10)
+        }
+    }
+}
+
+private struct MermaidDiagramAccessibility: ViewModifier {
+    let interactive: Bool
+    let summary: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if interactive {
+            content.accessibilityElement(children: .contain).accessibilityLabel(summary)
+        } else {
+            content.accessibilityElement(children: .ignore).accessibilityLabel(summary)
+                .accessibilityIdentifier("mermaid-diagram")
         }
     }
 }

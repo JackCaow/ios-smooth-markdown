@@ -69,6 +69,9 @@ struct MermaidGalleryView: View {
     @State private var selectedIndex = 0
     @State private var isDark = false
     @State private var showSource = false
+    @State private var nodeFeedback: String?
+    @State private var lastTappedNodeID: String?
+    @State private var feedbackTask: Task<Void, Never>?
     private let catalog = MermaidGalleryCatalog.load()
 
     private let categoryNames = [
@@ -111,11 +114,12 @@ struct MermaidGalleryView: View {
                     Text("\(selectedIndex + 1)/\(catalog.examples.count)")
                         .font(.subheadline.monospacedDigit())
                         .accessibilityIdentifier("mermaid-position")
+                        .accessibilityValue(lastTappedNodeID.map { "Last tapped node: \($0)" } ?? "")
                 }
                 Text(example.title).font(.title3.bold()).accessibilityIdentifier("mermaid-title")
                 Text(example.description).foregroundStyle(.secondary)
                 if let diagram = MermaidParser.parse(example.code) {
-                    MermaidDiagramView(diagram: diagram)
+                    MermaidDiagramView(diagram: diagram, onNodeTap: showNodeFeedback)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     ContentUnavailableView("Diagram not supported yet", systemImage: "curlybraces",
@@ -147,6 +151,24 @@ struct MermaidGalleryView: View {
             }
             .padding()
         }
+        .overlay(alignment: .bottom) {
+            if let nodeFeedback {
+                Text(nodeFeedback)
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.black.opacity(0.85), in: Capsule())
+                    .padding(.bottom, 12)
+                    .accessibilityIdentifier("mermaid-node-feedback")
+            }
+        }
+        .onDisappear { feedbackTask?.cancel() }
+        .onChange(of: selectedIndex) { _, _ in
+            feedbackTask?.cancel()
+            nodeFeedback = nil
+            lastTappedNodeID = nil
+        }
         .sheet(isPresented: $showSource) {
             NavigationStack {
                 ScrollView {
@@ -161,6 +183,16 @@ struct MermaidGalleryView: View {
                     ToolbarItem(placement: .topBarTrailing) { Button("Done") { showSource = false } }
                 }
             }
+        }
+    }
+
+    private func showNodeFeedback(_ id: String) {
+        feedbackTask?.cancel()
+        lastTappedNodeID = id
+        nodeFeedback = "点击了节点: \(id)"
+        feedbackTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            if !Task.isCancelled { nodeFeedback = nil }
         }
     }
 
