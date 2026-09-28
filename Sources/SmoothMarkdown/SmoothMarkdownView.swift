@@ -48,7 +48,7 @@ public struct SmoothMarkdownView: View {
     @ViewBuilder
     private func blockContent(_ node: Markup, alignment: TextAlignment? = nil) -> some View {
         if let heading = node as? Heading {
-            inline(heading)
+            inlineView(heading)
                 .font(.system(size: CGFloat(32 - (heading.level - 1) * 3), weight: .bold))
                 .multilineTextAlignment(alignment ?? .leading)
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
@@ -64,7 +64,7 @@ public struct SmoothMarkdownView: View {
             } else if enableHTML, let html = sole as? InlineHTML, let image = SafeHTML.imageTag(html.rawHTML) {
                 imageView(image)
             } else {
-                inline(paragraph).font(.body).multilineTextAlignment(alignment ?? .leading)
+                inlineView(paragraph).font(.body).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
             }
         } else if let code = node as? CodeBlock {
@@ -175,7 +175,7 @@ public struct SmoothMarkdownView: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, cells in
                     HStack(spacing: 0) {
                         ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                            inline(cell)
+                            inlineView(cell)
                                 .fontWeight(rowIndex == 0 ? .bold : .regular)
                                 .frame(width: 150, alignment: .leading)
                                 .padding(8)
@@ -241,6 +241,57 @@ public struct SmoothMarkdownView: View {
     private func inline(_ node: Markup) -> SwiftUI.Text {
         var tags: [SafeHTML.Tag] = []
         return inlineChildren(node, style: InlineStyle(), tags: &tags)
+    }
+
+    private enum FlowPiece {
+        case text(SwiftUI.Text)
+        case image(SafeHTML.ImageSpec)
+        case lineBreak
+    }
+
+    private func inlineView(_ node: Markup) -> AnyView {
+        let runs = InlineContent.runs(in: node, enableHTML: enableHTML)
+        guard runs.contains(where: { if case .image = $0 { return true }; return false }) else {
+            return AnyView(inline(node))
+        }
+        var pieces: [FlowPiece] = []
+        for run in runs {
+            switch run {
+            case let .image(image):
+                pieces.append(.image(image))
+            case let .text(value, sourceStyle, tags, code):
+                let style = InlineStyle(bold: sourceStyle.bold, italic: sourceStyle.italic,
+                                        strike: sourceStyle.strike, link: sourceStyle.link)
+                var word = ""
+                for character in value {
+                    if character == "\n" {
+                        if !word.isEmpty { pieces.append(.text(segment(word, style: style, tags: tags, code: code))); word = "" }
+                        pieces.append(.lineBreak)
+                    } else {
+                        word.append(character)
+                        if character.isWhitespace {
+                            pieces.append(.text(segment(word, style: style, tags: tags, code: code)))
+                            word = ""
+                        }
+                    }
+                }
+                if !word.isEmpty { pieces.append(.text(segment(word, style: style, tags: tags, code: code))) }
+            }
+        }
+        return AnyView(InlineFlowLayout {
+            ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
+                switch piece {
+                case let .text(text): text.fixedSize()
+                case let .image(image):
+                    imageView(image)
+                        .frame(width: image.width.map { CGFloat($0) } ?? 24,
+                               height: image.height.map { CGFloat($0) } ?? 24)
+                case .lineBreak:
+                    Color.clear.frame(width: 0, height: 0)
+                        .layoutValue(key: InlineBreakKey.self, value: true)
+                }
+            }
+        })
     }
 
     private func inlineChildren(_ node: Markup, style: InlineStyle, tags: inout [SafeHTML.Tag]) -> SwiftUI.Text {

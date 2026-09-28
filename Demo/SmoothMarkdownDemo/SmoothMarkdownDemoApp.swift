@@ -10,6 +10,10 @@ A **native** renderer with *inline formatting* and [links](https://github.com/Ja
 
 HTML: <b>bold</b> and <span style="color:red">red</span>.
 
+Mixed Markdown: before ![inline GitHub logo](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png) after the image.
+
+Mixed HTML: before <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="inline HTML logo" width="32" height="32"> after the image.
+
 <div align="center">Centered **Markdown**</div>
 
 <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" alt="HTML GitHub logo" width="64" height="64">
