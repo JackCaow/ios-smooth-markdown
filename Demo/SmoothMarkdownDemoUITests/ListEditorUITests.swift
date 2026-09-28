@@ -1,6 +1,30 @@
 import XCTest
 
 final class ListEditorUITests: XCTestCase {
+    func testNestedListItemAndContinuationEditUndoRedoInBlocks() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--nested-list-editor-fixture"]
+        app.launch()
+
+        let child = app.textFields["list-block-0-item-1"]
+        let continuation = app.textFields["list-block-0-item-1-continuation-0"]
+        XCTAssertTrue(child.waitForExistence(timeout: 10))
+        XCTAssertTrue(continuation.exists)
+        child.doubleTap()
+        child.typeText("Changed")
+        continuation.doubleTap()
+        continuation.typeText("followup")
+
+        app.segmentedControls.buttons["Source"].tap()
+        let source = app.textViews["markdown-source"]
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertEqual(source.value as? String, "- Parent\n  - Changed\n    followup\n- Sibling")
+        app.buttons["Undo"].tap()
+        XCTAssertEqual(source.value as? String, "- Parent\n  - Changed\n    followu\n- Sibling")
+        app.buttons["Redo"].tap()
+        XCTAssertEqual(source.value as? String, "- Parent\n  - Changed\n    followup\n- Sibling")
+    }
+
     func testTaskToggleSourceUndoAndOrderedTextEdit() {
         let app = XCUIApplication()
         app.launchArguments = ["--list-editor-fixture"]

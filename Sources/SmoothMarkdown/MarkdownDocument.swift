@@ -30,7 +30,10 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
         case let .paragraph(markdown), let .heading(_, markdown): markdown
         case let .fencedCode(_, _, code): code
         case let .table(table): table.toMarkdown()
-        case let .list(list): list.items.map(\.content).joined(separator: "\n")
+        case let .list(list):
+            list.items.map { item in
+                ([item.content] + item.continuations.map(\.content)).joined(separator: "\n")
+            }.joined(separator: "\n")
         case .horizontalRule: ""
         case .raw: source
         }
@@ -218,10 +221,13 @@ public struct MarkdownDocument: Equatable {
         return result
     }
 
-    /// Applies a one-line list item edit while preserving every marker and untouched source line.
+    /// Applies a list edit while preserving every marker, continuation prefix, and untouched source line.
     public func updatingList(_ id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> MarkdownDocument? {
         guard let block = blockById(id), case let .list(list) = block.kind,
               let updated = transform(list), updated != list else { return nil }
+        let parsed = MarkdownDocumentCodec().parse(updated.toMarkdown())
+        guard parsed.blocks.count == 1, case let .list(reparsed) = parsed.blocks[0].kind,
+              reparsed == updated else { return nil }
         let replacement = MarkdownDocumentBlock(id: id, kind: .list(updated), source: updated.toMarkdown(),
                                                 leadingTrivia: block.leadingTrivia)
         return replacingBlock(replacement)

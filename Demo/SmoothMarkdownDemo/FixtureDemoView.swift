@@ -4,10 +4,12 @@ import SwiftUI
 struct FixtureDemoView: View {
     @StateObject private var controller = MarkdownEditorController(
         text: ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ? inlineEditorFixture :
+            (ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ? nestedListEditorFixture :
             (ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ? listEditorFixture :
-                (ProcessInfo.processInfo.arguments.contains("--host-io-fixture") ? hostIOFixture : demoMarkdown)))
+                (ProcessInfo.processInfo.arguments.contains("--host-io-fixture") ? hostIOFixture : demoMarkdown))))
     @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
@@ -86,7 +88,8 @@ struct FixtureDemoView: View {
         }
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
-                ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") {
+                ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") {
                 controller.mode = .formatted
             }
         }

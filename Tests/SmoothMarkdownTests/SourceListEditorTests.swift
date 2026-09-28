@@ -32,14 +32,55 @@ final class SourceListEditorTests: XCTestCase {
     }
 
     @MainActor
-    func testUnsupportedListBodiesAndInvalidEditsStayUnchanged() {
+    func testContinuationAndNestedItemsEditWithoutRewritingOtherSource() {
+        let source = "# Title\r\n\r\n- Parent\r\n  parent continuation\r\n  + Child **bold**\r\n    child continuation\r\n    second line\r\n- Sibling\r\n\r\n<custom>raw</custom>\r\n"
+        let controller = MarkdownEditorController(text: source)
+        guard case let .list(list) = controller.semanticDocument.blocks[1].kind else {
+            return XCTFail("Nested multiline list should be editable in Blocks")
+        }
+        XCTAssertEqual(list.items.map(\.indent), ["", "  ", ""])
+        XCTAssertEqual(list.items[0].continuations.map(\.content), ["parent continuation"])
+        XCTAssertEqual(list.items[1].continuations.map(\.content), ["child continuation", "second line"])
+        XCTAssertEqual(controller.semanticDocument.blocks[1].plainText,
+                       "Parent\nparent continuation\nChild **bold**\nchild continuation\nsecond line\nSibling")
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") {
+            $0.replacingItemContent(at: 1, with: "Child revised")
+        })
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") {
+            $0.replacingContinuationContent(at: 1, lineIndex: 0, with: "child continuation revised")
+        })
+        let changed = source.replacingOccurrences(of: "  + Child **bold**\r\n    child continuation",
+                                                  with: "  + Child revised\r\n    child continuation revised")
+        XCTAssertEqual(controller.text, changed)
+        XCTAssertTrue(controller.undo())
+        XCTAssertTrue(controller.text.contains("  + Child revised\r\n    child continuation\r\n"))
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, changed)
+    }
+
+    @MainActor
+    func testContinuationListAndInvalidEdits() {
         let source = "- First\n  continuation\n\n- Simple\n"
         let controller = MarkdownEditorController(text: source)
-        XCTAssertEqual(controller.semanticDocument.blocks[0].kind, .raw)
-        XCTAssertFalse(controller.updateSemanticList(id: "block-0") { $0.replacingItemContent(at: 0, with: "Wrong") })
+        guard case let .list(list) = controller.semanticDocument.blocks[0].kind else {
+            return XCTFail("Paragraph continuation should be an editable list")
+        }
+        XCTAssertEqual(list.items[0].continuations.map(\.content), ["continuation"])
+        XCTAssertTrue(controller.updateSemanticList(id: "block-0") {
+            $0.replacingContinuationContent(at: 0, lineIndex: 0, with: "continued")
+        })
+        XCTAssertEqual(controller.text, "- First\n  continued\n\n- Simple\n")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
         XCTAssertFalse(controller.updateSemanticList(id: "block-1") { $0.settingTaskChecked(at: 0, to: true) })
         XCTAssertFalse(controller.updateSemanticList(id: "block-1") { $0.replacingItemContent(at: 0, with: "two\nlines") })
+        XCTAssertFalse(controller.updateSemanticList(id: "block-0") {
+            $0.replacingContinuationContent(at: 0, lineIndex: 0, with: "- new item")
+        })
         XCTAssertEqual(controller.text, source)
-        XCTAssertFalse(controller.canUndo)
+        XCTAssertTrue(controller.canRedo)
     }
 }

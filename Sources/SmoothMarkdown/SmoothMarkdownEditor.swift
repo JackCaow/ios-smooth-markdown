@@ -632,26 +632,46 @@ private struct FormattedListView: View {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             ForEach(list.items.indices, id: \.self) { index in
                 let item = list.items[index]
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    if let checked = item.checked {
-                        Button {
-                            controller.updateSemanticList(id: blockID) { $0.settingTaskChecked(at: index, to: !checked) }
-                        } label: {
-                            Image(systemName: checked ? "checkmark.square" : "square")
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        if let checked = item.checked {
+                            Button {
+                                controller.updateSemanticList(id: blockID) { $0.settingTaskChecked(at: index, to: !checked) }
+                            } label: {
+                                Image(systemName: checked ? "checkmark.square" : "square")
+                            }
+                            .accessibilityLabel(checked ? "Mark item \(index + 1) incomplete" : "Mark item \(index + 1) complete")
+                        } else {
+                            Text(item.marker).font(.system(.body, design: .monospaced))
                         }
-                        .accessibilityLabel(checked ? "Mark item \(index + 1) incomplete" : "Mark item \(index + 1) complete")
-                    } else {
-                        Text(item.marker).font(.system(.body, design: .monospaced))
+                        TextField("List item", text: Binding(get: {
+                            guard let block = controller.semanticDocument.blockById(blockID),
+                                  case let .list(current) = block.kind,
+                                  current.items.indices.contains(index) else { return item.content }
+                            return current.items[index].content
+                        }, set: { value in
+                            controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
+                        }))
+                        .accessibilityIdentifier("list-\(blockID)-item-\(index)")
                     }
-                    TextField("List item", text: Binding(get: {
-                        guard let block = controller.semanticDocument.blockById(blockID),
-                              case let .list(current) = block.kind,
-                              current.items.indices.contains(index) else { return item.content }
-                        return current.items[index].content
-                    }, set: { value in
-                        controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
-                    }))
-                    .accessibilityIdentifier("list-\(blockID)-item-\(index)")
+                    ForEach(item.continuations.indices, id: \.self) { lineIndex in
+                        let continuation = item.continuations[lineIndex]
+                        TextField("Continuation", text: Binding(get: {
+                            guard let block = controller.semanticDocument.blockById(blockID),
+                                  case let .list(current) = block.kind,
+                                  current.items.indices.contains(index),
+                                  current.items[index].continuations.indices.contains(lineIndex) else {
+                                return continuation.content
+                            }
+                            return current.items[index].continuations[lineIndex].content
+                        }, set: { value in
+                            controller.updateSemanticList(id: blockID) {
+                                $0.replacingContinuationContent(at: index, lineIndex: lineIndex, with: value)
+                            }
+                        }))
+                        .padding(.leading, CGFloat(continuation.indent.count - item.indent.count) * 8)
+                        .accessibilityIdentifier("list-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                    }
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
             }
