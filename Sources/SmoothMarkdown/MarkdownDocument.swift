@@ -143,12 +143,79 @@ public struct MarkdownDocument: Equatable {
         guard let block = blockById(id), case let .table(table) = block.kind else { return nil }
         let updated = transform(table)
         guard updated != table else { return nil }
+        if let source = Self.sourcePreservingSingleTableCellEdit(block.source, from: table, to: updated) {
+            return replacingBlock(.init(id: id, kind: .table(updated), source: source,
+                                        leadingTrivia: block.leadingTrivia))
+        }
         let ending = block.source.hasSuffix("\r\n") ? "\r\n" : block.source.hasSuffix("\n") ? "\n" : ""
         let newline = block.source.contains("\r\n") ? "\r\n" : "\n"
         let source = updated.toMarkdown().replacingOccurrences(of: "\n", with: newline) + ending
         let replacement = MarkdownDocumentBlock(id: id, kind: .table(updated), source: source,
                                                 leadingTrivia: block.leadingTrivia)
         return replacingBlock(replacement)
+    }
+
+    /// A cell edit should not rewrite untouched spacing, delimiter widths, or line endings.
+    /// Structural changes still use the table serializer above.
+    private static func sourcePreservingSingleTableCellEdit(_ source: String, from old: MarkdownSourceTable,
+                                                            to updated: MarkdownSourceTable) -> String? {
+        guard old.headers.count == updated.headers.count, old.rows.count == updated.rows.count,
+              old.alignments == updated.alignments else { return nil }
+        var change: (line: Int, column: Int, before: String, after: String)?
+        func record(_ line: Int, _ column: Int, _ before: String, _ after: String) -> Bool {
+            guard before != after else { return true }
+            guard change == nil else { return false }
+            change = (line, column, before, after)
+            return true
+        }
+        for column in old.headers.indices {
+            guard record(0, column, old.headers[column], updated.headers[column]) else { return nil }
+        }
+        for row in old.rows.indices {
+            guard old.rows[row].count == updated.rows[row].count else { return nil }
+            for column in old.rows[row].indices {
+                guard record(row + 2, column, old.rows[row][column], updated.rows[row][column]) else { return nil }
+            }
+        }
+        guard let change else { return nil }
+        let lines = source.components(separatedBy: "\n")
+        guard lines.indices.contains(change.line) else { return nil }
+        let rawLine = lines[change.line].hasSuffix("\r") ? String(lines[change.line].dropLast()) : lines[change.line]
+        let lineSource = rawLine as NSString
+        let units = Array(rawLine.utf16)
+        var separatorOffsets: [Int] = []
+        var slashes = 0
+        for (index, unit) in units.enumerated() {
+            if unit == 124, slashes.isMultiple(of: 2) { separatorOffsets.append(index) }
+            slashes = unit == 92 ? slashes + 1 : 0
+        }
+        let boundaries = [-1] + separatorOffsets + [lineSource.length]
+        var cells = zip(boundaries, boundaries.dropFirst()).map { left, right in
+            NSRange(location: left + 1, length: right - left - 1)
+        }
+        let trimmedLine = rawLine.trimmingCharacters(in: .whitespaces)
+        if trimmedLine.hasPrefix("|"), let first = cells.first,
+           lineSource.substring(with: first).trimmingCharacters(in: .whitespaces).isEmpty {
+            cells.removeFirst()
+        }
+        if trimmedLine.hasSuffix("|"), let last = cells.last,
+           lineSource.substring(with: last).trimmingCharacters(in: .whitespaces).isEmpty {
+            cells.removeLast()
+        }
+        guard cells.indices.contains(change.column) else { return nil }
+        let cell = lineSource.substring(with: cells[change.column])
+        guard cell.trimmingCharacters(in: .whitespaces) == change.before else { return nil }
+        let left = cell.prefix { $0 == " " || $0 == "\t" }.utf16.count
+        let right = cell.reversed().prefix { $0 == " " || $0 == "\t" }.count
+        let contentRange = NSRange(location: cells[change.column].location + left,
+                                   length: cells[change.column].length - left - right)
+        let lineOffset = lines[..<change.line].reduce(0) { $0 + ($1 as NSString).length + 1 }
+        let absoluteRange = NSRange(location: lineOffset + contentRange.location, length: contentRange.length)
+        let result = (source as NSString).replacingCharacters(in: absoluteRange, with: change.after)
+        let reparsed = MarkdownDocumentCodec().parse(result)
+        guard reparsed.blocks.count == 1, reparsed.blocks[0].kind == .table(updated),
+              reparsed.toMarkdown() == result else { return nil }
+        return result
     }
 
     /// Applies a one-line list item edit while preserving every marker and untouched source line.

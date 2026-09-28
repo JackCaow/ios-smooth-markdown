@@ -40,9 +40,7 @@ public final class MarkdownEditorController: ObservableObject {
         let document = semanticDocument
         guard let block = document.blockById(id), let replacement = block.replacingContent(content) else { return false }
         let updated = document.replacingBlock(replacement).toMarkdown()
-        guard updated != text else { return false }
-        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
-        return true
+        return replaceSemanticMarkdown(updated)
     }
 
     /// Applies one inline mark to a UTF-16 selection within an editable Blocks row.
@@ -75,24 +73,66 @@ public final class MarkdownEditorController: ObservableObject {
         let document = semanticDocument
         guard document.blockById(id) != nil else { return false }
         let updated = document.removingBlock(id).toMarkdown()
-        guard updated != text else { return false }
-        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
-        return true
+        return replaceSemanticMarkdown(updated)
     }
 
     /// Applies a semantic table operation by block ID through the source undo stack.
     @discardableResult
     public func updateSemanticTable(id: String, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> Bool {
-        guard let updated = semanticDocument.updatingTable(id, transform)?.toMarkdown(), updated != text else { return false }
-        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
-        return true
+        guard let updated = semanticDocument.updatingTable(id, transform)?.toMarkdown() else { return false }
+        return replaceSemanticMarkdown(updated)
     }
 
     /// Edits a supported list item through the same source history as other Blocks edits.
     @discardableResult
     public func updateSemanticList(id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> Bool {
-        guard let updated = semanticDocument.updatingList(id, transform)?.toMarkdown(), updated != text else { return false }
-        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
+        guard let updated = semanticDocument.updatingList(id, transform)?.toMarkdown() else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    /// Keeps a Source-mode selection anchored when a Blocks edit changes text before it.
+    /// Comparing Unicode scalars keeps the mapped endpoints outside UTF-16 surrogate pairs.
+    private func replaceSemanticMarkdown(_ updated: String) -> Bool {
+        guard updated != text else { return false }
+        let before = Array(text.unicodeScalars)
+        let after = Array(updated.unicodeScalars)
+        var prefix = 0
+        var prefixLength = 0
+        while prefix < min(before.count, after.count), before[prefix] == after[prefix] {
+            prefixLength += before[prefix].value > 0xFFFF ? 2 : 1
+            prefix += 1
+        }
+        var suffix = 0
+        var suffixLength = 0
+        while suffix < before.count - prefix, suffix < after.count - prefix,
+              before[before.count - suffix - 1] == after[after.count - suffix - 1] {
+            suffixLength += before[before.count - suffix - 1].value > 0xFFFF ? 2 : 1
+            suffix += 1
+        }
+
+        let oldLength = (text as NSString).length
+        let newLength = (updated as NSString).length
+        let oldSuffixStart = oldLength - suffixLength
+        let newSuffixStart = newLength - suffixLength
+        func mapped(_ offset: Int) -> Int {
+            if prefixLength == oldSuffixStart, offset >= oldSuffixStart {
+                return min(newLength, offset + newLength - oldLength)
+            }
+            if offset <= prefixLength { return offset }
+            if offset >= oldSuffixStart { return offset + newLength - oldLength }
+            return min(newSuffixStart, offset)
+        }
+        func validBoundary(_ offset: Int) -> Int {
+            var position = min(max(0, offset), newLength)
+            while position > 0, Range(NSRange(location: position, length: 0), in: updated) == nil {
+                position -= 1
+            }
+            return position
+        }
+        let start = validBoundary(mapped(selection.location))
+        let end = validBoundary(mapped(NSMaxRange(selection)))
+        let nextSelection = NSRange(location: start, length: max(0, end - start))
+        replaceRange(NSRange(location: 0, length: oldLength), with: updated, selectedRange: nextSelection)
         return true
     }
 

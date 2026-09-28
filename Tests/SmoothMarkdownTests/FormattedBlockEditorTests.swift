@@ -51,4 +51,40 @@ final class FormattedBlockEditorTests: XCTestCase {
         XCTAssertEqual(range.location, ("Emoji 😀\n\n" as NSString).length)
         XCTAssertNil(document.sourceRange(of: "missing"))
     }
+
+    func testComplexSourceBlocksPreviewKeepUntouchedBytesSelectionAndUndo() {
+        let original = "# Editor 😀\r\n\r\n"
+            + "- parent\r\n  - child\r\n- sibling\r\n\r\n"
+            + "> quoted **text** 😀\r\n> second line\r\n\r\n"
+            + "| Name  |   Value |\r\n| :---- | ---: |\r\n| one\\|two | 1 |\r\n\r\nTail"
+        let controller = MarkdownEditorController(text: original)
+        let document = controller.semanticDocument
+        XCTAssertEqual(document.toMarkdown(), original)
+        XCTAssertEqual(document.blocks.count, 5)
+        guard case .list = document.blocks[1].kind, case .raw = document.blocks[2].kind,
+              case .table = document.blocks[3].kind else {
+            return XCTFail("Expected nested list, source-only blockquote, and editable GFM table")
+        }
+
+        let originalSelection = (original as NSString).range(of: "second line")
+        controller.setSelection(originalSelection)
+        controller.mode = .formatted
+        XCTAssertTrue(controller.updateSemanticList(id: "block-1") {
+            $0.replacingItemContent(at: 1, with: "much longer child 😀")
+        })
+        let edited = original.replacingOccurrences(of: "  - child", with: "  - much longer child 😀")
+        XCTAssertEqual(controller.text, edited)
+        controller.mode = .preview
+        XCTAssertEqual(controller.text, edited)
+        controller.mode = .source
+        XCTAssertEqual(controller.selectedText, "second line")
+        XCTAssertEqual(controller.selection, (edited as NSString).range(of: "second line"))
+
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertEqual(controller.selection, originalSelection)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, edited)
+        XCTAssertEqual(controller.selectedText, "second line")
+    }
 }

@@ -89,4 +89,28 @@ final class FormattedTableEditorTests: XCTestCase {
         XCTAssertEqual(document.toMarkdown(), source)
         XCTAssertEqual(document.blocks[1].plainText, "After")
     }
+
+    func testCellEditKeepsUntouchedTableBytesAndSourceSelectionThroughUndo() {
+        let original = "- parent\r\n  - child\r\n\r\n"
+            + "> quote 😀\r\n\r\n"
+            + "| Name  |   Value |\r\n| :---- | ---: |\r\n| one\\|two | 1 |\r\n\r\nTail 😀"
+        let controller = MarkdownEditorController(text: original)
+        let originalSelection = (original as NSString).range(of: "Tail 😀")
+        controller.setSelection(originalSelection)
+        controller.mode = .formatted
+        XCTAssertTrue(controller.updateSemanticTable(id: "block-2") {
+            $0.replacingCell(rowIndex: 0, columnIndex: 0, text: "three|four")
+        })
+        let edited = original.replacingOccurrences(of: "one\\|two", with: "three\\|four")
+        XCTAssertEqual(controller.text, edited, "Only the edited table cell should change")
+        controller.mode = .source
+        XCTAssertEqual(controller.selection, (edited as NSString).range(of: "Tail 😀"))
+        XCTAssertEqual(controller.selectedText, "Tail 😀")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertEqual(controller.selection, originalSelection)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, edited)
+        XCTAssertEqual(controller.selectedText, "Tail 😀")
+    }
 }
