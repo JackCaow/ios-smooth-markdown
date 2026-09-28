@@ -59,7 +59,7 @@ final class AIBlockPluginTests: XCTestCase {
 
     func testBuiltInsAreOptInAndFencesProtectSyntax() {
         let registry = ParserPluginRegistry.builtIns()
-        XCTAssertEqual(registry.blockPlugins.map(\.id), ["tool_call", "thinking", "artifact", "admonition"])
+        XCTAssertEqual(registry.blockPlugins.map(\.id), ["tool_call", "thinking", "artifact", "admonition", "mermaid"])
         let source = "Intro\n<think>\nprivate\n</think>\nOutro"
         XCTAssertEqual(PluginBlockSyntax.sections(source, registry: nil).count, 1)
         let sections = PluginBlockSyntax.sections(source, registry: registry)
