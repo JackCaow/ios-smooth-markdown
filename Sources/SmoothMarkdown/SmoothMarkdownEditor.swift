@@ -88,7 +88,7 @@ private struct FormattedBlocksView: View {
         let document = controller.semanticDocument
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                Text("Edit block text here. Inline Markdown markers remain editable text.")
+                Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(document.blocks) { block in
@@ -105,21 +105,22 @@ private struct FormattedBlocksView: View {
 private struct FormattedBlockRow: View {
     @ObservedObject var controller: MarkdownEditorController
     let block: MarkdownDocumentBlock
+    @State private var inlineSelection = NSRange(location: 0, length: 0)
+    @State private var linkDestination = "https://"
+    @State private var showLinkEditor = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             switch block.kind {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
-                TextField("Heading", text: contentBinding)
-                    .font(.system(size: CGFloat(32 - (level - 1) * 3), weight: .bold))
-                    .accessibilityIdentifier("heading-\(block.id)")
+                inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
+                               identifier: "heading-\(block.id)")
+                inlineActions
             case .paragraph:
                 blockLabel("Paragraph")
-                TextField("Paragraph", text: contentBinding, axis: .vertical)
-                    .lineLimit(2...10)
-                    .font(.body)
-                    .accessibilityIdentifier("paragraph-\(block.id)")
+                inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
+                inlineActions
             case let .fencedCode(_, info, _):
                 blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
                 TextEditor(text: contentBinding)
@@ -152,6 +153,44 @@ private struct FormattedBlockRow: View {
         .padding(12)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityIdentifier("block-\(block.id)")
+        .alert("Link URL", isPresented: $showLinkEditor) {
+            TextField("https://example.com", text: $linkDestination)
+                .textInputAutocapitalization(.never)
+            Button("Apply") { apply(.link(destination: linkDestination)) }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Only http, https, mailto, and tel links are accepted.")
+        }
+    }
+
+    private func inlineTextView(font: UIFont, identifier: String) -> some View {
+        SemanticInlineTextView(text: controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText,
+                               selectedRange: inlineSelection, font: font, identifier: identifier,
+                               onEdit: { value in
+            if value.isEmpty, case .paragraph = block.kind {
+                return controller.removeSemanticBlock(id: block.id)
+            }
+            return controller.replaceSemanticBlockContent(id: block.id, with: value)
+        }, onSelection: { inlineSelection = $0 })
+        .frame(minHeight: 44)
+    }
+
+    private var inlineActions: some View {
+        HStack(spacing: 12) {
+            Button("B") { apply(.bold) }.accessibilityLabel("Bold selection")
+            Button("I") { apply(.italic) }.accessibilityLabel("Italic selection")
+            Button("Link") { showLinkEditor = true }.accessibilityLabel("Link selection")
+            Button("Code") { apply(.code) }.accessibilityLabel("Inline code selection")
+        }
+        .font(.caption.weight(.semibold))
+        .buttonStyle(.bordered)
+        .disabled(inlineSelection.length == 0)
+    }
+
+    private func apply(_ mark: MarkdownInlineMark) {
+        if let next = controller.applySemanticInlineMark(id: block.id, selection: inlineSelection, mark: mark) {
+            inlineSelection = next
+        }
     }
 
     private var contentBinding: Binding<String> {
@@ -272,6 +311,70 @@ private struct FormattedTableCell: View {
                 $0.replacingCell(rowIndex: row, columnIndex: column, text: value, header: isHeader)
             }
         })
+    }
+}
+
+@available(iOS 17.0, *)
+private struct SemanticInlineTextView: UIViewRepresentable {
+    let text: String
+    let selectedRange: NSRange
+    let font: UIFont
+    let identifier: String
+    let onEdit: (String) -> Bool
+    let onSelection: (NSRange) -> Void
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = UITextView()
+        view.delegate = context.coordinator
+        view.isScrollEnabled = false
+        view.backgroundColor = .clear
+        view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
+        view.textContainer.lineFragmentPadding = 0
+        view.font = font
+        view.text = text
+        view.autocorrectionType = .default
+        view.accessibilityIdentifier = identifier
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        context.coordinator.isUpdating = true
+        defer { context.coordinator.isUpdating = false }
+        view.font = font
+        if view.text != text { view.text = text }
+        let limit = (text as NSString).length
+        let location = min(max(0, selectedRange.location), limit)
+        let valid = NSRange(location: location, length: min(max(0, selectedRange.length), limit - location))
+        if view.selectedRange != valid { view.selectedRange = valid }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? 300
+        let measured = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(44, ceil(measured.height)))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject, UITextViewDelegate {
+        var parent: SemanticInlineTextView
+        var isUpdating = false
+        init(parent: SemanticInlineTextView) { self.parent = parent }
+
+        func textViewDidChange(_ textView: UITextView) {
+            guard parent.onEdit(textView.text) else {
+                isUpdating = true
+                textView.text = parent.text
+                isUpdating = false
+                return
+            }
+            parent.onSelection(textView.selectedRange)
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            if !isUpdating { parent.onSelection(textView.selectedRange) }
+        }
     }
 }
 

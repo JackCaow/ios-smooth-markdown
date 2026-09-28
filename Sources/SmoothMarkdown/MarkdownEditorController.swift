@@ -45,6 +45,30 @@ public final class MarkdownEditorController: ObservableObject {
         return true
     }
 
+    /// Applies one inline mark to a UTF-16 selection within an editable Blocks row.
+    /// Returns the selection in the new block body, or nil for an unsupported edit.
+    @discardableResult
+    public func applySemanticInlineMark(id: String, selection: NSRange, mark: MarkdownInlineMark) -> NSRange? {
+        let document = semanticDocument
+        guard let block = document.blockById(id), let sourceRange = document.sourceRange(of: id) else { return nil }
+        switch block.kind {
+        case .paragraph, .heading: break
+        case .fencedCode, .table, .horizontalRule, .raw: return nil
+        }
+        let oldBody = block.plainText
+        guard let edit = MarkdownInlineMarkEditor.apply(mark, to: oldBody, selection: selection),
+              let replacement = block.replacingContent(edit.markdown) else { return nil }
+        let updated = document.replacingBlock(replacement).toMarkdown()
+        guard updated != text else { return nil }
+        let endingLength = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+        let bodyOffset = (block.source as NSString).length - (oldBody as NSString).length - endingLength
+        let selectedInSource = NSRange(location: sourceRange.location + bodyOffset + edit.selection.location,
+                                       length: edit.selection.length)
+        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated,
+                     selectedRange: selectedInSource)
+        return edit.selection
+    }
+
     /// Removes a top-level block, including its separator, through source undo history.
     @discardableResult
     public func removeSemanticBlock(id: String) -> Bool {
