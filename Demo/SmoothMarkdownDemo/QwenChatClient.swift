@@ -40,6 +40,32 @@ struct QwenChatRequest {
     }
 }
 
+/// DeepSeek's OpenAI-compatible chat endpoint. The key is never persisted by the Demo.
+struct DeepSeekChatRequest {
+    static let endpoint = URL(string: "https://api.deepseek.com/chat/completions")!
+
+    let apiKey: String
+    let model: String
+
+    func urlRequest(prompt: String) throws -> URLRequest {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw QwenChatError.missingKey }
+        var request = URLRequest(url: Self.endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": QwenChatRequest.systemPrompt],
+                ["role": "user", "content": prompt],
+            ],
+            "stream": true,
+        ] as [String: Any])
+        return request
+    }
+}
+
 enum QwenChatError: LocalizedError {
     case missingKey
     case unexpectedResponse
@@ -48,7 +74,7 @@ enum QwenChatError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .missingKey: "Qwen API Key 为空"
+        case .missingKey: "API Key 为空"
         case .unexpectedResponse: "API 返回了无效的 HTTP 响应"
         case let .httpStatus(code): "API Error: \(code)"
         case .emptyResponse: "API 未返回可显示的内容"
@@ -121,7 +147,10 @@ struct QwenSSEDecoder {
 struct QwenChatClient {
     func stream(prompt: String, configuration: QwenChatRequest,
                 onDelta: @MainActor (String) -> Void) async throws {
-        let request = try configuration.urlRequest(prompt: prompt)
+        try await stream(request: configuration.urlRequest(prompt: prompt), onDelta: onDelta)
+    }
+
+    func stream(request: URLRequest, onDelta: @MainActor (String) -> Void) async throws {
         let session = URLSession(configuration: .ephemeral)
         defer { session.invalidateAndCancel() }
         let (bytes, response) = try await session.bytes(for: request)
@@ -138,5 +167,12 @@ struct QwenChatClient {
         try Task.checkCancellation()
         for fragment in decoder.finish() { await onDelta(fragment) }
         guard decoder.hasText else { throw QwenChatError.emptyResponse }
+    }
+}
+
+struct DeepSeekChatClient {
+    func stream(prompt: String, configuration: DeepSeekChatRequest,
+                onDelta: @MainActor (String) -> Void) async throws {
+        try await QwenChatClient().stream(request: configuration.urlRequest(prompt: prompt), onDelta: onDelta)
     }
 }

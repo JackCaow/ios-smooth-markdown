@@ -1,6 +1,30 @@
 import XCTest
 
 final class DemoAIChatUITests: XCTestCase {
+    func testDeepSeekSettingsExposeRuntimeKeyAndBothModels() {
+        let app = XCUIApplication()
+        app.launchEnvironment["QWEN_API_KEY"] = ""
+        app.launchEnvironment["DEEPSEEK_API_KEY"] = ""
+        app.launch()
+        app.buttons["open-examples"].tap()
+        let entry = app.buttons["feature-aiChat"]
+        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
+        XCTAssertTrue(entry.waitForExistence(timeout: 5))
+        entry.tap()
+        app.buttons["ai-chat-settings"].tap()
+
+        let provider = app.descendants(matching: .any)["ai-chat-provider"]
+        XCTAssertTrue(provider.waitForExistence(timeout: 5))
+        provider.tap()
+        app.buttons["DeepSeek"].tap()
+        XCTAssertTrue(app.secureTextFields["ai-chat-deepseek-api-key"].waitForExistence(timeout: 5))
+        let model = app.descendants(matching: .any)["ai-chat-deepseek-model"]
+        XCTAssertTrue(model.exists)
+        model.tap()
+        XCTAssertTrue(app.buttons["DeepSeek Flash"].exists)
+        XCTAssertTrue(app.buttons["DeepSeek V4 Pro"].exists)
+    }
+
     func testQwenSettingsExposeRuntimeKeyModelAndMockSwitch() {
         let app = XCUIApplication()
         app.launchEnvironment["QWEN_API_KEY"] = ""

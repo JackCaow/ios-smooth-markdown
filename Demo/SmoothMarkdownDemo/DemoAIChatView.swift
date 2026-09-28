@@ -63,7 +63,19 @@ private struct AIChatSource: Identifiable {
     let markdown: String
 }
 
-/// Counterpart of Flutter's AI Chat demo, with local mock and live Qwen streams.
+private enum AIChatProvider: String, CaseIterable, Identifiable {
+    case qwen = "Qwen"
+    case deepSeek = "DeepSeek"
+
+    var id: String { rawValue }
+}
+
+private enum LiveChatConfiguration {
+    case qwen(QwenChatRequest)
+    case deepSeek(DeepSeekChatRequest)
+}
+
+/// Counterpart of Flutter's AI Chat demo, with mock and optional live streams.
 struct DemoAIChatView: View {
     let parentIsDark: Bool
 
@@ -77,7 +89,10 @@ struct DemoAIChatView: View {
     @State private var showSettings = false
     @State private var source: AIChatSource?
     @State private var apiKey = ProcessInfo.processInfo.environment["QWEN_API_KEY"] ?? ""
+    @State private var deepSeekAPIKey = ProcessInfo.processInfo.environment["DEEPSEEK_API_KEY"] ?? ""
+    @State private var selectedProvider: AIChatProvider = .qwen
     @State private var selectedModel = "qwen3-235b-a22b"
+    @State private var selectedDeepSeekModel = "deepseek-flash"
     @State private var enableThinking = true
     @State private var useRealAPI = true
     @FocusState private var inputFocused: Bool
@@ -90,12 +105,20 @@ struct DemoAIChatView: View {
         ("qwen-plus", "Qwen Plus"),
         ("qwen-turbo", "Qwen Turbo"),
     ]
+    private let deepSeekModels: [(id: String, name: String)] = [
+        ("deepseek-flash", "DeepSeek Flash"),
+        ("deepseek-v4-pro", "DeepSeek V4 Pro"),
+    ]
 
     private var isDark: Bool { darkOverride ?? parentIsDark }
-    private var liveAPIAvailable: Bool { useRealAPI && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var liveAPIAvailable: Bool {
+        let key = selectedProvider == .qwen ? apiKey : deepSeekAPIKey
+        return useRealAPI && !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
     private var modeStatus: String {
         if isStreaming { return "正在输入..." }
         guard liveAPIAvailable else { return "模拟模式" }
+        if selectedProvider == .deepSeek { return selectedDeepSeekModel }
         return enableThinking && selectedModel.hasPrefix("qwen3") ? "\(selectedModel) (思考)" : selectedModel
     }
     private var backgroundColor: Color {
@@ -311,23 +334,45 @@ struct DemoAIChatView: View {
     private var settingsSheet: some View {
         NavigationStack {
             Form {
-                Section("Qwen API") {
-                    SecureField("Qwen API Key", text: $apiKey)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("ai-chat-api-key")
-                    Picker("选择模型", selection: $selectedModel) {
-                        ForEach(models.indices, id: \.self) { index in
-                            Text(models[index].name).tag(models[index].id)
+                Section(selectedProvider == .qwen ? "Qwen API" : "DeepSeek API") {
+                    Picker("服务商", selection: $selectedProvider) {
+                        ForEach(AIChatProvider.allCases) { provider in
+                            Text(provider.rawValue).tag(provider)
                         }
                     }
-                    .accessibilityIdentifier("ai-chat-model")
-                    Toggle("启用思考模式", isOn: $enableThinking)
-                        .disabled(!selectedModel.hasPrefix("qwen3"))
-                        .accessibilityIdentifier("ai-chat-thinking")
-                    Text(selectedModel.hasPrefix("qwen3") ? "显示 AI 的推理过程" : "仅 Qwen3 系列模型支持")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("ai-chat-provider")
+                    if selectedProvider == .qwen {
+                        SecureField("Qwen API Key", text: $apiKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("ai-chat-api-key")
+                        Picker("选择模型", selection: $selectedModel) {
+                            ForEach(models.indices, id: \.self) { index in
+                                Text(models[index].name).tag(models[index].id)
+                            }
+                        }
+                        .accessibilityIdentifier("ai-chat-model")
+                        Toggle("启用思考模式", isOn: $enableThinking)
+                            .disabled(!selectedModel.hasPrefix("qwen3"))
+                            .accessibilityIdentifier("ai-chat-thinking")
+                        Text(selectedModel.hasPrefix("qwen3") ? "显示 AI 的推理过程" : "仅 Qwen3 系列模型支持")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        SecureField("DeepSeek API Key", text: $deepSeekAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("ai-chat-deepseek-api-key")
+                        Picker("选择模型", selection: $selectedDeepSeekModel) {
+                            ForEach(deepSeekModels.indices, id: \.self) { index in
+                                Text(deepSeekModels[index].name).tag(deepSeekModels[index].id)
+                            }
+                        }
+                        .accessibilityIdentifier("ai-chat-deepseek-model")
+                        Text("推理内容可随流式响应展示。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     Toggle("使用真实 API", isOn: $useRealAPI)
                         .accessibilityIdentifier("ai-chat-real-api")
                     Text("关闭或未填写 API Key 时使用模拟响应。密钥只保留在本次页面会话中。")
@@ -370,9 +415,13 @@ struct DemoAIChatView: View {
         messages.append(.init(content: "", isUser: false, isStreaming: true))
         let messageID = messages[messages.count - 1].id
         let currentRunID = replyStreams.start(messageID: messageID)
-        let liveConfiguration = liveAPIAvailable ? QwenChatRequest(apiKey: apiKey,
-                                                                    model: selectedModel,
-                                                                    enableThinking: enableThinking) : nil
+        let liveConfiguration: LiveChatConfiguration? = liveAPIAvailable
+            ? (selectedProvider == .qwen
+                ? .qwen(QwenChatRequest(apiKey: apiKey, model: selectedModel,
+                                        enableThinking: enableThinking))
+                : .deepSeek(DeepSeekChatRequest(apiKey: deepSeekAPIKey,
+                                                model: selectedDeepSeekModel)))
+            : nil
         input = ""
         inputFocused = false
         isStreaming = true
@@ -380,8 +429,15 @@ struct DemoAIChatView: View {
         streamTask = Task { @MainActor in
             if let liveConfiguration {
                 do {
-                    try await QwenChatClient().stream(prompt: text, configuration: liveConfiguration) { fragment in
-                        _ = replyStreams.append(fragment, to: messageID, in: currentRunID)
+                    switch liveConfiguration {
+                    case let .qwen(configuration):
+                        try await QwenChatClient().stream(prompt: text, configuration: configuration) { fragment in
+                            _ = replyStreams.append(fragment, to: messageID, in: currentRunID)
+                        }
+                    case let .deepSeek(configuration):
+                        try await DeepSeekChatClient().stream(prompt: text, configuration: configuration) { fragment in
+                            _ = replyStreams.append(fragment, to: messageID, in: currentRunID)
+                        }
                     }
                     guard !Task.isCancelled,
                           let fullText = replyStreams.finish(messageID: messageID, in: currentRunID),
