@@ -135,18 +135,29 @@ struct DemoHomeView: View {
         } else if currentFeature == .plugins, let markdown {
             DemoPluginView(markdown: markdown, styleSheet: theme.styleSheet)
         } else if let markdown {
-            VStack(spacing: 0) {
+            SmoothMarkdownView(markdown: markdown,
+                               onLinkTap: { url in
+                                   let tapped = url.absoluteString
+                                   linkMessage = tapped
+                                   Task { @MainActor in
+                                       try? await Task.sleep(for: .seconds(2))
+                                       if linkMessage == tapped { linkMessage = nil }
+                                   }
+                               },
+                               enableHTML: false,
+                               styleSheet: theme.styleSheet, plugins: plugins)
+                .id(selected)
+                .accessibilityIdentifier("demo-reader")
+                .overlay(alignment: .bottom) {
                 if let linkMessage {
                     Text("\(DemoLocalizations.text("link_tapped", in: language)): \(linkMessage)")
-                        .font(.caption).accessibilityIdentifier("demo-link-message")
+                        .font(.caption)
+                        .padding(10)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.bottom, 12)
+                        .accessibilityIdentifier("demo-link-message")
                 }
-                SmoothMarkdownView(markdown: markdown,
-                                   onLinkTap: { linkMessage = $0.absoluteString },
-                                   enableHTML: false,
-                                   styleSheet: theme.styleSheet, plugins: plugins)
-                    .id(selected)
-                    .accessibilityIdentifier("demo-reader")
-            }
+                }
         } else if let error = pageCatalog.error {
             ContentUnavailableView(DemoLocalizations.text("demo_page_unavailable", in: language),
                                    systemImage: "doc.questionmark",

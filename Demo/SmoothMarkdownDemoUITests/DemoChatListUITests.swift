@@ -28,14 +28,16 @@ final class DemoChatListUITests: XCTestCase {
         let online = NSPredicate(format: "label == %@", "Online")
         expectation(for: online, evaluatedWith: app.staticTexts["chat-assistant-status"])
         waitForExpectations(timeout: 20)
-        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "chat-assistant-bubble").count, 2)
+        // LazyVStack can recycle the welcome bubble after scrolling to the completed reply.
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "chat-assistant-bubble").firstMatch.exists)
 
         app.buttons["chat-toggle-theme"].tap()
         XCTAssertTrue(app.buttons["chat-toggle-theme"].exists)
         app.buttons["chat-cache-statistics"].tap()
         let cache = app.alerts["Cache Statistics"]
         XCTAssertTrue(cache.waitForExistence(timeout: 5))
-        let values = app.staticTexts["chat-cache-values"]
+        let values = cache.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Cached Entries:")).firstMatch
+        XCTAssertTrue(values.waitForExistence(timeout: 5))
         XCTAssertTrue(values.label.contains("Cached Entries:"))
         XCTAssertTrue(values.label.contains("Max Capacity: 200"))
         XCTAssertTrue(values.label.contains("Utilization:"))
