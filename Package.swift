@@ -11,6 +11,10 @@ let package = Package(
     targets: [
         .target(name: "SmoothMarkdown", dependencies: [
             .product(name: "Markdown", package: "swift-markdown")
+        ]),
+        .testTarget(name: "SmoothMarkdownTests", dependencies: [
+            "SmoothMarkdown",
+            .product(name: "Markdown", package: "swift-markdown")
         ])
     ]
 )

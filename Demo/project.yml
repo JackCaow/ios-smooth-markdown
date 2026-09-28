@@ -15,8 +15,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo
-        GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: '5.9'
         CODE_SIGNING_ALLOWED: NO
+    info:
+      path: SmoothMarkdownDemo/Info.plist
+      properties:
+        UILaunchScreen: {}
     dependencies:
       - package: SmoothMarkdown

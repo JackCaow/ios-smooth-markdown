@@ -12,6 +12,15 @@ struct SmoothMarkdownDemoApp: App {
 
             > This is the first vertical slice of the Flutter port.
 
+            - [x] Render headings and emphasis
+            - [ ] Port the editor
+
+            | Platform | Renderer |
+            | --- | --- |
+            | iOS | SwiftUI |
+
+            ![GitHub logo](https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png)
+
             ```swift
             SmoothMarkdownView(markdown: "Hello")
             ```
