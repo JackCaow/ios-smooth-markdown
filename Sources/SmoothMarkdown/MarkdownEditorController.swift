@@ -102,11 +102,18 @@ public final class MarkdownEditorController: ObservableObject {
 
     /// Return outdents an empty nested item, exits an empty root item, or adds a sibling.
     @discardableResult
-    func submitSemanticListItem(id: String, at index: Int) -> Bool {
+    func submitSemanticListItem(id: String, at index: Int, contentOffset: Int? = nil) -> Bool {
         let document = semanticDocument
         guard let block = document.blockById(id), case let .list(list) = block.kind,
               list.items.indices.contains(index) else { return false }
         let item = list.items[index]
+        if let contentOffset {
+            let contentLength = (item.content as NSString).length
+            guard contentOffset >= 0, contentOffset <= contentLength else { return false }
+            if contentOffset < contentLength {
+                return updateSemanticList(id: id) { $0.splittingItem(at: index, contentOffset: contentOffset) }
+            }
+        }
         if item.content.isEmpty && item.continuations.isEmpty && !list.hasNestedItems(at: index),
            !list.isNestedItem(at: index) {
             guard let blockRange = document.sourceRange(of: id) else { return false }

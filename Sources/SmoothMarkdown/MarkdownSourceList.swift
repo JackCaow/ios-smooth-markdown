@@ -121,6 +121,31 @@ public struct MarkdownSourceList: Equatable {
         return .init(items: next)
     }
 
+    /// Splits a leaf item's text at a UTF-16 caret offset. A continuation or
+    /// nested subtree needs a separate semantic split to assign its children.
+    public func splittingItem(at index: Int, contentOffset: Int) -> Self? {
+        guard items.indices.contains(index), items[index].continuations.isEmpty,
+              !hasNestedItems(at: index) else { return nil }
+        let item = items[index]
+        let length = (item.content as NSString).length
+        guard contentOffset >= 0, contentOffset < length,
+              let prefixRange = Range(NSRange(location: 0, length: contentOffset), in: item.content)
+        else { return nil }
+        let prefix = String(item.content[prefixRange])
+        let suffix = String(item.content[prefixRange.upperBound...])
+        // Foundation can bridge a range ending inside a surrogate pair. Do
+        // not replace one character with two replacement characters.
+        guard (prefix as NSString).length == contentOffset,
+              prefix + suffix == item.content else { return nil }
+        guard let inserted = insertingEmptyItem(after: index),
+              let before = inserted.items[index].replacingContent(prefix),
+              let after = inserted.items[index + 1].replacingContent(suffix) else { return nil }
+        var next = inserted.items
+        next[index] = before
+        next[index + 1] = after
+        return .init(items: next)
+    }
+
     public func settingTaskChecked(at index: Int, to checked: Bool) -> Self? {
         guard items.indices.contains(index), let item = items[index].settingChecked(checked) else { return nil }
         var next = items

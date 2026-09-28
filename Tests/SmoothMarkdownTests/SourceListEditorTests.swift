@@ -137,6 +137,36 @@ final class SourceListEditorTests: XCTestCase {
     }
 
     @MainActor
+    func testReturnInMiddleSplitsLeafItemAndPreservesMarkersUndo() {
+        let source = "# Title\r\n\r\n  7)  Alpha🐱Beta\r\n  8)  Next\r\n\r\nTail\r\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-1", at: 0, contentOffset: 7))
+        let expected = "# Title\r\n\r\n  7)  Alpha🐱\r\n  8)  Beta\r\n  8)  Next\r\n\r\nTail\r\n"
+        XCTAssertEqual(controller.text, expected)
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, expected)
+    }
+
+    @MainActor
+    func testReturnAtStartMovesLeafContentToUncheckedTaskSibling() {
+        let controller = MarkdownEditorController(text: "- [x] Complete\n- [ ] Next")
+        XCTAssertTrue(controller.submitSemanticListItem(id: "block-0", at: 0, contentOffset: 0))
+        XCTAssertEqual(controller.text, "- [x] \n- [ ] Complete\n- [ ] Next")
+    }
+
+    @MainActor
+    func testMiddleReturnRejectsContinuationChildAndSurrogateOffset() {
+        let controller = MarkdownEditorController(text: "- Parent\n  - Child\n- Body\n  continuation\n- 🐱tail")
+        XCTAssertFalse(controller.submitSemanticListItem(id: "block-0", at: 0, contentOffset: 2))
+        XCTAssertFalse(controller.submitSemanticListItem(id: "block-0", at: 2, contentOffset: 2))
+        XCTAssertFalse(controller.submitSemanticListItem(id: "block-0", at: 3, contentOffset: 1))
+        XCTAssertEqual(controller.text, "- Parent\n  - Child\n- Body\n  continuation\n- 🐱tail")
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    @MainActor
     func testReturnOutdentsEmptyNestedItemAndKeepsUndoHistory() {
         let source = "# Title\r\n\r\n- Parent\r\n  - \r\n- After\r\n"
         let controller = MarkdownEditorController(text: source)
@@ -239,6 +269,23 @@ final class SourceListEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, "- Parent\n  - Child\n")
         XCTAssertTrue(controller.undo())
         XCTAssertEqual(controller.text, source)
+    }
+
+    @MainActor
+    func testListTextFieldReturnsCollapsedCaretOffset() {
+        let field = FormattedListKeyboardTextField()
+        field.text = "Alpha🐱Beta"
+        var submitted: Int?
+        field.onReturnAtCaret = { submitted = $0 }
+        let caret = field.position(from: field.beginningOfDocument, offset: 7)!
+        field.selectedTextRange = field.textRange(from: caret, to: caret)
+        XCTAssertTrue(field.submitAtCurrentCaret())
+        XCTAssertEqual(submitted, 7)
+        let end = field.endOfDocument
+        field.selectedTextRange = field.textRange(from: caret, to: end)
+        submitted = nil
+        XCTAssertFalse(field.submitAtCurrentCaret())
+        XCTAssertNil(submitted)
     }
     #endif
 }

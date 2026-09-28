@@ -716,6 +716,7 @@ private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
+    @State private var focusRequest: (index: Int, token: UUID)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -741,8 +742,12 @@ private struct FormattedListView: View {
                             return current.items[index].content
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
-                        }), onSubmit: {
-                            controller.submitSemanticListItem(id: blockID, at: index)
+                        }), focusRequest: focusRequest?.index == index ? focusRequest?.token : nil,
+                            onSubmit: { contentOffset in
+                                let split = contentOffset < (item.content as NSString).length
+                                if controller.submitSemanticListItem(id: blockID, at: index, contentOffset: contentOffset), split {
+                                    focusRequest = (index + 1, UUID())
+                                }
                         }, onIndent: { outdent in
                             _ = changeIndent(at: index, outdent: outdent)
                         })
@@ -795,6 +800,15 @@ private struct FormattedListView: View {
 @available(iOS 17.0, *)
 final class FormattedListKeyboardTextField: UITextField {
     var onIndent: ((Bool) -> Void)?
+    var onReturnAtCaret: ((Int) -> Void)?
+
+    /// Return from a one-line field only when the caret is collapsed.
+    @discardableResult
+    func submitAtCurrentCaret() -> Bool {
+        guard let selectedTextRange, selectedTextRange.isEmpty else { return false }
+        onReturnAtCaret?(offset(from: beginningOfDocument, to: selectedTextRange.start))
+        return true
+    }
 
     override var keyCommands: [UIKeyCommand]? {
         let indent = UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(indentItem))
@@ -811,7 +825,8 @@ final class FormattedListKeyboardTextField: UITextField {
 @available(iOS 17.0, *)
 private struct FormattedListItemField: UIViewRepresentable {
     @Binding var text: String
-    let onSubmit: () -> Void
+    let focusRequest: UUID?
+    let onSubmit: (Int) -> Void
     let onIndent: (Bool) -> Void
 
     func makeUIView(context: Context) -> FormattedListKeyboardTextField {
@@ -825,19 +840,28 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.placeholder = "List item"
         field.text = text
         field.onIndent = onIndent
+        field.onReturnAtCaret = onSubmit
         return field
     }
 
     func updateUIView(_ field: FormattedListKeyboardTextField, context: Context) {
         context.coordinator.parent = self
         field.onIndent = onIndent
+        field.onReturnAtCaret = onSubmit
         if field.text != text { field.text = text }
+        if let focusRequest, context.coordinator.handledFocusRequest != focusRequest {
+            context.coordinator.handledFocusRequest = focusRequest
+            field.becomeFirstResponder()
+            field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
+                                                      to: field.beginningOfDocument)
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     final class Coordinator: NSObject, UITextFieldDelegate {
         var parent: FormattedListItemField
+        var handledFocusRequest: UUID?
 
         init(parent: FormattedListItemField) { self.parent = parent }
 
@@ -846,7 +870,7 @@ private struct FormattedListItemField: UIViewRepresentable {
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-            parent.onSubmit()
+            (textField as? FormattedListKeyboardTextField)?.submitAtCurrentCaret()
             return false
         }
     }
