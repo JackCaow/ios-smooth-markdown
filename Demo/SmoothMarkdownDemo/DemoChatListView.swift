@@ -119,7 +119,6 @@ struct DemoChatListView: View {
             }
         }
         .preferredColorScheme(isDark ? .dark : .light)
-        .accessibilityIdentifier("chat-list-demo")
     }
 
     private var titleBar: some View {

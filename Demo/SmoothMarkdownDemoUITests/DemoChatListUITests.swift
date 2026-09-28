@@ -14,7 +14,7 @@ final class DemoChatListUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["chat-assistant-status"].label, "Online")
         XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "chat-assistant-bubble").count, 1)
 
-        let field = app.textFields["chat-message-input"]
+        let field = app.descendants(matching: .any).matching(identifier: "chat-message-input").firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
         field.typeText("Show me a code example")
