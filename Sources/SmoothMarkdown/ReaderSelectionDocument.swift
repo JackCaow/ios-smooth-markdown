@@ -110,7 +110,8 @@ enum ReaderSelectionGroup {
     case selectable([Markup])
     case individual(Markup)
 
-    static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> [ReaderSelectionGroup] {
+    static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?, enabled: Bool = true) -> [ReaderSelectionGroup] {
+        guard enabled else { return nodes.map(ReaderSelectionGroup.individual) }
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
         func flush() {

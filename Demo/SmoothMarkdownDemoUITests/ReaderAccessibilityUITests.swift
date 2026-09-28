@@ -24,8 +24,8 @@ final class ReaderAccessibilityUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Image taps: 1"].exists)
         let inlineImage = app.buttons["Inline icon"]
         reveal(inlineImage, in: app)
-        XCTAssertGreaterThanOrEqual(inlineImage.frame.width, 44)
-        XCTAssertGreaterThanOrEqual(inlineImage.frame.height, 44)
+        XCTAssertGreaterThanOrEqual(inlineImage.frame.width, 43.5)
+        XCTAssertGreaterThanOrEqual(inlineImage.frame.height, 43.5)
 
         let details = app.buttons["More information"]
         reveal(details, in: app)

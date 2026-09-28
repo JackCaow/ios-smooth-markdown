@@ -5,6 +5,7 @@ import SwiftUIMath
 
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
 public struct SmoothMarkdownView: View {
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
@@ -13,6 +14,7 @@ public struct SmoothMarkdownView: View {
     public let onCodeCopy: ((String, String?) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
+    public let enableCrossBlockSelection: Bool
 
     public init(
         markdown: String,
@@ -22,7 +24,8 @@ public struct SmoothMarkdownView: View {
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
-        plugins: ParserPluginRegistry? = nil
+        plugins: ParserPluginRegistry? = nil,
+        enableCrossBlockSelection: Bool = true
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
@@ -32,6 +35,7 @@ public struct SmoothMarkdownView: View {
         self.onCodeCopy = onCodeCopy
         self.styleSheet = styleSheet
         self.plugins = plugins
+        self.enableCrossBlockSelection = enableCrossBlockSelection
     }
 
     public var body: some View {
@@ -99,7 +103,8 @@ public struct SmoothMarkdownView: View {
         case let .markdown(source):
             #if os(iOS)
             ForEach(Array(ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
-                                                      enableHTML: enableHTML, plugins: plugins).enumerated()), id: \.offset) { _, group in
+                                                      enableHTML: enableHTML, plugins: plugins,
+                                                      enabled: enableCrossBlockSelection && !voiceOverEnabled).enumerated()), id: \.offset) { _, group in
                 switch group {
                 case let .selectable(nodes):
                     if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
@@ -341,7 +346,8 @@ public struct SmoothMarkdownView: View {
     private func accessibleImage<Content: View>(_ content: Content, url: URL?, label: String, inline: Bool) -> AnyView {
         if let url, let onImageTap {
             return AnyView(Button { onImageTap(url) } label: {
-                content.frame(minWidth: inline ? 44 : nil, minHeight: inline ? 44 : nil)
+                content.padding(inline ? 10 : 0)
+                    .contentShape(Rectangle())
             }
                 .buttonStyle(.plain)
                 .accessibilityLabel(label))

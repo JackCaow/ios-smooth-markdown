@@ -274,7 +274,7 @@ private struct DemoContentView: View {
             VStack(spacing: 0) {
                 Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
                 SmoothMarkdownView(markdown: accessibilityMarkdown, onImageTap: { _ in imageTapCount += 1 },
-                                   styleSheet: .light(), plugins: plugins)
+                                   styleSheet: .light(), plugins: plugins, enableCrossBlockSelection: false)
             }
         } else {
         VStack(spacing: 0) {
