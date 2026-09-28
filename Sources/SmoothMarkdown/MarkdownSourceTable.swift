@@ -24,7 +24,13 @@ public struct MarkdownSourceTable: Equatable {
     public func replacingCell(rowIndex: Int, columnIndex: Int, text: String, header: Bool = false) -> Self {
         guard headers.indices.contains(columnIndex) else { return self }
         var result = self
-        let escaped = text.replacingOccurrences(of: "|", with: "\\|")
+        var escaped = ""
+        var slashCount = 0
+        for character in text {
+            if character == "|", slashCount.isMultiple(of: 2) { escaped.append("\\") }
+            escaped.append(character)
+            slashCount = character == "\\" ? slashCount + 1 : 0
+        }
         if header {
             result.headers[columnIndex] = escaped
         } else if rows.indices.contains(rowIndex) {

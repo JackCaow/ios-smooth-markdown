@@ -5,6 +5,7 @@ public enum MarkdownSemanticBlock: Equatable {
     case paragraph(markdown: String)
     case heading(level: Int, markdown: String)
     case fencedCode(fence: String, info: String, code: String)
+    case table(MarkdownSourceTable)
     case horizontalRule
     case raw
 }
@@ -27,6 +28,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
         switch kind {
         case let .paragraph(markdown), let .heading(_, markdown): markdown
         case let .fencedCode(_, _, code): code
+        case let .table(table): table.toMarkdown()
         case .horizontalRule: ""
         case .raw: source
         }
@@ -59,7 +61,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
             let rendered = opener + content + (content.hasSuffix(newline) || content.isEmpty ? "" : newline) + closer
             return validated(.init(id: id, kind: .fencedCode(fence: fence, info: info, code: content),
                                    source: rendered, leadingTrivia: leadingTrivia))
-        case .horizontalRule, .raw: return nil
+        case .table, .horizontalRule, .raw: return nil
         }
     }
 
@@ -132,5 +134,18 @@ public struct MarkdownDocument: Equatable {
                             leadingTrivia: removed.leadingTrivia)
         }
         return .init(blocks: next, trailingTrivia: trailingTrivia)
+    }
+
+    /// Applies a table edit while retaining the surrounding document source and line ending.
+    public func updatingTable(_ id: String, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> MarkdownDocument? {
+        guard let block = blockById(id), case let .table(table) = block.kind else { return nil }
+        let updated = transform(table)
+        guard updated != table else { return nil }
+        let ending = block.source.hasSuffix("\r\n") ? "\r\n" : block.source.hasSuffix("\n") ? "\n" : ""
+        let newline = block.source.contains("\r\n") ? "\r\n" : "\n"
+        let source = updated.toMarkdown().replacingOccurrences(of: "\n", with: newline) + ending
+        let replacement = MarkdownDocumentBlock(id: id, kind: .table(updated), source: source,
+                                                leadingTrivia: block.leadingTrivia)
+        return replacingBlock(replacement)
     }
 }

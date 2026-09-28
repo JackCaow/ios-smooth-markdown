@@ -56,6 +56,14 @@ public final class MarkdownEditorController: ObservableObject {
         return true
     }
 
+    /// Applies a semantic table operation by block ID through the source undo stack.
+    @discardableResult
+    public func updateSemanticTable(id: String, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> Bool {
+        guard let updated = semanticDocument.updatingTable(id, transform)?.toMarkdown(), updated != text else { return false }
+        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
+        return true
+    }
+
     public func markSaved(_ saved: String? = nil) { savedText = saved ?? text }
     public func clearHistory() { undoStack.removeAll(); redoStack.removeAll() }
 

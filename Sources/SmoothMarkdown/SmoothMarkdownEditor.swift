@@ -128,6 +128,8 @@ private struct FormattedBlockRow: View {
                     .textInputAutocapitalization(.never)
                     .frame(minHeight: 120)
                     .accessibilityIdentifier("code-\(block.id)")
+            case let .table(table):
+                FormattedTableView(controller: controller, blockID: block.id, table: table)
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
@@ -166,6 +168,110 @@ private struct FormattedBlockRow: View {
 
     private func blockLabel(_ title: String) -> some View {
         Text(title.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+    }
+}
+
+@available(iOS 17.0, *)
+private struct FormattedTableView: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let table: MarkdownSourceTable
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("TABLE · \(table.columnCount) COLUMNS")
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                Spacer()
+                Menu("Add") {
+                    Button("Row") { edit { $0.insertingRowAfter($0.rows.count - 1) } }
+                    Button("Column") { edit { $0.insertingColumnAfter($0.columnCount - 1) } }
+                }
+            }
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        ForEach(table.headers.indices, id: \.self) { column in
+                            VStack(alignment: .leading, spacing: 4) {
+                                FormattedTableCell(controller: controller, blockID: blockID,
+                                                   row: 0, column: column, isHeader: true)
+                                Menu(alignmentLabel(table.alignments[column])) {
+                                    Button("Align default") { edit { $0.settingColumnAlignment(column, to: nil) } }
+                                    Button("Align left") { edit { $0.settingColumnAlignment(column, to: .left) } }
+                                    Button("Align center") { edit { $0.settingColumnAlignment(column, to: .center) } }
+                                    Button("Align right") { edit { $0.settingColumnAlignment(column, to: .right) } }
+                                    Divider()
+                                    Button("Insert column before") { edit { $0.insertingColumnBefore(column) } }
+                                    Button("Insert column after") { edit { $0.insertingColumnAfter(column) } }
+                                    Button("Delete column", role: .destructive) { edit { $0.deletingColumn(column) } }
+                                }
+                                .font(.caption2)
+                            }
+                            .frame(width: 150)
+                        }
+                    }
+                    ForEach(table.rows.indices, id: \.self) { row in
+                        HStack(spacing: 6) {
+                            ForEach(table.headers.indices, id: \.self) { column in
+                                FormattedTableCell(controller: controller, blockID: blockID,
+                                                   row: row, column: column, isHeader: false)
+                                    .frame(width: 150)
+                            }
+                            Menu("Row \(row + 1)") {
+                                Button("Insert row before") { edit { $0.insertingRowBefore(row) } }
+                                Button("Insert row after") { edit { $0.insertingRowAfter(row) } }
+                                Button("Delete row", role: .destructive) { edit { $0.deletingRow(row) } }
+                            }
+                            .font(.caption)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func edit(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) {
+        controller.updateSemanticTable(id: blockID, transform)
+    }
+
+    private func alignmentLabel(_ alignment: MarkdownTableAlignment?) -> String {
+        switch alignment {
+        case .left: "Left"
+        case .center: "Center"
+        case .right: "Right"
+        case nil: "Default"
+        }
+    }
+}
+
+@available(iOS 17.0, *)
+private struct FormattedTableCell: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let row: Int
+    let column: Int
+    let isHeader: Bool
+
+    var body: some View {
+        TextField(isHeader ? "Header" : "Cell", text: textBinding)
+            .textFieldStyle(.roundedBorder)
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .accessibilityIdentifier("table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)")
+    }
+
+    private var textBinding: Binding<String> {
+        Binding(get: {
+            guard let block = controller.semanticDocument.blockById(blockID),
+                  case let .table(table) = block.kind, table.headers.indices.contains(column) else { return "" }
+            let source = isHeader ? table.headers[column] :
+                (table.rows.indices.contains(row) ? table.rows[row][column] : "")
+            return source.replacingOccurrences(of: "\\|", with: "|")
+        }, set: { value in
+            controller.updateSemanticTable(id: blockID) {
+                $0.replacingCell(rowIndex: row, columnIndex: column, text: value, header: isHeader)
+            }
+        })
     }
 }
 

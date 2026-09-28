@@ -25,7 +25,16 @@ public struct MarkdownDocumentCodec {
                 lines.dropFirst().contains { $0.text.trimmingCharacters(in: .whitespaces) == "---" }
             let classification: Classification = isFrontmatter ? .raw : classify(lines[index].text)
             let kind: MarkdownSemanticBlock
-            switch classification {
+            if !isFrontmatter, index + 1 < lines.count,
+               MarkdownSourceTable.parse(lines[index...index + 1].map(\.text).joined(separator: "\n")) != nil {
+                index += 2
+                while index < lines.count, !lines[index].isBlank, isTableBodyLine(lines[index].text) {
+                    index += 1
+                }
+                let tableSource = lines[start..<index].map(\.text).joined(separator: "\n")
+                kind = .table(MarkdownSourceTable.parse(tableSource)!)
+            } else {
+                switch classification {
             case let .heading(level, prefix):
                 kind = .heading(level: level, markdown: String(lines[index].text.dropFirst(prefix.count)))
                 index += 1
@@ -57,6 +66,7 @@ public struct MarkdownDocumentCodec {
                 while index < lines.count && !lines[index].isBlank && !isNewBlock(lines[index].text) { index += 1 }
                 let source = lines[start..<index].map(\.raw).joined()
                 kind = .paragraph(markdown: stripFinalLineEnding(source))
+                }
             }
             let source = lines[start..<index].map(\.raw).joined()
             blocks.append(.init(id: "block-\(blocks.count)", kind: kind, source: source,
@@ -95,6 +105,12 @@ public struct MarkdownDocumentCodec {
         case .paragraph: false
         default: true
         }
+    }
+
+    private func isTableBodyLine(_ line: String) -> Bool {
+        if line.contains("|") { return true }
+        if case .paragraph = classify(line) { return true }
+        return false
     }
 
     private func isDefiniteBreak(_ line: String) -> Bool {
