@@ -161,7 +161,7 @@ final class MermaidTests: XCTestCase {
         XCTAssertEqual(MermaidLayout.kanbanColumns(diagram).count, 2)
         XCTAssertGreaterThan(MermaidLayout.compute(diagram).size.height, 200)
         XCTAssertNil(MermaidParser.parse("kanban\ntitle Empty Board"))
-        XCTAssertNil(MermaidParser.parse("erDiagram\nA ||--o{ B : owns"))
+        XCTAssertEqual(MermaidParser.parse("erDiagram\nA ||--o{ B : owns")?.kind, .erDiagram)
     }
 
     func testRadarFixturesChineseLabelsOptionsAndFallback() {
@@ -216,7 +216,7 @@ final class MermaidTests: XCTestCase {
         let horizontal = MermaidParser.parse("xychart horizontal\nx-axis [A, B]\nbar [10, 20]")!
         XCTAssertEqual(horizontal.xyOrientation, .horizontal)
         XCTAssertNil(MermaidParser.parse("xychart-beta\nx-axis [A, B]"))
-        XCTAssertNil(MermaidParser.parse("erDiagram\nA ||--o{ B : owns"))
+        XCTAssertEqual(MermaidParser.parse("erDiagram\nA ||--o{ B : owns")?.kind, .erDiagram)
     }
 
     func testMermaidFencePluginAndOrdinaryFenceFallback() throws {

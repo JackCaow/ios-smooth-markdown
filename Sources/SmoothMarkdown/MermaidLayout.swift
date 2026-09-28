@@ -17,7 +17,7 @@ struct MermaidLayoutResult {
 enum MermaidLayout {
     static func compute(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
         switch diagram.kind {
-        case .flowchart: flowchart(diagram)
+        case .flowchart, .classDiagram, .stateDiagram, .erDiagram: flowchart(diagram)
         case .sequence: sequence(diagram)
         case .pie: pie(diagram)
         case .timeline: timeline(diagram)
@@ -117,7 +117,8 @@ enum MermaidLayout {
         let grouped = Dictionary(grouping: diagram.nodes) { rank[$0.id] ?? 0 }
         let layers = grouped.keys.sorted().compactMap { grouped[$0] }
         let horizontal = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
-        let margin: CGFloat = 24, mainGap: CGFloat = 64, crossGap: CGFloat = 36
+        let margin: CGFloat = diagram.kind == .flowchart ? 24 : 64
+        let mainGap: CGFloat = 72, crossGap: CGFloat = 40
         // In a horizontal graph the main axis uses node width, and the cross axis uses height.
         func axisSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeWidth(node) : nodeHeight(node) }
         func laneSize(_ node: MermaidNode) -> CGFloat { horizontal ? nodeHeight(node) : nodeWidth(node) }
@@ -187,6 +188,11 @@ enum MermaidLayout {
     }
 
     private static func nodeWidth(_ node: MermaidNode) -> CGFloat {
+        if node.shape == .stateStart || node.shape == .stateEnd { return 28 }
+        if !node.compartments.isEmpty {
+            let longest = ([node.label] + node.compartments.flatMap { $0 }).map(\.utf16.count).max() ?? 0
+            return min(max(CGFloat(longest) * 7.5 + 28, 110), 360)
+        }
         let base = min(max(CGFloat(node.label.utf16.count) * 8 + 28, 88), 280)
         switch node.shape {
         case .diamond: return base + 30
@@ -196,9 +202,14 @@ enum MermaidLayout {
     }
 
     private static func nodeHeight(_ node: MermaidNode) -> CGFloat {
+        if node.shape == .stateStart || node.shape == .stateEnd { return 28 }
+        if !node.compartments.isEmpty {
+            let rows = node.compartments.reduce(0) { $0 + $1.count }
+            return CGFloat(48 + rows * 20 + node.compartments.count * 10)
+        }
         switch node.shape {
-        case .diamond, .circle: 76
-        default: 48
+        case .diamond, .circle: return 76
+        default: return 48
         }
     }
 }

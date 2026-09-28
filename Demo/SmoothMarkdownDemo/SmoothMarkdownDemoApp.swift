@@ -159,6 +159,36 @@ SmoothMarkdownView(markdown: "Hello")
 ```
 """
 
+private let structuredMarkdown = """
+# Structured Mermaid
+
+```mermaid
+stateDiagram-v2
+  [*] --> Pending
+  Pending --> Paid: payment
+  Paid --> [*]
+```
+
+```mermaid
+classDiagram
+  Animal <|-- Duck
+  class Duck {
+    +String beakColor
+    +swim()
+  }
+  Pond o-- Duck : contains
+```
+
+```mermaid
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  CUSTOMER {
+    int id PK
+    string name
+  }
+```
+"""
+
 @main
 struct SmoothMarkdownDemoApp: App {
     var body: some Scene {
@@ -170,6 +200,7 @@ private struct DemoContentView: View {
     @StateObject private var controller = MarkdownEditorController(text: demoMarkdown)
     @State private var showEditor = false
     @State private var enableHTML = false
+    @State private var showStructured = false
     @State private var themeIndex = 0
     private let plugins = ParserPluginRegistry.builtIns()
     private let themes: [(String, MarkdownStyleSheet)] = [
@@ -183,6 +214,7 @@ private struct DemoContentView: View {
             HStack {
                 Button(showEditor ? "Read" : "Open editor") { showEditor.toggle() }
                 if !showEditor {
+                    Button(showStructured ? "Show all" : "Structured") { showStructured.toggle() }
                     Button(enableHTML ? "HTML on" : "Enable HTML") { enableHTML.toggle() }
                     Menu("Theme: \(themes[themeIndex].0)") {
                         ForEach(themes.indices, id: \.self) { index in
@@ -197,7 +229,7 @@ private struct DemoContentView: View {
             if showEditor {
                 SmoothMarkdownEditor(controller: controller)
             } else {
-                SmoothMarkdownView(markdown: controller.text, enableHTML: enableHTML,
+                SmoothMarkdownView(markdown: showStructured ? structuredMarkdown : controller.text, enableHTML: enableHTML,
                                    styleSheet: themes[themeIndex].1, plugins: plugins)
             }
         }

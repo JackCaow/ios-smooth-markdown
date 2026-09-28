@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// Opt-in native rendering of fenced `mermaid` flowchart and sequence diagrams.
+/// Opt-in native rendering of supported fenced `mermaid` diagrams.
 public struct MermaidPlugin: BlockParserPlugin {
     public let id = "mermaid"
     public let name = "Mermaid Diagram Plugin"

@@ -1,24 +1,27 @@
 import Foundation
 
-public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart }
+public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart, classDiagram, stateDiagram, erDiagram }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
-public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder }
+public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder, stateStart, stateEnd }
 public enum MermaidLine: Equatable { case solid, dotted, thick }
 public enum MermaidArrow: Equatable { case none, arrow, cross }
 public enum MermaidParticipantType: Equatable { case participant, actor }
+public enum MermaidMarker: Equatable { case inheritance, composition, aggregation, exactlyOne, zeroOrOne, oneOrMore, zeroOrMore }
 
 public struct MermaidNode: Equatable, Identifiable {
     public let id: String
     public let label: String
     public let shape: MermaidShape
     public let participantType: MermaidParticipantType
+    public let compartments: [[String]]
 
     public init(id: String, label: String, shape: MermaidShape = .rectangle,
-                participantType: MermaidParticipantType = .participant) {
+                participantType: MermaidParticipantType = .participant, compartments: [[String]] = []) {
         self.id = id
         self.label = label
         self.shape = shape
         self.participantType = participantType
+        self.compartments = compartments
     }
 }
 
@@ -28,14 +31,27 @@ public struct MermaidEdge: Equatable {
     public let label: String?
     public let line: MermaidLine
     public let arrow: MermaidArrow
+    public let sourceArrow: MermaidArrow
+    public let sourceMarker: MermaidMarker?
+    public let targetMarker: MermaidMarker?
+    public let sourceLabel: String?
+    public let targetLabel: String?
 
     public init(from: String, to: String, label: String? = nil,
-                line: MermaidLine = .solid, arrow: MermaidArrow = .arrow) {
+                line: MermaidLine = .solid, arrow: MermaidArrow = .arrow,
+                sourceArrow: MermaidArrow = .none, sourceMarker: MermaidMarker? = nil,
+                targetMarker: MermaidMarker? = nil, sourceLabel: String? = nil,
+                targetLabel: String? = nil) {
         self.from = from
         self.to = to
         self.label = label
         self.line = line
         self.arrow = arrow
+        self.sourceArrow = sourceArrow
+        self.sourceMarker = sourceMarker
+        self.targetMarker = targetMarker
+        self.sourceLabel = sourceLabel
+        self.targetLabel = targetLabel
     }
 }
 
@@ -120,7 +136,7 @@ public struct MermaidDiagram: Equatable {
     public func node(_ id: String) -> MermaidNode? { nodes.first { $0.id == id } }
 }
 
-/// Parses the documented native flowchart, sequence, pie, timeline, Gantt, and Kanban subset.
+/// Parses the documented native Mermaid subsets.
 public enum MermaidParser {
     public static func parse(_ source: String) -> MermaidDiagram? {
         let rawLines = source.components(separatedBy: "\n")
@@ -147,6 +163,10 @@ public enum MermaidParser {
         if header.lowercased() == "kanban" { return MermaidExtendedParser.kanban(rawLines) }
         if header.lowercased() == "radar-beta" { return MermaidPlotParser.radar(lines) }
         if header.lowercased().hasPrefix("xychart") { return MermaidPlotParser.xyChart(lines) }
+        if header.lowercased() == "classdiagram" || header.lowercased() == "statediagram" ||
+            header.lowercased() == "statediagram-v2" || header.lowercased() == "erdiagram" {
+            return MermaidStructuredParser.parse(lines)
+        }
         return nil
     }
 

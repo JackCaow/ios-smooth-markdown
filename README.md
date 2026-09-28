@@ -8,7 +8,7 @@ Reader and editor work in progress. The package renders headings, paragraphs, in
 
 SVG files use [SwiftDraw](https://github.com/swhitty/SwiftDraw) 0.29.0, loaded from HTTP(S) or the app bundle. The demo includes `native-vector.svg`; host apps must bundle their own local SVG files. An invalid or missing SVG falls back to its alt/title label.
 
-Mermaid uses native SwiftUI Canvas for a bounded flowchart and sequence subset. It recognizes backtick and tilde `mermaid` fences, TD/TB/BT/LR/RL flow direction, common node shapes and labeled/dotted/thick connections, participant aliases, actor declarations, and common message arrows. Unsupported diagram kinds show their source. Subgraphs, styling directives, sequence notes/control blocks, and full Mermaid layout/interaction remain future work.
+Mermaid uses native SwiftUI Canvas for bounded flowchart, sequence, pie, timeline, Gantt, Kanban, radar, XY, class, state, and ER subsets through the opt-in `MermaidPlugin`. Structured diagrams recognize class members and common relationship markers, basic state transitions with distinct start/end markers, and ER attributes/cardinalities. Unsupported structured statements fall back to source instead of rendering a partial graph. Composite states, class namespaces, ER subgraphs, advanced styling, full Mermaid syntax, and pixel-identical layout remain future work. The demo has a Structured view with one fixture of each new kind.
 
 Math uses [SwiftUIMath](https://github.com/gonzalezreal/swiftui-math) 0.1.0 for native SwiftUI typesetting. It supports the library's TeX math subset, including fractions, sums, scripts, Greek letters, and common operators. Full LaTeX documents and arbitrary packages are outside this renderer's scope.
 

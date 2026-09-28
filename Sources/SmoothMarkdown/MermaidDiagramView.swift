@@ -46,12 +46,18 @@ public struct MermaidDiagramView: View {
                         context.stroke(line, with: .color(ink.opacity(0.4)), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                     }
                 }
-                for placed in layout.edges { drawEdge(placed, in: context, ink: ink, background: colorScheme == .dark ? .black : .white) }
+                for placed in layout.edges {
+                    if placed.edge.from == placed.edge.to, let frame = layout.nodes[placed.edge.from] {
+                        drawSelfEdge(placed.edge, frame: frame, in: context, ink: ink)
+                    } else {
+                        drawEdge(placed, in: context, ink: ink, background: colorScheme == .dark ? .black : .white)
+                    }
+                }
                 for node in diagram.nodes {
                     guard let frame = layout.nodes[node.id] else { continue }
                     let shape = diagram.kind == .sequence ? MermaidShape.rounded : node.shape
                     let path = nodePath(shape, frame: frame)
-                    context.fill(path, with: .color(fill))
+                    context.fill(path, with: .color(shape == .stateStart ? ink : fill))
                     context.stroke(path, with: .color(ink), lineWidth: 1.5)
                     if shape == .subroutine {
                         for x in [frame.minX + 8, frame.maxX - 8] {
@@ -59,8 +65,14 @@ public struct MermaidDiagramView: View {
                             context.stroke(line, with: .color(ink), lineWidth: 1)
                         }
                     }
-                    context.draw(Text(node.label).font(.system(size: 13, weight: .medium)).foregroundColor(ink),
-                                 at: CGPoint(x: frame.midX, y: frame.midY))
+                    if !node.compartments.isEmpty {
+                        drawCompartments(node, frame: frame, in: context, ink: ink)
+                    } else if shape == .stateEnd {
+                        context.fill(Path(ellipseIn: frame.insetBy(dx: 7, dy: 7)), with: .color(ink))
+                    } else if shape != .stateStart {
+                        context.draw(Text(node.label).font(.system(size: 13, weight: .medium)).foregroundColor(ink),
+                                     at: CGPoint(x: frame.midX, y: frame.midY))
+                    }
                 }
             }
             .frame(width: max(layout.size.width, 180), height: max(layout.size.height, 100))
@@ -75,6 +87,9 @@ public struct MermaidDiagramView: View {
         switch diagram.kind {
         case .flowchart: "Flowchart with \(diagram.nodes.count) nodes and \(diagram.edges.count) connections"
         case .sequence: "Sequence diagram with \(diagram.nodes.count) participants and \(diagram.edges.count) messages"
+        case .classDiagram: "Class diagram with \(diagram.nodes.count) classes and \(diagram.edges.count) relationships"
+        case .stateDiagram: "State diagram with \(diagram.nodes.count) states and \(diagram.edges.count) transitions"
+        case .erDiagram: "ER diagram with \(diagram.nodes.count) entities and \(diagram.edges.count) relationships"
         case .pie: "Pie chart with \(diagram.pieSlices.count) slices"
         case .timeline: "Timeline with \(diagram.timelineSections.count) periods"
         case .gantt: "Gantt chart with \(diagram.ganttTasks.count) tasks"
@@ -373,14 +388,11 @@ public struct MermaidDiagramView: View {
                                 dash: placed.edge.line == .dotted ? [5, 4] : [])
         context.stroke(path, with: .color(ink), style: style)
         let angle = atan2(end.y - start.y, end.x - start.x)
+        if let marker = placed.edge.sourceMarker { drawMarker(marker, at: start, toward: end, in: context, ink: ink) }
+        if let marker = placed.edge.targetMarker { drawMarker(marker, at: end, toward: start, in: context, ink: ink) }
+        if placed.edge.sourceArrow == .arrow { drawArrow(at: start, angle: angle + .pi, in: context, ink: ink) }
         if placed.edge.arrow == .arrow {
-            let length: CGFloat = 10
-            var head = Path()
-            head.move(to: end)
-            head.addLine(to: CGPoint(x: end.x - length * cos(angle - .pi / 6), y: end.y - length * sin(angle - .pi / 6)))
-            head.move(to: end)
-            head.addLine(to: CGPoint(x: end.x - length * cos(angle + .pi / 6), y: end.y - length * sin(angle + .pi / 6)))
-            context.stroke(head, with: .color(ink), lineWidth: 1.5)
+            drawArrow(at: end, angle: angle, in: context, ink: ink)
         } else if placed.edge.arrow == .cross {
             var cross = Path()
             for sign in [-1.0, 1.0] {
@@ -399,6 +411,94 @@ public struct MermaidDiagramView: View {
                          with: .color(background))
             context.draw(Text(label).font(.system(size: 11)).foregroundColor(ink), at: middle)
         }
+        for (text, point) in [(placed.edge.sourceLabel, start), (placed.edge.targetLabel, end)] {
+            guard let text, !text.isEmpty else { continue }
+            context.draw(Text(text).font(.system(size: 10)).foregroundColor(ink),
+                         at: CGPoint(x: point.x + 16, y: point.y - 13))
+        }
+    }
+
+    private func drawCompartments(_ node: MermaidNode, frame: CGRect, in context: GraphicsContext, ink: Color) {
+        context.draw(Text(node.label).font(.system(size: 13, weight: .semibold)).foregroundColor(ink),
+                     at: CGPoint(x: frame.midX, y: frame.minY + 22))
+        var y = frame.minY + 43
+        for rows in node.compartments {
+            var divider = Path()
+            divider.move(to: CGPoint(x: frame.minX, y: y))
+            divider.addLine(to: CGPoint(x: frame.maxX, y: y))
+            context.stroke(divider, with: .color(ink.opacity(0.6)), lineWidth: 1)
+            y += 13
+            for row in rows {
+                context.draw(Text(row).font(.system(size: 11, design: .monospaced)).foregroundColor(ink),
+                             at: CGPoint(x: frame.minX + 9, y: y), anchor: .leading)
+                y += 20
+            }
+        }
+    }
+
+    private func drawArrow(at point: CGPoint, angle: CGFloat, in context: GraphicsContext, ink: Color) {
+        let length: CGFloat = 10
+        var head = Path()
+        head.move(to: point)
+        head.addLine(to: CGPoint(x: point.x - length * cos(angle - .pi / 6), y: point.y - length * sin(angle - .pi / 6)))
+        head.move(to: point)
+        head.addLine(to: CGPoint(x: point.x - length * cos(angle + .pi / 6), y: point.y - length * sin(angle + .pi / 6)))
+        context.stroke(head, with: .color(ink), lineWidth: 1.5)
+    }
+
+    private func drawMarker(_ marker: MermaidMarker, at point: CGPoint, toward other: CGPoint,
+                            in context: GraphicsContext, ink: Color) {
+        let angle = atan2(other.y - point.y, other.x - point.x)
+        func position(_ forward: CGFloat, _ side: CGFloat = 0) -> CGPoint {
+            CGPoint(x: point.x + forward * cos(angle) - side * sin(angle),
+                    y: point.y + forward * sin(angle) + side * cos(angle))
+        }
+        var path = Path()
+        switch marker {
+        case .inheritance:
+            path.move(to: point); path.addLine(to: position(14, 8)); path.addLine(to: position(14, -8)); path.closeSubpath()
+            context.fill(path, with: .color(colorScheme == .dark ? .black : .white))
+            context.stroke(path, with: .color(ink), lineWidth: 1.5)
+        case .composition, .aggregation:
+            path.move(to: point); path.addLine(to: position(8, 6)); path.addLine(to: position(16));
+            path.addLine(to: position(8, -6)); path.closeSubpath()
+            context.fill(path, with: .color(marker == .composition ? ink : (colorScheme == .dark ? .black : .white)))
+            context.stroke(path, with: .color(ink), lineWidth: 1.5)
+        case .exactlyOne, .zeroOrOne, .oneOrMore, .zeroOrMore:
+            let multiple = marker == .oneOrMore || marker == .zeroOrMore
+            let optional = marker == .zeroOrOne || marker == .zeroOrMore
+            if multiple {
+                for side: CGFloat in [-7, 0, 7] {
+                    path.move(to: position(16)); path.addLine(to: position(5, side))
+                }
+            } else {
+                for forward: CGFloat in [7, 12] {
+                    path.move(to: position(forward, -7)); path.addLine(to: position(forward, 7))
+                }
+            }
+            context.stroke(path, with: .color(ink), lineWidth: 1.5)
+            if optional {
+                context.fill(Path(ellipseIn: CGRect(x: position(19).x - 3, y: position(19).y - 3, width: 6, height: 6)),
+                             with: .color(colorScheme == .dark ? .black : .white))
+                context.stroke(Path(ellipseIn: CGRect(x: position(19).x - 3, y: position(19).y - 3, width: 6, height: 6)),
+                               with: .color(ink), lineWidth: 1.5)
+            }
+        }
+    }
+
+    private func drawSelfEdge(_ edge: MermaidEdge, frame: CGRect, in context: GraphicsContext, ink: Color) {
+        let x = frame.maxX, y = frame.midY
+        var path = Path()
+        path.move(to: CGPoint(x: x, y: y - 10))
+        path.addCurve(to: CGPoint(x: x, y: y + 10), control1: CGPoint(x: x + 56, y: y - 50),
+                      control2: CGPoint(x: x + 56, y: y + 50))
+        context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: 1.5,
+                                                                  dash: edge.line == .dotted ? [5, 4] : []))
+        drawArrow(at: CGPoint(x: x, y: y + 10), angle: .pi * 0.8, in: context, ink: ink)
+        if let label = edge.label {
+            context.draw(Text(label).font(.system(size: 10)).foregroundColor(ink),
+                         at: CGPoint(x: x + 38, y: y - 26))
+        }
     }
 
     private func nodePath(_ shape: MermaidShape, frame: CGRect) -> Path {
@@ -406,7 +506,7 @@ public struct MermaidDiagramView: View {
         case .rectangle, .subroutine: return Path(frame)
         case .rounded: return Path(roundedRect: frame, cornerRadius: 8)
         case .stadium: return Path(roundedRect: frame, cornerRadius: frame.height / 2)
-        case .circle: return Path(ellipseIn: frame)
+        case .circle, .stateStart, .stateEnd: return Path(ellipseIn: frame)
         case .diamond:
             var path = Path()
             path.move(to: CGPoint(x: frame.midX, y: frame.minY))
