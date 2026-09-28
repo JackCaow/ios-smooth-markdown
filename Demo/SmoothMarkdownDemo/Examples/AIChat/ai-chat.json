@@ -1,0 +1,59 @@
+{
+  "source": "flutter-smooth-markdown/example/lib/ai_chat_demo.dart",
+  "sourceSha256": "19e5ebbe4cfa4f6fabd5815f8ee4c9830c3d531194419aee673acfe1a99156a7",
+  "chunkSizeUTF16": 5,
+  "delayMillis": 20,
+  "welcome": "\n# 🤖 AI Chat Demo\n\n欢迎使用 AI 聊天演示！本演示集成了 **Qwen 模型** 并支持以下 AI 特性解析：\n\n## 支持的 AI 格式\n\n1. **Thinking Block** - AI 思考过程\n2. **Artifact Block** - 代码/文档制品\n3. **Tool Call Block** - 工具调用\n\n## 快速测试\n\n点击下方的 **快捷提示词** 按钮来测试各种功能！\n\n---\n\n💡 **提示**: 点击右上角设置图标配置 API Key 来使用真实 Qwen API\n",
+  "welcomeSha256": "f11167e14acb6ae17fdf10672896999540d3952d3f2208a1bd558f967ba5cbc7",
+  "quickPrompts": [
+    {
+      "id": "thinking",
+      "label": "🧠 Thinking",
+      "description": "测试思考块解析",
+      "prompt": "演示 thinking block",
+      "response": "\n<thinking>\n让我分析一下用户的问题...\n\n首先，用户想要了解 thinking block 的解析。\n\n我需要：\n1. 解释 thinking block 的用途\n2. 展示正确的语法格式\n3. 说明何时使用\n\nthinking block 主要用于展示 AI 的推理过程，让用户理解 AI 是如何得出结论的。\n</thinking>\n\n# Thinking Block 演示\n\nThinking block 用于展示 AI 的 **内部推理过程**。\n\n## 语法格式\n\n支持两种格式：\n\n1. XML 风格: `<thinking>...</thinking>`\n2. 简写: `<think>...</think>`\n\n## 使用场景\n\n- 展示复杂问题的分析过程\n- 让用户理解 AI 的推理逻辑\n- 提高回答的透明度\n\n上面的折叠块就是一个 thinking block 示例！点击可以展开查看。\n",
+      "responseSha256": "3ebe1548a5e0d37a92fc89a915b53b5374636b688bf17de1fe99c329b26f90b5"
+    },
+    {
+      "id": "artifact",
+      "label": "📦 Artifact",
+      "description": "测试制品块解析",
+      "prompt": "演示 artifact block",
+      "response": "\n# Artifact Block 演示\n\nArtifact 用于展示 **可复用的代码或文档制品**。\n\n## 代码制品示例\n\n<artifact identifier=\"hello-dart\" type=\"code\" language=\"dart\" title=\"Hello World\">\nvoid main() {\n  print('Hello, World!');\n\n  final message = 'This is an artifact!';\n  print(message);\n}\n</artifact>\n\n## 文档制品示例\n\n<artifact id=\"readme\" type=\"document\" title=\"项目说明\">\n# 项目名称\n\n这是一个示例项目。\n\n## 功能特性\n\n- 特性 1\n- 特性 2\n- 特性 3\n</artifact>\n\n## Mermaid 图表示例\n\n<artifact id=\"flow\" type=\"mermaid\" title=\"流程图\">\ngraph TD\n    A[开始] --> B{判断}\n    B -->|是| C[执行]\n    B -->|否| D[结束]\n    C --> D\n</artifact>\n\nArtifact 支持多种类型：`code`, `document`, `html`, `svg`, `component`, `mermaid`\n",
+      "responseSha256": "73a7d5cc4acc56b79ab7cc9646b9895f9ceea7065b22e2e695e02be469f8a32c"
+    },
+    {
+      "id": "toolCall",
+      "label": "🔧 Tool Call",
+      "description": "测试工具调用解析",
+      "prompt": "演示 tool call block",
+      "response": "\n# Tool Call Block 演示\n\nTool Call 用于展示 **AI 工具调用**。\n\n## 搜索工具调用\n\n<tool_use>\n<tool_name>web_search</tool_name>\n<tool_id>search_001</tool_id>\n<input>\nquery: \"Flutter Smooth Markdown\"\nlimit: 10\n</input>\n</tool_use>\n\n## 代码执行工具\n\n<tool_use>\n<tool_name>code_interpreter</tool_name>\n<tool_id>exec_002</tool_id>\n<input>\nlanguage: \"python\"\ncode: \"print(sum(range(1, 101)))\"\n</input>\n</tool_use>\n\n## 文件操作工具\n\n<tool_use>\n<tool_name>file_write</tool_name>\n<input>\npath: \"/tmp/test.txt\"\ncontent: \"Hello World\"\n</input>\n</tool_use>\n\nTool Call 块会显示工具名称、参数和执行状态。\n",
+      "responseSha256": "a4609cf9361e7ff569c991b08246247997c8ef276bce460ef7bf5eebb1d4e0dc"
+    },
+    {
+      "id": "allInOne",
+      "label": "🎯 All-in-One",
+      "description": "测试所有格式",
+      "prompt": "演示所有 AI 格式",
+      "response": "\n<thinking>\n用户想要看到所有 AI 格式的综合演示。\n\n我需要：\n1. 先展示一个 thinking block\n2. 然后展示 artifact\n3. 最后展示 tool call\n4. 加上一些普通的 markdown 内容\n\n让我按顺序组织这些内容...\n</thinking>\n\n# 🎯 AI 格式综合演示\n\n这是一个包含所有 AI 特殊格式的完整示例。\n\n## 1️⃣ 思考过程\n\n上面的折叠块展示了 AI 的思考过程。\n\n## 2️⃣ 代码制品\n\n<artifact identifier=\"demo-widget\" type=\"code\" language=\"dart\" title=\"Flutter Widget\">\nclass DemoWidget extends StatelessWidget {\n  const DemoWidget({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return Container(\n      padding: const EdgeInsets.all(16),\n      decoration: BoxDecoration(\n        color: Colors.blue.shade50,\n        borderRadius: BorderRadius.circular(12),\n      ),\n      child: const Text('Hello from Artifact!'),\n    );\n  }\n}\n</artifact>\n\n## 3️⃣ 工具调用\n\n<tool_use>\n<tool_name>analyze_code</tool_name>\n<tool_id>analysis_001</tool_id>\n<input>\nfile: \"demo_widget.dart\"\nchecks: [\"lint\", \"format\", \"performance\"]\n</input>\n</tool_use>\n\n## 4️⃣ 普通 Markdown\n\n当然，我们也支持所有标准 **Markdown** 语法：\n\n- ✅ 粗体、*斜体*、`行内代码`\n- ✅ 列表和任务清单\n- ✅ 引用块和代码块\n- ✅ 表格和图片\n\n> 这是一个引用块示例\n>\n> — AI Assistant\n\n```dart\n// 普通代码块示例\nvoid main() => print('Standard code block');\n```\n\n---\n\n**总结**: 所有格式都已成功解析和渲染！ 🎉\n",
+      "responseSha256": "820a221c83268e83bb46080f62e0c55128ef79a04c8685d86fcb30fc5c7d3b29"
+    },
+    {
+      "id": "code",
+      "label": "💻 Code",
+      "description": "生成代码示例",
+      "prompt": "写一个 Flutter Widget 示例",
+      "response": "\n<thinking>\n用户想要一个 Flutter Widget 示例。\n\n让我创建一个实用的、可复制的 Widget：\n- 包含基础结构\n- 展示常用模式\n- 代码清晰易懂\n</thinking>\n\n# Flutter Widget 示例\n\n这是一个可复用的卡片组件：\n\n<artifact identifier=\"user-card\" type=\"code\" language=\"dart\" title=\"UserCard Widget\">\nimport 'package:flutter/material.dart';\n\nclass UserCard extends StatelessWidget {\n  const UserCard({\n    super.key,\n    required this.name,\n    required this.email,\n    this.avatarUrl,\n    this.onTap,\n  });\n\n  final String name;\n  final String email;\n  final String? avatarUrl;\n  final VoidCallback? onTap;\n\n  @override\n  Widget build(BuildContext context) {\n    return Card(\n      elevation: 2,\n      shape: RoundedRectangleBorder(\n        borderRadius: BorderRadius.circular(12),\n      ),\n      child: InkWell(\n        onTap: onTap,\n        borderRadius: BorderRadius.circular(12),\n        child: Padding(\n          padding: const EdgeInsets.all(16),\n          child: Row(\n            children: [\n              CircleAvatar(\n                radius: 24,\n                backgroundImage: avatarUrl != null\n                    ? NetworkImage(avatarUrl!)\n                    : null,\n                child: avatarUrl == null\n                    ? Text(name[0].toUpperCase())\n                    : null,\n              ),\n              const SizedBox(width: 16),\n              Expanded(\n                child: Column(\n                  crossAxisAlignment: CrossAxisAlignment.start,\n                  children: [\n                    Text(\n                      name,\n                      style: const TextStyle(\n                        fontSize: 16,\n                        fontWeight: FontWeight.w600,\n                      ),\n                    ),\n                    const SizedBox(height: 4),\n                    Text(\n                      email,\n                      style: TextStyle(\n                        fontSize: 14,\n                        color: Colors.grey[600],\n                      ),\n                    ),\n                  ],\n                ),\n              ),\n              const Icon(Icons.chevron_right),\n            ],\n          ),\n        ),\n      ),\n    );\n  }\n}\n</artifact>\n\n## 使用方法\n\n```dart\nUserCard(\n  name: 'John Doe',\n  email: 'john@example.com',\n  avatarUrl: 'https://example.com/avatar.png',\n  onTap: () => print('Card tapped!'),\n)\n```\n\n这个组件支持：\n- ✅ 头像显示（支持网络图片或首字母）\n- ✅ 点击回调\n- ✅ 圆角卡片设计\n- ✅ Material Design 风格\n",
+      "responseSha256": "9e47a0360b97711e3bf34c5e354230b46667a3458598a408b442108de99bf7aa"
+    },
+    {
+      "id": "table",
+      "label": "📊 Table",
+      "description": "生成表格",
+      "prompt": "对比 Flutter 和 React Native",
+      "response": "\n<thinking>\n用户想要对比 Flutter 和 React Native。\n\n我需要从多个维度进行对比：\n- 性能\n- 开发体验\n- 社区生态\n- 学习曲线\n- 适用场景\n</thinking>\n\n# Flutter vs React Native 对比\n\n## 综合对比表\n\n| 特性 | Flutter | React Native |\n|------|---------|--------------|\n| **开发语言** | Dart | JavaScript/TypeScript |\n| **渲染引擎** | Skia (自绘) | 原生组件 |\n| **性能** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |\n| **热重载** | ✅ 极快 | ✅ 快 |\n| **UI 一致性** | ✅ 完全一致 | ⚠️ 平台差异 |\n| **原生功能** | 通过插件 | 通过桥接 |\n| **包大小** | ~5MB | ~7MB |\n| **学习曲线** | 中等 | 较低 (Web 背景) |\n\n## 详细分析\n\n### 🚀 性能\n\n| 场景 | Flutter | React Native |\n|------|:-------:|:------------:|\n| 列表滚动 | 60 FPS | 55-60 FPS |\n| 动画 | 流畅 | 可能卡顿 |\n| 启动时间 | 快 | 中等 |\n| 内存占用 | 较低 | 中等 |\n\n### 🛠️ 开发体验\n\n| 方面 | Flutter | React Native |\n|------|---------|--------------|\n| IDE 支持 | VS Code, Android Studio | VS Code, WebStorm |\n| 调试工具 | DevTools | Chrome DevTools |\n| 测试框架 | 内置完善 | Jest + Testing Library |\n| 文档质量 | 优秀 | 良好 |\n\n## 推荐场景\n\n**选择 Flutter:**\n- 需要高度一致的 UI\n- 性能要求高\n- 复杂动画需求\n- 新项目从零开始\n\n**选择 React Native:**\n- 团队有 Web 背景\n- 需要快速原型\n- 大量复用 Web 代码\n- 已有 React 生态\n\n---\n\n> 两者都是优秀的跨平台方案，选择取决于团队技术栈和项目需求。\n",
+      "responseSha256": "972e2ed2aec697fe4a05004857ceb6001836c95acff525e733f998fecc351ea1"
+    }
+  ],
+  "genericResponseTemplate": "\n<thinking>\n分析用户的问题: \"{{prompt}}\"\n\n这是一个通用回复，因为没有匹配到预设的快捷提示词。\n</thinking>\n\n# 回复\n\n您好！您的问题是: **{{prompt}}**\n\n这是一个模拟回复。要获得真实的 AI 回复，请：\n\n1. 点击右上角设置图标 ⚙️\n2. 输入您的 Qwen API Key\n3. 开启 \"使用真实 API\" 开关\n\n---\n\n您也可以尝试下方的 **快捷提示词** 来测试各种 AI 格式解析功能！\n"
+}
