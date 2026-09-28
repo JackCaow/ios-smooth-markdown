@@ -11,6 +11,8 @@ public struct SmoothMarkdownView: View {
     public let onImageTap: ((URL) -> Void)?
     /// Receives the original image source, alt text, and title, matching Flutter's image callback.
     public let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
+    /// Replaces the content of a safe image while retaining native tap and accessibility handling.
+    public let imageBuilder: ((String, String?, String?) -> AnyView)?
     public let enableHTML: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let onCodeCopy: ((String, String?) -> Void)?
@@ -23,6 +25,7 @@ public struct SmoothMarkdownView: View {
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
+        imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         enableHTML: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
@@ -34,6 +37,7 @@ public struct SmoothMarkdownView: View {
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onImageTapWithMetadata = onImageTapWithMetadata
+        self.imageBuilder = imageBuilder
         self.enableHTML = enableHTML
         self.codeBlockOptions = codeBlockOptions
         self.onCodeCopy = onCodeCopy
@@ -314,6 +318,15 @@ public struct SmoothMarkdownView: View {
         let height: CGFloat? = image.height.map { CGFloat($0) } ?? (inline ? 24 : nil)
         let resizableSVG = width != nil || height != nil
         guard let source = ImageSource.parse(image.source) else { return AnyView(SwiftUI.Text(label)) }
+        let tapURL: URL? = switch source {
+        case let .remote(url, _): url
+        case let .bundled(name, _): URL(string: name)
+        }
+        if let imageBuilder {
+            return accessibleImage(imageBuilder(image.source, image.alt, image.title)
+                .frame(width: width, height: height),
+                url: tapURL, image: image, label: label, inline: inline)
+        }
         switch source {
         case let .remote(url, svg: true):
             return accessibleImage(

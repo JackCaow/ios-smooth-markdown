@@ -6,6 +6,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
     public let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
+    public let imageBuilder: ((String, String?, String?) -> AnyView)?
     public let onError: ((Error) -> Void)?
     /// Called after the final chunk has been published to the reader.
     public let onComplete: ((String) -> Void)?
@@ -27,6 +28,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
+        imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil,
@@ -41,6 +43,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onImageTapWithMetadata = onImageTapWithMetadata
+        self.imageBuilder = imageBuilder
         self.onError = onError
         self.onComplete = onComplete
         self.codeBlockOptions = codeBlockOptions
@@ -53,6 +56,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public var body: some View {
         SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
                            onImageTapWithMetadata: onImageTapWithMetadata,
+                           imageBuilder: imageBuilder,
                            enableHTML: enableHTML, codeBlockOptions: codeBlockOptions,
                            onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins)
             .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {
