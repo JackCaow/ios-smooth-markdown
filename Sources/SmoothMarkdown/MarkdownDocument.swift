@@ -89,6 +89,18 @@ public struct MarkdownDocument: Equatable {
     public func toMarkdown() -> String { blocks.map { $0.leadingTrivia + $0.source }.joined() + trailingTrivia }
     public func blockById(_ id: String) -> MarkdownDocumentBlock? { blocks.first { $0.id == id } }
 
+    /// UTF-16 source range for one block, excluding its leading whitespace.
+    public func sourceRange(of id: String) -> NSRange? {
+        var offset = 0
+        for block in blocks {
+            offset += (block.leadingTrivia as NSString).length
+            let length = (block.source as NSString).length
+            if block.id == id { return NSRange(location: offset, length: length) }
+            offset += length
+        }
+        return nil
+    }
+
     public func replacingBlock(_ replacement: MarkdownDocumentBlock) -> MarkdownDocument {
         guard let index = blocks.firstIndex(where: { $0.id == replacement.id }) else { return self }
         var next = blocks
@@ -106,6 +118,18 @@ public struct MarkdownDocument: Equatable {
         let trivia = blocks.map(\.leadingTrivia)
         next = next.enumerated().map { position, item in
             .init(id: item.id, kind: item.kind, source: item.source, leadingTrivia: trivia[position])
+        }
+        return .init(blocks: next, trailingTrivia: trailingTrivia)
+    }
+
+    public func removingBlock(_ id: String) -> MarkdownDocument {
+        guard let index = blocks.firstIndex(where: { $0.id == id }) else { return self }
+        var next = blocks
+        let removed = next.remove(at: index)
+        if index == 0 && !next.isEmpty {
+            let first = next[0]
+            next[0] = .init(id: first.id, kind: first.kind, source: first.source,
+                            leadingTrivia: removed.leadingTrivia)
         }
         return .init(blocks: next, trailingTrivia: trailingTrivia)
     }

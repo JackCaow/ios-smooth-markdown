@@ -45,6 +45,17 @@ public final class MarkdownEditorController: ObservableObject {
         return true
     }
 
+    /// Removes a top-level block, including its separator, through source undo history.
+    @discardableResult
+    public func removeSemanticBlock(id: String) -> Bool {
+        let document = semanticDocument
+        guard document.blockById(id) != nil else { return false }
+        let updated = document.removingBlock(id).toMarkdown()
+        guard updated != text else { return false }
+        replaceRange(NSRange(location: 0, length: (text as NSString).length), with: updated, selectedRange: selection)
+        return true
+    }
+
     public func markSaved(_ saved: String? = nil) { savedText = saved ?? text }
     public func clearHistory() { undoStack.removeAll(); redoStack.removeAll() }
 
@@ -282,7 +293,7 @@ public final class MarkdownEditorController: ObservableObject {
     }
 }
 
-public enum MarkdownEditorMode: String, CaseIterable { case source, preview, split }
+public enum MarkdownEditorMode: String, CaseIterable { case source, formatted, preview, split }
 
 public enum MarkdownEditorCommand {
     case paragraph, bold, italic, strikethrough, inlineCode
