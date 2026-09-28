@@ -6,6 +6,11 @@ private let demoMarkdown = """
 
 A **native** renderer with *inline formatting* and [links](https://github.com/JackCaow/flutter-smooth-markdown).
 
+```swift
+let message = "A long code line stays on one line and scrolls horizontally instead of wrapping inside the code panel."
+print(message) // Copy this block
+```
+
 <details>
 <summary>Tap to expand **features**</summary>
 Hidden **formatted** content.

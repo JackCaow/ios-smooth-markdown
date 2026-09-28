@@ -9,6 +9,8 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let streamID: String?
     public let throttleMillis: Int64
     public let enableHTML: Bool
+    public let codeBlockOptions: CodeBlockOptions
+    public let onCodeCopy: ((String, String?) -> Void)?
 
     @StateObject private var accumulator: StreamMarkdownAccumulator
 
@@ -19,6 +21,8 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         enableHTML: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
+        codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        onCodeCopy: ((String, String?) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil
     ) {
         self.chunks = chunks
@@ -28,11 +32,14 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onError = onError
+        self.codeBlockOptions = codeBlockOptions
+        self.onCodeCopy = onCodeCopy
         _accumulator = StateObject(wrappedValue: StreamMarkdownAccumulator(throttleMillis: throttleMillis, enableHTML: enableHTML))
     }
 
     public var body: some View {
-        SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap, enableHTML: enableHTML)
+        SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
+                           enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, onCodeCopy: onCodeCopy)
             .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis, enableHTML: enableHTML)) {
                 accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
                 do {

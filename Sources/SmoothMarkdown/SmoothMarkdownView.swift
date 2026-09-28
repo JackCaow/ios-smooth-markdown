@@ -8,17 +8,23 @@ public struct SmoothMarkdownView: View {
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
     public let enableHTML: Bool
+    public let codeBlockOptions: CodeBlockOptions
+    public let onCodeCopy: ((String, String?) -> Void)?
 
     public init(
         markdown: String,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
-        enableHTML: Bool = false
+        enableHTML: Bool = false,
+        codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        onCodeCopy: ((String, String?) -> Void)? = nil
     ) {
         self.markdown = markdown
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.enableHTML = enableHTML
+        self.codeBlockOptions = codeBlockOptions
+        self.onCodeCopy = onCodeCopy
     }
 
     public var body: some View {
@@ -114,17 +120,8 @@ public struct SmoothMarkdownView: View {
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
             }
         } else if let code = node as? CodeBlock {
-            VStack(alignment: .leading, spacing: 6) {
-                if let language = code.language, !language.isEmpty {
-                    SwiftUI.Text(language).font(.caption).foregroundStyle(.secondary)
-                }
-                SwiftUI.Text(code.code)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            EnhancedCodeBlockView(code: code.code, language: code.language,
+                                  options: codeBlockOptions, onCopy: onCodeCopy)
         } else if let quote = node as? BlockQuote {
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in
