@@ -87,7 +87,7 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Markdown Demo')),
       body: SmoothMarkdown(
-        data: '# Hello **World**\\n\\nThis is *amazing*!',
+        data: '# Hello **World**\n\nThis is *amazing*!',
         useEnhancedComponents: true,
         styleSheet: MarkdownStyleSheet.github(),
       ),

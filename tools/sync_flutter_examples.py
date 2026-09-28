@@ -17,6 +17,21 @@ IDS = (
     "links-images", "enhanced-ui", "theme-showcase", "details-summary", "complex-example",
 )
 PATTERN = re.compile(r"MarkdownExample\(\s*title: '([^']+)',\s*markdown: '''(.*?)''',\s*\)", re.S)
+ESCAPES = {"$": "$", "\\": "\\"}
+
+
+def dart_string_value(source: str) -> str:
+    """Convert escapes used by Flutter's non-raw triple-quoted samples."""
+    if re.search(r"(?<!\\)\$\{", source):
+        raise ValueError("Interpolated Flutter example requires manual extraction")
+
+    def unescape(match: re.Match[str]) -> str:
+        code = match.group(1)
+        if code not in ESCAPES:
+            raise ValueError(f"Unexpected Dart escape in example: \\{code}")
+        return ESCAPES[code]
+
+    return re.sub(r"\\(.)", unescape, source, flags=re.S)
 
 
 def main() -> None:
@@ -35,7 +50,7 @@ def main() -> None:
     entries = []
     files: dict[Path, bytes] = {}
     for identifier, (title, markdown) in zip(IDS, examples):
-        content = markdown.encode("utf-8")
+        content = dart_string_value(markdown).encode("utf-8")
         filename = identifier + ".md"
         files[output / filename] = content
         entries.append({"id": identifier, "title": title, "file": filename,
