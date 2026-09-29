@@ -93,6 +93,10 @@ public struct MarkdownStyleSheet {
     public var blockquoteDecoration: MarkdownBlockquoteDecoration?
     /// Insets inside the blockquote background and border.
     public var blockquotePadding: EdgeInsets
+    /// Outer and inner table rules. When set, this takes precedence over `tableBorderColor`.
+    /// An empty border draws no rules, matching Flutter's nullable `tableBorder`.
+    public var tableBorder: MarkdownTableBorder?
+    /// Legacy all-sides table color; used as a 1pt grid when `tableBorder` is nil.
     public var tableBorderColor: Color?
     /// Background behind the header row, matching Flutter's tableHeaderDecoration color.
     public var tableHeaderBackgroundColor: Color?
@@ -159,7 +163,8 @@ public struct MarkdownStyleSheet {
         italicStyle: MarkdownInlineTextStyle? = nil,
         strikethroughStyle: MarkdownInlineTextStyle? = nil,
         linkStyle: MarkdownInlineTextStyle? = nil,
-        inlineCodeStyle: MarkdownInlineTextStyle? = nil
+        inlineCodeStyle: MarkdownInlineTextStyle? = nil,
+        tableBorder: MarkdownTableBorder? = nil
     ) {
         self.backgroundColor = backgroundColor
         self.textColor = textColor
@@ -185,6 +190,7 @@ public struct MarkdownStyleSheet {
                                            bottom: max(0, blockquotePadding.bottom),
                                            trailing: max(0, blockquotePadding.trailing))
         self.tableBorderColor = tableBorderColor
+        self.tableBorder = tableBorder
         self.tableHeaderBackgroundColor = tableHeaderBackgroundColor
         self.ruleColor = ruleColor
         self.horizontalRuleThickness = max(0, horizontalRuleThickness)
@@ -296,6 +302,11 @@ public struct MarkdownStyleSheet {
     internal var resolvedCodeBlockPadding: EdgeInsets {
         codeBlockPadding ?? EdgeInsets(top: codePadding, leading: codePadding,
                                        bottom: codePadding, trailing: codePadding)
+    }
+
+    internal var resolvedTableBorder: MarkdownTableBorder? {
+        if let tableBorder { return tableBorder }
+        return tableBorderColor.map { .all(color: $0) }
     }
 
     internal func resolvedInlineStyle(bold: Bool, italic: Bool, strike: Bool,
