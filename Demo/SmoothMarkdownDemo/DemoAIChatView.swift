@@ -115,10 +115,11 @@ struct DemoAIChatView: View {
     @State private var replyStreams = DemoChatReplyStreams()
     @State private var scrollRevision = 0
     @State private var showSettings = false
+    @State private var showHelp = false
     @State private var source: AIChatSource?
     @State private var apiKey = ProcessInfo.processInfo.environment["QWEN_API_KEY"] ?? ""
     @State private var deepSeekAPIKey = ProcessInfo.processInfo.environment["DEEPSEEK_API_KEY"] ?? ""
-    @State private var selectedProvider: AIChatProvider = .qwen
+    @State private var selectedProvider: AIChatProvider = .deepSeek
     @State private var selectedModel = "qwen3-235b-a22b"
     @State private var selectedDeepSeekModel = "deepseek-flash"
     @State private var enableThinking = true
@@ -160,8 +161,6 @@ struct DemoAIChatView: View {
         Group {
             if let fixture {
                 VStack(spacing: 0) {
-                    titleBar
-                    quickPrompts(fixture)
                     ScrollViewReader { reader in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 8) {
@@ -183,13 +182,9 @@ struct DemoAIChatView: View {
                     composer
                 }
                 .background(backgroundColor)
-                .onAppear {
-                    if messages.isEmpty {
-                        messages = [.init(content: fixture.welcome, isUser: false)]
-                    }
-                }
                 .onDisappear { stopStreaming() }
                 .sheet(isPresented: $showSettings) { settingsSheet }
+                .sheet(isPresented: $showHelp) { helpSheet(fixture.welcome) }
                 .sheet(item: $source) { item in sourceSheet(item.markdown) }
             } else {
                 ContentUnavailableView("AI Chat unavailable", systemImage: "doc.questionmark",
@@ -198,88 +193,51 @@ struct DemoAIChatView: View {
             }
         }
         .preferredColorScheme(isDark ? .dark : .light)
-    }
-
-    private var titleBar: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                titleIdentity
-                Spacer(minLength: 0)
-                actionButtons
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                titleIdentity
-                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(surfaceColor)
-    }
-
-    private var titleIdentity: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "sparkles")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 36, height: 36)
-                .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 12))
-            VStack(alignment: .leading, spacing: 2) {
-                Text("AI Chat Demo").font(DemoTypography.barTitle)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                VStack(spacing: 0) {
+                    Text(selectedProvider.rawValue)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
                 Text(modeStatus)
-                    .font(DemoTypography.metadata)
-                    .foregroundStyle(isStreaming ? .blue : liveAPIAvailable ? .green : .orange)
-                    .accessibilityIdentifier("ai-chat-status")
-            }
-            .layoutPriority(1)
-        }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
-            Button {
-                newChat()
-            } label: {
-                Image(systemName: "square.and.pencil")
-            }
-            .accessibilityLabel("新对话")
-            .accessibilityIdentifier("ai-chat-new")
-            Button {
-                darkOverride = !isDark
-            } label: {
-                Image(systemName: isDark ? "sun.max" : "moon")
-            }
-            .accessibilityLabel("切换主题")
-            .accessibilityIdentifier("ai-chat-theme")
-            Button {
-                showSettings = true
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .accessibilityLabel("API 设置")
-            .accessibilityIdentifier("ai-chat-settings")
-        }
-        .labelStyle(.iconOnly)
-    }
-
-    private func quickPrompts(_ fixture: AIChatFixture) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(fixture.quickPrompts) { prompt in
-                    Button(prompt.label) { send(prompt.prompt) }
-                        .buttonStyle(.bordered)
-                        .font(DemoTypography.metadata)
-                        .disabled(isStreaming)
-                        .accessibilityHint(prompt.description)
-                        .accessibilityIdentifier("ai-chat-prompt-\(prompt.id)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .accessibilityIdentifier("ai-chat-status")
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Menu {
+                    Section("快捷提示词") {
+                        ForEach(fixture?.quickPrompts ?? []) { prompt in
+                            Button(prompt.label) { send(prompt.prompt) }
+                                .disabled(isStreaming)
+                                .accessibilityHint(prompt.description)
+                                .accessibilityIdentifier("ai-chat-prompt-\(prompt.id)")
+                        }
+                    }
+                    Button("新对话", systemImage: "square.and.pencil") { newChat() }
+                        .accessibilityIdentifier("ai-chat-new")
+                    Button("切换主题", systemImage: isDark ? "sun.max" : "moon") {
+                        darkOverride = !isDark
+                    }
+                    .accessibilityIdentifier("ai-chat-theme")
+                    Button("使用说明", systemImage: "questionmark.circle") { showHelp = true }
+                        .accessibilityIdentifier("ai-chat-help")
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .accessibilityLabel("聊天操作")
+                .accessibilityIdentifier("ai-chat-actions")
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .accessibilityLabel("API 设置")
+                .accessibilityIdentifier("ai-chat-settings")
+            }
         }
-        .background(surfaceColor)
     }
 
     private func bubble(_ message: AIChatMessage) -> some View {
@@ -459,6 +417,24 @@ struct DemoAIChatView: View {
         }
     }
 
+    private func helpSheet(_ markdown: String) -> some View {
+        NavigationStack {
+            ScrollView {
+                SmoothMarkdownView(markdown: markdown, styleSheet: bubbleStyle(isUser: false),
+                                   plugins: plugins, scrollable: false)
+                    .padding(16)
+                    .accessibilityIdentifier("ai-chat-help-content")
+            }
+            .navigationTitle("使用说明")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") { showHelp = false }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
     private func send(_ text: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !isStreaming, let fixture else { return }
@@ -551,9 +527,7 @@ struct DemoAIChatView: View {
         input = ""
         inputFocused = false
         source = nil
-        if let fixture {
-            messages = [.init(content: fixture.welcome, isUser: false)]
-        }
+        messages = []
         scrollRevision += 1
     }
 

@@ -13,9 +13,9 @@ final class DemoExamplesUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         choose("language-en", in: app)
-        XCTAssertTrue(app.staticTexts["demo-current-title"].waitForExistence(timeout: 10))
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
-        XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("Default Light"))
+        XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
+        XCTAssertTrue(selectedTheme(in: app).contains("Default Light"))
+        XCTAssertFalse(app.staticTexts["demo-current-title"].exists)
 
         app.buttons["view-markdown-source"].tap()
         XCTAssertTrue(app.navigationBars["Markdown Source"].waitForExistence(timeout: 5))
@@ -24,18 +24,18 @@ final class DemoExamplesUITests: XCTestCase {
 
         for (id, title) in examples {
             choose("example-\(id)", in: app)
-            XCTAssertEqual(app.staticTexts["demo-current-title"].label, title)
+            XCTAssertEqual(selectedExample(in: app), title)
             XCTAssertFalse(app.staticTexts["Examples unavailable"].exists)
             XCTAssertTrue(app.buttons["view-markdown-source"].exists)
         }
 
         app.buttons["theme-menu"].tap()
         app.buttons["VS Code Dark"].tap()
-        XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("VS Code Dark"))
+        XCTAssertTrue(selectedTheme(in: app).contains("VS Code Dark"))
         app.buttons["open-demo-editor"].tap()
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
         app.buttons["demo-editor-back"].tap()
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Complex Example")
+        XCTAssertEqual(selectedExample(in: app), "Complex Example")
     }
 
     func testSourceSheetClosesBeforeChangingThemeAndOpeningEditor() {
@@ -57,6 +57,27 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
     }
 
+    func testHomeAndFeatureHaveNoSecondaryHeader() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
+        XCTAssertFalse(app.staticTexts["demo-current-title"].exists)
+        // Let the physical device's app-launch transition finish before taking visual evidence.
+        Thread.sleep(forTimeInterval: 2)
+        let homeScreenshot = XCTAttachment(screenshot: app.screenshot())
+        homeScreenshot.name = "iOS Demo home without secondary header"
+        homeScreenshot.lifetime = .keepAlways
+        add(homeScreenshot)
+
+        choose("feature-math", in: app)
+        XCTAssertTrue(app.navigationBars["Math Formula Demo"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["demo-current-title"].exists)
+        let featureScreenshot = XCTAttachment(screenshot: app.screenshot())
+        featureScreenshot.name = "iOS Demo feature without secondary header"
+        featureScreenshot.lifetime = .keepAlways
+        add(featureScreenshot)
+    }
+
     func testDrawerEditorEntryOpensEditor() {
         let app = XCUIApplication()
         app.launch()
@@ -74,7 +95,7 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["editor-find-open"].exists)
         app.buttons["demo-editor-back"].tap()
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
+        XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
     }
 
     func testFlutterSpecialPagesAndNativeExtrasOpen() {
@@ -91,15 +112,14 @@ final class DemoExamplesUITests: XCTestCase {
         ]
         for (id, title) in features {
             choose("feature-\(id)", in: app)
-            XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
-                .matching(NSPredicate(format: "label == %@", title))
-                .firstMatch.exists)
+            XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.staticTexts["demo-current-title"].exists)
             XCTAssertTrue(app.buttons["demo-feature-back"].exists)
             app.buttons["demo-feature-back"].tap()
-            XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Basic Formatting")
+            XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
         }
         choose("language-en", in: app)
-        XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("English"))
+        XCTAssertTrue(selectedTheme(in: app).contains("English"))
     }
 
     func testMermaidGalleryUsesFlutterFortyExamples() {
@@ -136,13 +156,11 @@ final class DemoExamplesUITests: XCTestCase {
         app.buttons["VS Code Dark"].tap()
 
         choose("feature-math", in: app)
-        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
-            .matching(NSPredicate(format: "label == %@", "Math Formula Demo"))
-            .firstMatch.exists)
+        XCTAssertTrue(app.navigationBars["Math Formula Demo"].waitForExistence(timeout: 5))
         app.buttons["demo-feature-back"].tap()
 
-        XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Headers")
-        XCTAssertTrue(app.staticTexts["demo-current-theme"].label.contains("VS Code Dark"))
+        XCTAssertEqual(selectedExample(in: app), "Headers")
+        XCTAssertTrue(selectedTheme(in: app).contains("VS Code Dark"))
         app.buttons["view-markdown-source"].tap()
         XCTAssertTrue(app.staticTexts["markdown-source-content"].label.contains("# Header 1"))
     }
@@ -151,11 +169,24 @@ final class DemoExamplesUITests: XCTestCase {
         let openExamples = app.buttons["open-examples"]
         XCTAssertTrue(openExamples.waitForExistence(timeout: 30))
         openExamples.tap()
+        let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+        XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
         let entry = app.buttons[identifier]
-        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
-        XCTAssertTrue(entry.exists, "Missing navigation entry: \(identifier)")
-        entry.tap()
-        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
-            .firstMatch.waitForExistence(timeout: 5))
+        for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
+        XCTAssertTrue(entry.isHittable, "Missing navigation entry: \(identifier)")
+        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        if identifier.hasPrefix("feature-") {
+            XCTAssertTrue(app.buttons["demo-feature-back"].waitForExistence(timeout: 5))
+        } else {
+            XCTAssertTrue(openExamples.waitForExistence(timeout: 5))
+        }
+    }
+
+    private func selectedExample(in app: XCUIApplication) -> String {
+        (app.buttons["open-examples"].value as? String) ?? ""
+    }
+
+    private func selectedTheme(in app: XCUIApplication) -> String {
+        (app.buttons["theme-menu"].value as? String) ?? ""
     }
 }
