@@ -153,6 +153,7 @@ struct DemoHomeView: View {
             }
             .sheet(isPresented: $showSource) {
                 DemoSourceSheet(markdown: markdown ?? "", language: language)
+                    .presentationDetents([.medium, .large])
             }
             .navigationDestination(for: DemoRoute.self) { route in
                 switch route {
@@ -460,10 +461,12 @@ private struct DemoSourceSheet: View {
         NavigationStack {
             ScrollView {
                 Text(markdown)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: 600, alignment: .leading)
+                    .frame(maxWidth: .infinity)
                     .textSelection(.enabled)
-                    .padding()
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 16)
                     .accessibilityIdentifier("markdown-source-content")
             }
             .navigationTitle(DemoLocalizations.text("source_title", in: language))
