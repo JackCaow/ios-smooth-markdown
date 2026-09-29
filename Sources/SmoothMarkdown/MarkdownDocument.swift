@@ -8,6 +8,8 @@ public enum MarkdownSemanticBlock: Equatable {
     case table(MarkdownSourceTable)
     case list(MarkdownSourceList)
     case horizontalRule
+    /// An opt-in top-level block parsed by a registered host plugin.
+    case plugin(id: String, match: BlockPluginMatch)
     case raw
 }
 
@@ -35,6 +37,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
                 ([item.content] + item.continuations.map(\.content)).joined(separator: "\n")
             }.joined(separator: "\n")
         case .horizontalRule: ""
+        case let .plugin(_, match): match.content
         case .raw: source
         }
     }
@@ -66,7 +69,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
             let rendered = opener + content + (content.hasSuffix(newline) || content.isEmpty ? "" : newline) + closer
             return validated(.init(id: id, kind: .fencedCode(fence: fence, info: info, code: content),
                                    source: rendered, leadingTrivia: leadingTrivia))
-        case .table, .list, .horizontalRule, .raw: return nil
+        case .table, .list, .horizontalRule, .plugin, .raw: return nil
         }
     }
 

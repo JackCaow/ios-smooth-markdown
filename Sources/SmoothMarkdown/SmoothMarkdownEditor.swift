@@ -232,9 +232,20 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private var previewPlugins: ParserPluginRegistry? {
-        guard enableWikilinks else { return nil }
-        let registry = ParserPluginRegistry.builtIns()
-        try? registry.register(WikilinkPlugin(onTapWikilink: onTapWikilink))
+        let registry = controller.parserPlugins ?? ParserPluginRegistry()
+        if enableWikilinks {
+            let builtIns = ParserPluginRegistry.builtIns()
+            for plugin in builtIns.blockPlugins where registry.getBlockPlugin(plugin.id) == nil {
+                try? registry.register(plugin)
+            }
+            for plugin in builtIns.inlinePlugins where registry.getInlinePlugin(plugin.id) == nil {
+                try? registry.register(plugin)
+            }
+            if registry.getInlinePlugin("wikilink") == nil {
+                try? registry.register(WikilinkPlugin(onTapWikilink: onTapWikilink))
+            }
+        }
+        guard !registry.blockPlugins.isEmpty || !registry.inlinePlugins.isEmpty else { return nil }
         return registry
     }
 
@@ -554,7 +565,7 @@ private struct FormattedBlockRow: View {
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
-            case .raw:
+            case .plugin, .raw:
                 blockLabel("Source only")
                 Text(block.source.trimmingCharacters(in: .whitespacesAndNewlines))
                     .font(.system(.caption, design: .monospaced))
@@ -588,7 +599,15 @@ private struct FormattedBlockRow: View {
     }
 
     private var customBlockView: AnyView? {
-        guard customBlockMatcher?(block) == true else { return nil }
+        let matched: Bool
+        if let customBlockMatcher {
+            matched = customBlockMatcher(block)
+        } else if case .plugin = block.kind {
+            matched = true
+        } else {
+            matched = false
+        }
+        guard matched else { return nil }
         let expectedText = customBlockEditing ? (customBlockExpectedText ?? "") : controller.text
         let context = MarkdownEditorCustomBlockContext(
             blockID: block.id, blockKind: block.kind, markdown: block.source,

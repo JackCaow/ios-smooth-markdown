@@ -2,7 +2,12 @@ import Foundation
 
 /// Imports Markdown without normalizing untouched syntax, whitespace, or line endings.
 public struct MarkdownDocumentCodec {
-    public init() {}
+    private let plugins: ParserPluginRegistry?
+
+    /// Custom block syntax is recognized only when its registry is explicitly supplied.
+    public init(plugins: ParserPluginRegistry? = nil) {
+        self.plugins = plugins?.copy()
+    }
 
     public func parse(_ markdown: String) -> MarkdownDocument {
         guard !markdown.isEmpty else { return .init(blocks: []) }
@@ -11,6 +16,7 @@ public struct MarkdownDocumentCodec {
             SourceLine(text: component.hasSuffix("\r") ? String(component.dropLast()) : component,
                        raw: component + (index < components.count - 1 ? "\n" : ""))
         }
+        let pluginLines = lines.map(\.text)
         var blocks: [MarkdownDocumentBlock] = []
         var pendingTrivia = ""
         var index = 0
@@ -25,10 +31,14 @@ public struct MarkdownDocumentCodec {
                 lines.dropFirst().contains { $0.text.trimmingCharacters(in: .whitespaces) == "---" }
             let classification: Classification = isFrontmatter ? .raw : classify(lines[index].text)
             let kind: MarkdownSemanticBlock
-            if !isFrontmatter, index + 1 < lines.count,
+            if !isFrontmatter, let pluginBlock = pluginBlock(at: index, lines: lines, pluginLines: pluginLines) {
+                index += pluginBlock.match.linesConsumed
+                kind = .plugin(id: pluginBlock.id, match: pluginBlock.match)
+            } else if !isFrontmatter, index + 1 < lines.count,
                MarkdownSourceTable.parse(lines[index...index + 1].map(\.text).joined(separator: "\n")) != nil {
                 index += 2
-                while index < lines.count, !lines[index].isBlank, isTableBodyLine(lines[index].text) {
+                while index < lines.count, !lines[index].isBlank, isTableBodyLine(lines[index].text),
+                    pluginBlock(at: index, lines: lines, pluginLines: pluginLines) == nil {
                     index += 1
                 }
                 let tableSource = lines[start..<index].map(\.text).joined(separator: "\n")
@@ -51,7 +61,8 @@ public struct MarkdownDocumentCodec {
                 index += 1
             case .list:
                 index += 1
-                while index < lines.count && !lines[index].isBlank && !isDefiniteBreak(lines[index].text) { index += 1 }
+                while index < lines.count && !lines[index].isBlank &&
+                    !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
                 let source = lines[start..<index].map(\.raw).joined()
                 kind = MarkdownSourceList.parse(source).map(MarkdownSemanticBlock.list) ?? .raw
             case .raw:
@@ -63,12 +74,14 @@ public struct MarkdownDocumentCodec {
                         if closing { break }
                     }
                 } else {
-                    while index < lines.count && !lines[index].isBlank && !isDefiniteBreak(lines[index].text) { index += 1 }
+                    while index < lines.count && !lines[index].isBlank &&
+                        !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
                 }
                 kind = .raw
             case .paragraph:
                 index += 1
-                while index < lines.count && !lines[index].isBlank && !isNewBlock(lines[index].text) { index += 1 }
+                while index < lines.count && !lines[index].isBlank &&
+                    !isNewBlock(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
                 let source = lines[start..<index].map(\.raw).joined()
                 kind = .paragraph(markdown: stripFinalLineEnding(source))
                 }
@@ -107,7 +120,8 @@ public struct MarkdownDocumentCodec {
         return .paragraph
     }
 
-    private func isNewBlock(_ line: String) -> Bool {
+    private func isNewBlock(_ line: String, at index: Int, lines: [SourceLine], pluginLines: [String]) -> Bool {
+        if pluginBlock(at: index, lines: lines, pluginLines: pluginLines) != nil { return true }
         switch classify(line) {
         case .paragraph: false
         default: true
@@ -120,11 +134,27 @@ public struct MarkdownDocumentCodec {
         return false
     }
 
-    private func isDefiniteBreak(_ line: String) -> Bool {
+    private func isDefiniteBreak(_ line: String, at index: Int, lines: [SourceLine], pluginLines: [String]) -> Bool {
+        if pluginBlock(at: index, lines: lines, pluginLines: pluginLines) != nil { return true }
         switch classify(line) {
         case .heading, .fence, .horizontalRule: true
         case .paragraph, .list, .raw: false
         }
+    }
+
+    /// Keep the original source in the semantic match; plugins parse normalized lines,
+    /// while editor selections and replacements must retain CRLF and exact trivia.
+    private func pluginBlock(at index: Int, lines: [SourceLine], pluginLines: [String])
+        -> (id: String, match: BlockPluginMatch)? {
+        guard let plugins, !lines[index].isBlank else { return nil }
+        for plugin in plugins.findBlockPlugins(pluginLines[index], lines: pluginLines, at: index) {
+            guard let parsed = plugin.parse(pluginLines, at: index), parsed.linesConsumed > 0,
+                  parsed.linesConsumed <= lines.count - index else { continue }
+            let source = lines[index..<(index + parsed.linesConsumed)].map(\.raw).joined()
+            return (plugin.id, BlockPluginMatch(linesConsumed: parsed.linesConsumed, source: source,
+                                                content: parsed.content, attributes: parsed.attributes))
+        }
+        return nil
     }
 
     private func isRule(_ trimmed: String) -> Bool {

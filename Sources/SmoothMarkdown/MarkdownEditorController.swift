@@ -24,16 +24,18 @@ public final class MarkdownEditorController: ObservableObject {
         let pendingListParagraph: PendingListParagraph?
     }
     private let historyLimit: Int
+    private let plugins: ParserPluginRegistry?
     private var undoStack: [Snapshot] = []
     private var redoStack: [Snapshot] = []
     private var transactionDepth = 0
     private var transactionBefore: Snapshot?
 
-    public init(text: String = "", historyLimit: Int = 100) {
+    public init(text: String = "", historyLimit: Int = 100, plugins: ParserPluginRegistry? = nil) {
         self.text = text
         self.selection = NSRange(location: (text as NSString).length, length: 0)
         self.savedText = text
         self.historyLimit = max(0, historyLimit)
+        self.plugins = plugins?.copy()
     }
 
     public var isDirty: Bool { text != savedText }
@@ -42,7 +44,10 @@ public final class MarkdownEditorController: ObservableObject {
     public var selectedText: String { (text as NSString).substring(with: normalizedSelection()) }
 
     /// A source-preserving semantic snapshot for supported top-level blocks.
-    public var semanticDocument: MarkdownDocument { MarkdownDocumentCodec().parse(text) }
+    public var semanticDocument: MarkdownDocument { codec.parse(text) }
+    /// A snapshot of the editor's opt-in syntax registry for its preview.
+    public var parserPlugins: ParserPluginRegistry? { plugins?.copy() }
+    private var codec: MarkdownDocumentCodec { MarkdownDocumentCodec(plugins: plugins) }
 
     /// Replaces one host-recognized block only while the source snapshot that
     /// produced its editor context is still current. The replacement must
@@ -52,7 +57,7 @@ public final class MarkdownEditorController: ObservableObject {
         guard text == expectedText else { return false }
         let document = semanticDocument
         guard let original = document.blockById(id) else { return false }
-        let parsed = MarkdownDocumentCodec().parse(markdown)
+        let parsed = codec.parse(markdown)
         guard parsed.blocks.count == 1, parsed.trailingTrivia.isEmpty,
               parsed.blocks[0].leadingTrivia.isEmpty, parsed.blocks[0].source == markdown else { return false }
         let replacement = MarkdownDocumentBlock(id: id, kind: parsed.blocks[0].kind,
@@ -76,7 +81,7 @@ public final class MarkdownEditorController: ObservableObject {
     private func isValidCustomBlockDocument(_ document: MarkdownDocument,
                                             matching expectedBlocks: [MarkdownDocumentBlock]) -> Bool {
         let source = document.toMarkdown()
-        let reparsed = MarkdownDocumentCodec().parse(source)
+        let reparsed = codec.parse(source)
         return reparsed.toMarkdown() == source && reparsed.blocks.count == expectedBlocks.count &&
             zip(reparsed.blocks, expectedBlocks).allSatisfy { parsed, expected in
                 parsed.kind == expected.kind && parsed.source == expected.source
@@ -118,7 +123,7 @@ public final class MarkdownEditorController: ObservableObject {
         for block in document.blocks[range] {
             switch block.kind {
             case .paragraph, .heading, .fencedCode, .horizontalRule: break
-            case .list, .table, .raw: return nil
+            case .list, .table, .plugin, .raw: return nil
             }
         }
         var kept = document.blocks.enumerated().compactMap { range.contains($0.offset) ? nil : $0.element }
@@ -129,7 +134,7 @@ public final class MarkdownEditorController: ObservableObject {
         }
         let updated = kept.isEmpty ? "" : MarkdownDocument(blocks: kept,
                                                                trailingTrivia: document.trailingTrivia).toMarkdown()
-        let reparsed = MarkdownDocumentCodec().parse(updated)
+        let reparsed = codec.parse(updated)
         guard reparsed.toMarkdown() == updated, reparsed.blocks.count == kept.count,
               zip(reparsed.blocks, kept).allSatisfy({ $0.0.kind == $0.1.kind && $0.0.source == $0.1.source }) else {
             return nil
@@ -154,7 +159,7 @@ public final class MarkdownEditorController: ObservableObject {
         guard let block = document.blockById(id), let sourceRange = document.sourceRange(of: id) else { return nil }
         switch block.kind {
         case .paragraph, .heading: break
-        case .fencedCode, .table, .list, .horizontalRule, .raw: return nil
+        case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
         }
         let oldBody = block.plainText
         guard let edit = MarkdownInlineMarkEditor.apply(mark, to: oldBody, selection: selection),
@@ -628,7 +633,7 @@ public final class MarkdownEditorController: ObservableObject {
               let blockRange = semanticDocument.sourceRange(of: id) else { return nil }
         switch block.kind {
         case .paragraph, .heading: break
-        case .fencedCode, .table, .list, .horizontalRule, .raw: return nil
+        case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
         }
         let body = block.plainText
         guard let match = WikilinkTrigger.match(in: body, cursor: selection.location) else { return nil }
