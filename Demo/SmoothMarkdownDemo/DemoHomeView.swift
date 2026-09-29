@@ -229,9 +229,10 @@ struct DemoHomeView: View {
     }
 
     private func headerIdentity(title: String, icon: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
             Image(systemName: icon)
                 .font(.system(size: 21))
+                .frame(width: 28)
                 .accessibilityHidden(true)
             Text(title)
                 .font(DemoTypography.pageTitle)
