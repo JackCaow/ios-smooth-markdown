@@ -110,5 +110,41 @@ final class MarkdownTypographyTests: XCTestCase {
         XCTAssertEqual(before, after, accuracy: 1)
         XCTAssertGreaterThanOrEqual(after + 1, native.layoutManager.usedRect(for: native.textContainer).maxY)
     }
+
+    func testReaderLineHeightsAndInlineCodeWrappingFollowLightStyle() {
+        let source = """
+        # 🚀 完整 Markdown 功能展示
+
+        This is a paragraph with `var x = 42;` inline code.
+        """
+        let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
+                                                       enableHTML: false, plugins: nil)!
+        let reader = ReaderSelectionTextView(document: document, styleSheet: .light(),
+                                              onLinkTap: nil, onTextLongPress: nil,
+                                              selectable: true, onCharacterTap: nil)
+        let text = reader.attributedContent(traits: MarkdownTypography.traits(for: .large)).text
+        let sourceText = text.string as NSString
+        let titleRange = sourceText.range(of: "完整 Markdown")
+        let bodyRange = sourceText.range(of: "This is a paragraph")
+        let codeRange = sourceText.range(of: "var\u{00A0}x\u{00A0}=\u{00A0}42;")
+        guard codeRange.location != NSNotFound else { return XCTFail("Inline code lost its source text") }
+        let titleStyle = text.attribute(.paragraphStyle, at: titleRange.location,
+                                        effectiveRange: nil) as? NSParagraphStyle
+        let bodyStyle = text.attribute(.paragraphStyle, at: bodyRange.location,
+                                       effectiveRange: nil) as? NSParagraphStyle
+        let titleFont = text.attribute(.font, at: titleRange.location, effectiveRange: nil) as? UIFont
+        let bodyFont = text.attribute(.font, at: bodyRange.location, effectiveRange: nil) as? UIFont
+        let codeFont = text.attribute(.font, at: codeRange.location, effectiveRange: nil) as? UIFont
+        XCTAssertEqual(titleStyle?.minimumLineHeight ?? 0, (titleFont?.pointSize ?? 0) * 1.3,
+                       accuracy: 0.1)
+        XCTAssertEqual(bodyStyle?.minimumLineHeight ?? 0, (bodyFont?.pointSize ?? 0) * 1.5,
+                       accuracy: 0.1)
+        XCTAssertEqual(titleStyle?.lineBreakStrategy, .pushOut)
+        XCTAssertEqual(codeFont?.pointSize ?? 0, 14, accuracy: 0.1)
+        let native = QuoteTextView(usingTextLayoutManager: false)
+        native.attributedText = text
+        XCTAssertEqual(native.transformedCopyText(in: codeRange), "var x = 42;")
+        XCTAssertNil(native.transformedCopyText(in: bodyRange))
+    }
 }
 #endif

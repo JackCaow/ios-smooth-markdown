@@ -233,7 +233,8 @@ public struct MarkdownStyleSheet {
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false,
-             codeBlockDecoration: .init(borderColor: rgb(0xE0E0E0), borderWidth: 1, cornerRadius: 4))
+             codeBlockDecoration: .init(borderColor: rgb(0xE0E0E0), borderWidth: 1, cornerRadius: 4),
+             inlineCodeStyle: .init(fontSize: 14))
     }
 
     public static func dark() -> Self {
@@ -246,7 +247,8 @@ public struct MarkdownStyleSheet {
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true,
-             codeBlockDecoration: .init(borderColor: rgb(0x616161), borderWidth: 1, cornerRadius: 4))
+             codeBlockDecoration: .init(borderColor: rgb(0x616161), borderWidth: 1, cornerRadius: 4),
+             inlineCodeStyle: .init(fontSize: 14))
     }
 
     public static func github(dark: Bool = false) -> Self {

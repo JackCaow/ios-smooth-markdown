@@ -2,6 +2,8 @@
 import SwiftUI
 import UIKit
 
+private let codeSpaceAttribute = NSAttributedString.Key("SmoothMarkdownCodeSpace")
+
 /// A single read-only UITextView gives adjacent Markdown blocks one native selection range.
 @available(iOS 17.0, *)
 struct ReaderSelectionTextView: UIViewRepresentable {
@@ -258,18 +260,25 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 paragraph.paragraphSpacingBefore += 8
                 paragraph.paragraphSpacing += 10
             }
-            paragraph.lineSpacing = UIFontMetrics(forTextStyle: .body).scaledValue(for: 2, compatibleWith: traits)
+            let semanticStyle = headingLevel.flatMap { level -> Font.TextStyle? in
+                let index = level - 1
+                return styleSheet.readerHeadingTextStyles.indices.contains(index)
+                    ? styleSheet.readerHeadingTextStyles[index] : nil
+            } ?? styleSheet.readerParagraphTextStyle
+            let textStyle = MarkdownTypography.uiTextStyle(semanticStyle)
+            let baseFont = MarkdownTypography.font(textStyle: textStyle, weight: weight,
+                                                   customSize: nil, traits: traits)
+            // Flutter's light stylesheet uses 1.5 for prose and 1.3/1.4 for headings.
+            // A minimum height respects larger inline glyphs and keeps Dynamic Type scaling.
+            let heightFactor: CGFloat = headingLevel.map { $0 <= 2 ? 1.3 : 1.4 } ?? 1.5
+            paragraph.minimumLineHeight = baseFont.pointSize * heightFactor
+            paragraph.lineBreakStrategy = headingLevel == nil ? [] : .pushOut
             for run in line.runs {
                 let inlineStyle = styleSheet.resolvedInlineStyle(
                     bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
                     link: run.style.link != nil, code: run.code)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
-                let semanticStyle = headingLevel.flatMap { level -> Font.TextStyle? in
-                    let index = level - 1
-                    return styleSheet.readerHeadingTextStyles.indices.contains(index)
-                        ? styleSheet.readerHeadingTextStyles[index] : nil
-                } ?? styleSheet.readerParagraphTextStyle
-                let scaledFont = MarkdownTypography.font(textStyle: MarkdownTypography.uiTextStyle(semanticStyle),
+                let scaledFont = MarkdownTypography.font(textStyle: textStyle,
                                                          weight: fontWeight, customSize: inlineStyle.fontSize,
                                                          traits: traits)
                 let font = inlineStyle.monospaced == true
@@ -303,7 +312,23 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 if let link = run.style.link {
                     attributes[.link] = link
                 }
-                output.append(NSAttributedString(string: run.text, attributes: attributes))
+                // Keep short inline code together when wrapping. NBSP has the
+                // same UTF-16 length as a space, so native selection offsets stay
+                // valid; the marker restores exact source text on Copy.
+                let codeText = NSMutableString(string: run.text)
+                var replacedSpaces: [Int] = []
+                if run.code {
+                    for offset in 0..<codeText.length where codeText.character(at: offset) == 32 {
+                        codeText.replaceCharacters(in: NSRange(location: offset, length: 1), with: "\u{00A0}")
+                        replacedSpaces.append(offset)
+                    }
+                }
+                let attributedRun = NSMutableAttributedString(string: codeText as String, attributes: attributes)
+                for offset in replacedSpaces {
+                    attributedRun.addAttribute(codeSpaceAttribute, value: true,
+                                               range: NSRange(location: offset, length: 1))
+                }
+                output.append(attributedRun)
             }
             if line.kind == .rule {
                 ruleRegions.append(NSRange(location: start, length: output.length - start))
@@ -358,17 +383,34 @@ final class QuoteTextView: UITextView {
     override func copy(_ sender: Any?) {
         let range = selectedRange
         guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return }
-        let selectedRules = ruleRegions.filter { NSIntersectionRange($0, range).length > 0 }
-            .sorted { $0.location > $1.location }
-        guard !selectedRules.isEmpty else {
+        guard let transformed = transformedCopyText(in: range) else {
             super.copy(sender)
             return
         }
+        UIPasteboard.general.string = transformed
+    }
+
+    /// Returns plain text only when visual anchors or nonbreaking code spaces
+    /// need to be restored. Otherwise UITextView keeps its native Copy behavior.
+    func transformedCopyText(in range: NSRange) -> String? {
+        guard range.location >= 0, range.length > 0,
+              NSMaxRange(range) <= textStorage.length else { return nil }
+        let selectedRules = ruleRegions.filter { NSIntersectionRange($0, range).length > 0 }
+            .sorted { $0.location > $1.location }
         let selected = NSMutableString(string: (textStorage.string as NSString).substring(with: range))
+        var restoredCodeSpace = false
+        for offset in 0..<range.length where selected.character(at: offset) == 160 {
+            if textStorage.attribute(codeSpaceAttribute, at: range.location + offset,
+                                     effectiveRange: nil) != nil {
+                selected.replaceCharacters(in: NSRange(location: offset, length: 1), with: " ")
+                restoredCodeSpace = true
+            }
+        }
+        guard restoredCodeSpace || !selectedRules.isEmpty else { return nil }
         for rule in selectedRules {
             selected.deleteCharacters(in: NSRange(location: rule.location - range.location, length: rule.length))
         }
-        UIPasteboard.general.string = selected as String
+        return selected as String
     }
 
     func quoteFrames() -> [(CGRect, Int)] {
