@@ -208,6 +208,7 @@ struct DemoHomeView: View {
                                    }
                                },
                                enableHTML: false,
+                               useEnhancedComponents: true,
                                styleSheet: theme.styleSheet, plugins: plugins,
                                selectable: true)
                 .id(selected)

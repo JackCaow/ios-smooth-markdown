@@ -48,6 +48,7 @@ struct DemoStreamingMarkdownBubble: View {
     let styleSheet: MarkdownStyleSheet
     let plugins: ParserPluginRegistry?
     let emptyLabel: String
+    let useEnhancedComponents: Bool
 
     var body: some View {
         Group {
@@ -55,6 +56,7 @@ struct DemoStreamingMarkdownBubble: View {
                 ProgressView().accessibilityLabel(emptyLabel)
             } else {
                 SmoothMarkdownView(markdown: stream.visibleText,
+                                   useEnhancedComponents: useEnhancedComponents,
                                    styleSheet: styleSheet, plugins: plugins,
                                    enableCache: false,
                                    scrollable: false)

@@ -14,6 +14,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let streamID: String?
     public let throttleMillis: Int64
     public let enableHTML: Bool
+    public let useEnhancedComponents: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
@@ -40,6 +41,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         streamID: String? = nil,
         throttleMillis: Int64 = 50,
         enableHTML: Bool = false,
+        useEnhancedComponents: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
@@ -64,6 +66,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.streamID = streamID
         self.throttleMillis = throttleMillis
         self.enableHTML = enableHTML
+        self.useEnhancedComponents = useEnhancedComponents
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onImageTapWithMetadata = onImageTapWithMetadata
@@ -96,7 +99,8 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                 SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
                                    onImageTapWithMetadata: onImageTapWithMetadata,
                                    imageBuilder: imageBuilder,
-                                   enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
+                                   enableHTML: enableHTML, useEnhancedComponents: useEnhancedComponents,
+                                   codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
                                    onCodeCopy: onCodeCopy, onTextLongPress: onTextLongPress,
                                    styleSheet: styleSheet, plugins: plugins, builderRegistry: builderRegistry,
                                    enableCache: false,

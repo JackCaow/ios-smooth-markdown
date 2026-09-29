@@ -6,6 +6,17 @@ import SwiftUIMath
 import UIKit
 #endif
 
+enum MarkdownEnhancedComponents {
+    static func usesBuiltInAICard(for pluginID: String, enabled: Bool) -> Bool {
+        enabled || !["thinking", "artifact", "tool_call"].contains(pluginID)
+    }
+
+    static func isExternalLink(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "https" || scheme == "http"
+    }
+}
+
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
 public struct SmoothMarkdownView: View {
     /// Statistics for the document parse cache used by reader views.
@@ -15,6 +26,7 @@ public struct SmoothMarkdownView: View {
     public static func clearCache() { MarkdownParseCache.shared.clear() }
 
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
     public let markdown: String
@@ -25,6 +37,9 @@ public struct SmoothMarkdownView: View {
     /// Replaces the content of a safe image while retaining native tap and accessibility handling.
     public let imageBuilder: ((String, String?, String?) -> AnyView)?
     public let enableHTML: Bool
+    /// Flutter-compatible visual variants for code, headings, blockquotes, and links.
+    /// Standard components are used unless this is explicitly enabled.
+    public let useEnhancedComponents: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
@@ -53,6 +68,7 @@ public struct SmoothMarkdownView: View {
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         enableHTML: Bool = false,
+        useEnhancedComponents: Bool = false,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
@@ -72,6 +88,7 @@ public struct SmoothMarkdownView: View {
         self.onImageTapWithMetadata = onImageTapWithMetadata
         self.imageBuilder = imageBuilder
         self.enableHTML = enableHTML
+        self.useEnhancedComponents = useEnhancedComponents
         self.codeBlockOptions = codeBlockOptions
         self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
@@ -256,7 +273,8 @@ public struct SmoothMarkdownView: View {
               projection.attributedText.string == selection.selectionText else { return nil }
         let styled = ReaderSelectionTextView(document: selection, styleSheet: styleSheet,
                                              onLinkTap: onLinkTap, onTextLongPress: nil,
-                                             selectable: true, onCharacterTap: nil)
+                                             selectable: true, onCharacterTap: nil,
+                                             useEnhancedComponents: useEnhancedComponents)
             .attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize)).text
         guard styled.string == projection.attributedText.string else { return nil }
         if validateExpandedDetails, !summaryIDs.isEmpty {
@@ -280,10 +298,13 @@ public struct SmoothMarkdownView: View {
             }
             return imageView(image)
         case let .code(code, language):
-            return AnyView(EnhancedCodeBlockView(code: code, language: language,
-                                                 options: codeBlockOptions, onCopy: onCodeCopy,
-                                                 styleSheet: styleSheet, selectable: false,
-                                                 onSelectSurroundingContent: nil))
+            if useEnhancedComponents {
+                return AnyView(EnhancedCodeBlockView(code: code, language: language,
+                                                     options: codeBlockOptions, onCopy: onCodeCopy,
+                                                     styleSheet: styleSheet, selectable: false,
+                                                     onSelectSurroundingContent: nil))
+            }
+            return AnyView(StandardCodeBlockView(code: code, styleSheet: styleSheet, selectable: false))
         case let .table(source):
             guard let table = parse(source).child(at: 0) as? Markdown.Table else { return nil }
             return AnyView(tableView(table, selectable: false))
@@ -385,6 +406,7 @@ public struct SmoothMarkdownView: View {
                                            onImageTap: onImageTap,
                                            onImageTapWithMetadata: onImageTapWithMetadata,
                                            imageBuilder: imageBuilder, enableHTML: enableHTML,
+                                           useEnhancedComponents: useEnhancedComponents,
                                            codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
                                            onCodeCopy: onCodeCopy, onTextLongPress: onTextLongPress,
                                            styleSheet: styleSheet, plugins: plugins,
@@ -524,7 +546,8 @@ public struct SmoothMarkdownView: View {
             if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
                 ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                         onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                        selectable: selectable, onCharacterTap: nil)
+                                        selectable: selectable, onCharacterTap: nil,
+                                        useEnhancedComponents: useEnhancedComponents)
             }
         case let .blockBridge(nodes):
             if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
@@ -563,7 +586,8 @@ public struct SmoothMarkdownView: View {
                let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
                 ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                         onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                        selectable: selectable, onCharacterTap: nil)
+                                        selectable: selectable, onCharacterTap: nil,
+                                        useEnhancedComponents: useEnhancedComponents)
             } else {
                 block(node)
             }
@@ -586,7 +610,8 @@ public struct SmoothMarkdownView: View {
             let preciseTap = document.canMapNativeOffsets ? onCharacterTap : nil
             return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                    onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                                   selectable: selectable, onCharacterTap: preciseTap))
+                                                   selectable: selectable, onCharacterTap: preciseTap,
+                                                   useEnhancedComponents: useEnhancedComponents))
         }
         return block(node)
     }
@@ -632,7 +657,7 @@ public struct SmoothMarkdownView: View {
         if let builder = builderRegistry?.findBuilder(node) {
             builder.build(node, context: renderContext(alignment: alignment))
         } else if let heading = node as? Heading {
-            let decorated = heading.level <= 2
+            let decorated = useEnhancedComponents && heading.level <= 2
             let primary = Color.accentColor
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: decorated ? 12 : 0) {
@@ -653,7 +678,7 @@ public struct SmoothMarkdownView: View {
                         .markdownTextSelection(selectable)
                         .accessibilityAddTraits(.isHeader)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, useEnhancedComponents ? 8 : 0)
                 if decorated {
                     Rectangle()
                         .fill(LinearGradient(colors: [primary.opacity(0.3), primary.opacity(0)],
@@ -681,7 +706,8 @@ public struct SmoothMarkdownView: View {
                        paragraph, enableHTML: enableHTML, plugins: plugins) {
                     ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                             onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                            selectable: selectable, onCharacterTap: nil)
+                                            selectable: selectable, onCharacterTap: nil,
+                                            useEnhancedComponents: useEnhancedComponents)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     inlineView(paragraph).font(styleSheet.paragraphFont ?? .body)
@@ -698,14 +724,16 @@ public struct SmoothMarkdownView: View {
         } else if let code = node as? CodeBlock {
             if let codeBuilder {
                 codeBuilder(code.code, code.language)
-            } else {
+            } else if useEnhancedComponents {
                 EnhancedCodeBlockView(code: code.code, language: code.language,
                                       options: codeBlockOptions, onCopy: onCodeCopy,
                                       styleSheet: styleSheet, selectable: selectable,
                                       onSelectSurroundingContent: onSelectSurroundingContent)
+            } else {
+                StandardCodeBlockView(code: code.code, styleSheet: styleSheet, selectable: selectable)
             }
         } else if let quote = node as? BlockQuote {
-            blockquote {
+            blockquote(enhanced: useEnhancedComponents) {
                 ForEach(Array(quote.children.enumerated()), id: \.offset) { _, child in
                     block(child, alignment: alignment)
                 }
@@ -779,18 +807,44 @@ public struct SmoothMarkdownView: View {
         }
     }
 
-    private func blockquote<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    private func blockquote<Content: View>(enhanced: Bool = false,
+                                           @ViewBuilder content: () -> Content) -> some View {
         let decoration = styleSheet.resolvedBlockquoteDecoration
-        return VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(styleSheet.blockquotePadding)
-            .background(decoration.backgroundColor ?? Color.clear)
-            .overlay(alignment: .leading) {
-                if decoration.borderWidth > 0 {
-                    Rectangle().fill(decoration.borderColor ?? .accentColor)
-                        .frame(width: decoration.borderWidth)
+        return Group {
+            if enhanced {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "text.quote")
+                        .font(.system(size: 24))
+                        .foregroundStyle(Color.accentColor.opacity(0.4))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .padding(styleSheet.blockquotePadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LinearGradient(colors: colorScheme == .dark
+                    ? [Color(white: 0.10), Color(white: 0.15)]
+                    : [Color(white: 0.98), Color(white: 0.95)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .overlay(alignment: .leading) {
+                    Rectangle().fill(Color.accentColor.opacity(0.6)).frame(width: 4)
+                }
+                .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
+                                                   bottomTrailingRadius: 4, topTrailingRadius: 4))
+                .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+            } else {
+                VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(styleSheet.blockquotePadding)
+                    .background(decoration.backgroundColor ?? Color.clear)
+                    .overlay(alignment: .leading) {
+                        if decoration.borderWidth > 0 {
+                            Rectangle().fill(decoration.borderColor ?? .accentColor)
+                                .frame(width: decoration.borderWidth)
+                        }
+                    }
             }
+        }
     }
 
     @ViewBuilder
@@ -1004,8 +1058,13 @@ public struct SmoothMarkdownView: View {
 
     private func pluginView(_ plugin: any BlockParserPlugin, _ match: BlockPluginMatch) -> AnyView {
         let node = MarkdownPluginNode(plugin: plugin, match: match)
-        guard let builder = builderRegistry?.findBuilder(node) else { return plugin.render(match) }
-        return builder.build(node, context: renderContext())
+        if let builder = builderRegistry?.findBuilder(node) {
+            return builder.build(node, context: renderContext())
+        }
+        guard MarkdownEnhancedComponents.usesBuiltInAICard(for: plugin.id, enabled: useEnhancedComponents) else {
+            return AnyView(Text("Unknown node type: \(plugin.id)"))
+        }
+        return plugin.render(match)
     }
 
     private struct InlineStyle {
@@ -1016,9 +1075,19 @@ public struct SmoothMarkdownView: View {
     }
 
     private func inline(_ runs: [InlineContent.Run]) -> SwiftUI.Text {
-        runs.reduce(SwiftUI.Text("")) { output, run in
+        runs.enumerated().reduce(SwiftUI.Text("")) { output, element in
+            let (index, run) = element
             if case let .text(value, sourceStyle, tags, code) = run {
-                return output + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
+                let rendered = output + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
+                if useEnhancedComponents, !selectable, let link = sourceStyle.link,
+                   MarkdownEnhancedComponents.isExternalLink(link),
+                   (index + 1 == runs.count || !runs[index + 1].hasLink(link)) {
+                    // A nonselectable SwiftUI text run can add the external-link cue
+                    // directly. Native selectable text draws it without changing Copy.
+                    return rendered + segment(" ↗", style: inlineStyle(sourceStyle), tags: tags, code: false)
+                        .font(.system(size: 12))
+                }
+                return rendered
             }
             return output
         }
@@ -1047,7 +1116,8 @@ public struct SmoothMarkdownView: View {
             // in one native text range while drawing the keycap around its glyphs.
             return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                    onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                                   selectable: selectable, onCharacterTap: nil))
+                                                   selectable: selectable, onCharacterTap: nil,
+                                                   useEnhancedComponents: useEnhancedComponents))
         }
         #endif
         let hasImage = runs.contains { if case .image = $0 { return true }; return false }
@@ -1238,7 +1308,9 @@ public struct SmoothMarkdownView: View {
         if inlineStyle.bold == true { result = result.bold() }
         if inlineStyle.italic == true { result = result.italic() }
         if inlineStyle.strikethrough == true { result = result.strikethrough() }
-        if inlineStyle.underline == true { result = result.underline() }
+        if inlineStyle.underline == true || (useEnhancedComponents && link != nil) {
+            result = result.underline()
+        }
         if let script { result = result.baselineOffset(script.baselineOffset(scale: inlineFontScale)) }
         if let foreground = htmlForeground ?? inlineStyle.textColor { result = result.foregroundColor(foreground) }
         return result
