@@ -47,8 +47,8 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
                                                  enableHTML: false, plugins: nil)
         XCTAssertEqual(groups.count, 3)
-        guard case let .imageBridge(nodes) = groups[0],
-              let bridge = ReaderImageRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+        guard case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
             return XCTFail("Expected an image range with original image block")
         }
         XCTAssertEqual(bridge.segments.count, 2)
@@ -66,8 +66,8 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
                                                  enableHTML: false, plugins: nil)
         XCTAssertEqual(groups.count, 1)
-        guard case let .imageBridge(nodes) = groups[0],
-              let bridge = ReaderImageRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+        guard case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
             return XCTFail("Expected text-image-text bridge")
         }
         XCTAssertEqual(bridge.segments.map(\.isImage), [false, true, false])
@@ -83,7 +83,7 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
                                                  enableHTML: false, plugins: nil)
         XCTAssertFalse(groups.contains {
-            if case .imageBridge = $0 { return true }
+            if case .blockBridge = $0 { return true }
             return false
         })
     }
@@ -137,4 +137,54 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         XCTAssertEqual(document.lines[1].quoteIDs.count, 2)
         XCTAssertEqual(document.lines[0].quoteIDs[0], document.lines[1].quoteIDs[0])
     }
+    func testTableBridgeCopiesVisibleCellsWithInlineMarksAcrossProse() {
+        let source = """
+        Before table.
+
+        | Name | Value |
+        | --- | --- |
+        | **Alpha** | 42 |
+        | Beta | `x` |
+
+        After table.
+        """
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected text-table-text bridge")
+        }
+        XCTAssertEqual(bridge.segments.count, 3)
+        XCTAssertEqual(bridge.copiedText(in: 0...2, enableHTML: false, plugins: nil),
+                       "Before table.\nName\tValue\nAlpha\t42\nBeta\tx\nAfter table.")
+        XCTAssertEqual(bridge.copiedText(in: 1...2, enableHTML: false, plugins: nil),
+                       "Name\tValue\nAlpha\t42\nBeta\tx\nAfter table.")
+    }
+
+    func testTableAndImageBridgeKeepsTableTextAndOmitsImageAlt() {
+        let source = "Before\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\n![photo](https://example.com/photo.png)\n\nAfter"
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected table and image in one range")
+        }
+        XCTAssertEqual(bridge.segments.count, 4)
+        XCTAssertEqual(bridge.copiedText(in: 0...3, enableHTML: false, plugins: nil),
+                       "Before\nName\tValue\nAlpha\t42\nAfter")
+    }
+
+    func testAdjacentImagesStayIndependentWithoutCopyableText() {
+        let source = "![one](https://example.com/one.png)\n\n![two](https://example.com/two.png)"
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertTrue(groups.allSatisfy {
+            if case .individual = $0 { return true }
+            return false
+        })
+    }
+
 }

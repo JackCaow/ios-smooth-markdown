@@ -164,11 +164,11 @@ public struct SmoothMarkdownView: View {
                                                 onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
                                                 selectable: selectable)
                     }
-                case let .imageBridge(nodes):
-                    if let bridge = ReaderImageRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
-                        ReaderImageRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
+                case let .blockBridge(nodes):
+                    if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
+                        ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
                                              spacing: styleSheet.blockSpacing) { segment in
-                            if segment.isImage, let node = segment.nodes.first { return block(node) }
+                            if segment.isBridge, let node = segment.nodes.first { return block(node) }
                             guard let node = segment.nodes.first else { return AnyView(EmptyView()) }
                             if let document = ReaderSelectionDocument.compose(segment.nodes,
                                                                                 enableHTML: enableHTML, plugins: plugins),

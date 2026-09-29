@@ -2,15 +2,15 @@
 import SwiftUI
 import UIKit
 
-/// Keeps the host's original SwiftUI image (including custom builders and tap
-/// callbacks) while exposing a block range that can cross that image.
+/// Keeps SwiftUI images and tables in their original layout while exposing a
+/// block range that can cross them.
 @available(iOS 17.0, *)
-struct ReaderImageRangeView: View {
-    let document: ReaderImageRangeDocument
+struct ReaderBlockRangeView: View {
+    let document: ReaderBlockRangeDocument
     let enableHTML: Bool
     let plugins: ParserPluginRegistry?
     let spacing: CGFloat
-    let renderSegment: (ReaderImageRangeDocument.Segment) -> AnyView
+    let renderSegment: (ReaderBlockRangeDocument.Segment) -> AnyView
 
     @State private var selecting = false
     @State private var anchor: Int?
@@ -26,7 +26,7 @@ struct ReaderImageRangeView: View {
             ForEach(document.segments.indices, id: \.self) { index in
                 let segment = document.segments[index]
                 Group {
-                    if segment.isImage && !selecting {
+                    if segment.isBridge && !selecting {
                         renderSegment(segment)
                             .contextMenu {
                                 Button("Select surrounding content") { beginSelection() }

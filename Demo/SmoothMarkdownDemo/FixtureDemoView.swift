@@ -29,7 +29,14 @@ struct FixtureDemoView: View {
     ]
 
     var body: some View {
-        if ProcessInfo.processInfo.arguments.contains("--reader-image-range-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--reader-table-range-fixture") {
+            VStack(spacing: 0) {
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("table-range-clipboard")
+                SmoothMarkdownView(markdown: "Before table.\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\nAfter table.",
+                                   styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-image-range-fixture") {
             VStack(spacing: 0) {
                 Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
                 Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }

@@ -112,7 +112,7 @@ struct ReaderSelectionDocument {
         return output.isEmpty ? nil : output
     }
 
-    private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
+    static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
         var output: [Run] = []
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
@@ -124,14 +124,21 @@ struct ReaderSelectionDocument {
         }
         return output
     }
+
+    private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
+        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins)
+    }
 }
 
-/// A logical copy range across standalone image widgets. Image views stay in
-/// SwiftUI; copying omits their invisible selection anchor, as Flutter does.
-struct ReaderImageRangeDocument {
+/// A block range across content that must retain its SwiftUI rendering.
+/// Images contribute no text; tables contribute their visible cell text.
+struct ReaderBlockRangeDocument {
     struct Segment {
+        enum Kind { case text, image, table }
         let nodes: [Markup]
-        let isImage: Bool
+        let kind: Kind
+        var isImage: Bool { kind == .image }
+        var isBridge: Bool { kind != .text }
     }
 
     let segments: [Segment]
@@ -140,32 +147,65 @@ struct ReaderImageRangeDocument {
         var result: [Segment] = []
         var textRun: [Markup] = []
         func flushText() {
-            if !textRun.isEmpty { result.append(.init(nodes: textRun, isImage: false)) }
+            if !textRun.isEmpty { result.append(.init(nodes: textRun, kind: .text)) }
             textRun.removeAll()
         }
         for node in nodes {
             if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
                 flushText()
-                result.append(.init(nodes: [node], isImage: true))
+                result.append(.init(nodes: [node], kind: .image))
+            } else if node is Markdown.Table,
+                      Self.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
+                flushText()
+                result.append(.init(nodes: [node], kind: .table))
             } else if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) {
                 textRun.append(node)
             } else { return nil }
         }
         flushText()
-        guard result.contains(where: \.isImage), result.contains(where: { !$0.isImage }) else { return nil }
+        guard result.contains(where: \.isBridge), result.count > 1 else { return nil }
         segments = result
     }
 
     func copiedText(in range: ClosedRange<Int>, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
         guard range.lowerBound >= 0, range.upperBound < segments.count else { return nil }
-        let nodes = segments[range].filter { !$0.isImage }.flatMap(\.nodes)
-        return ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins)?.copiedText
+        var parts: [String] = []
+        for segment in segments[range] {
+            switch segment.kind {
+            case .image: continue
+            case .table:
+                guard let node = segment.nodes.first,
+                      let text = Self.tableText(node, enableHTML: enableHTML, plugins: plugins) else { return nil }
+                parts.append(text)
+            case .text:
+                guard let text = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
+                                                                 plugins: plugins)?.copiedText else { return nil }
+                parts.append(text)
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
+
+    static func tableText(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
+        guard let table = node as? Markdown.Table else { return nil }
+        let rows = [Array(table.head.children)] + table.body.children.map { Array($0.children) }
+        var output: [String] = []
+        for row in rows {
+            var cells: [String] = []
+            for cell in row {
+                guard let runs = ReaderSelectionDocument.copyableInlineRuns(cell, enableHTML: enableHTML,
+                                                                             plugins: plugins) else { return nil }
+                cells.append(runs.map(\.text).joined())
+            }
+            output.append(cells.joined(separator: "\t"))
+        }
+        return output.joined(separator: "\n")
     }
 }
 
 enum ReaderSelectionGroup {
     case selectable([Markup])
-    case imageBridge([Markup])
+    case blockBridge([Markup])
     case individual(Markup)
 
     static func isStandaloneImage(_ node: Markup, enableHTML: Bool) -> Bool {
@@ -190,23 +230,24 @@ enum ReaderSelectionGroup {
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
         func flush() {
-            let hasImage = pending.contains { isStandaloneImage($0, enableHTML: enableHTML) }
-            let hasText = pending.contains { !isStandaloneImage($0, enableHTML: enableHTML) }
-            if hasImage && hasText { result.append(.imageBridge(pending)) }
-            else if pending.count > 1 && !hasImage { result.append(.selectable(pending)) }
+            let hasBridge = pending.contains { isStandaloneImage($0, enableHTML: enableHTML) || $0 is Markdown.Table }
+            let hasCopyable = pending.contains {
+                ReaderSelectionDocument.isSelectable($0, enableHTML: enableHTML, plugins: plugins) || $0 is Markdown.Table
+            }
+            if hasBridge && hasCopyable && pending.count > 1 { result.append(.blockBridge(pending)) }
+            else if pending.count > 1 && !hasBridge { result.append(.selectable(pending)) }
+            else if pending.count > 1 { result.append(contentsOf: pending.map(ReaderSelectionGroup.individual)) }
             else if let one = pending.first {
                 let lineCount = ReaderSelectionDocument.compose([one], enableHTML: enableHTML,
                                                                  plugins: plugins)?.lines.count ?? 0
-                result.append(lineCount > 1 && !hasImage ? .selectable(pending) : .individual(one))
-            }
-            if hasImage && !hasText && pending.count > 1 {
-                result.append(contentsOf: pending.dropFirst().map(ReaderSelectionGroup.individual))
+                result.append(lineCount > 1 && !hasBridge ? .selectable(pending) : .individual(one))
             }
             pending.removeAll()
         }
         for node in nodes {
             if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
-                isStandaloneImage(node, enableHTML: enableHTML) {
+                isStandaloneImage(node, enableHTML: enableHTML) ||
+                ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
                 pending.append(node)
             } else {
                 flush()
