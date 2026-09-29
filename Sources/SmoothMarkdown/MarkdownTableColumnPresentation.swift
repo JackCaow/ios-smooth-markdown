@@ -75,6 +75,7 @@ struct MarkdownTableViewport<Content: View>: View {
     var body: some View {
         content(Self.columnWidth(viewportWidth: viewportWidth, columnCount: columnCount, padding: padding))
             .frame(maxWidth: .infinity)
+            // Measure the framed ScrollView viewport, never its scrolling cell content.
             .background {
                 GeometryReader { geometry in
                     Color.clear.preference(key: MarkdownTableViewportWidthKey.self, value: geometry.size.width)
