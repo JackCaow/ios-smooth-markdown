@@ -44,6 +44,7 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     private let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
+    private let builderRegistry: BuilderRegistry?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 editorTheme: MarkdownEditorTheme? = nil,
@@ -72,7 +73,8 @@ public struct SmoothMarkdownEditor: View {
                 customSlashCommands: [MarkdownEditorSlashCommand] = [],
                 customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)? = nil,
                 customBlockBuilder: MarkdownEditorCustomBlockBuilder? = nil,
-                customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
+                customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil,
+                builderRegistry: BuilderRegistry? = nil) {
         self.controller = controller
         self.onSave = onSave
         self.editorTheme = editorTheme
@@ -97,6 +99,7 @@ public struct SmoothMarkdownEditor: View {
         self.customBlockMatcher = customBlockMatcher
         self.customBlockBuilder = customBlockBuilder
         self.customBlockEditorBuilder = customBlockEditorBuilder
+        self.builderRegistry = builderRegistry
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onExportPDF: onExportPDF,
@@ -249,7 +252,8 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private var previewView: some View {
-        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins,
+                           builderRegistry: builderRegistry)
             .padding(effectiveTheme.previewPadding ?? EdgeInsets())
             .background(effectiveTheme.previewBackgroundColor ?? .clear)
     }
