@@ -8,6 +8,8 @@ struct DemoEditorView: View {
     @State private var lastExport: String?
     @State private var hostMessage: String?
     @State private var showingHelp = false
+    @State private var useDeviceIO = false
+    @StateObject private var hostFiles = DemoEditorHostFiles()
 
     private let helpText = "Try the toolbar, slash commands at the start of a paragraph, wikilinks, Find, Focus, and the demo's image, import, and export callbacks."
 
@@ -26,16 +28,23 @@ struct DemoEditorView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            Menu("Host I/O") {
+                Toggle("Use device files and image URLs", isOn: $useDeviceIO)
+            }
+            .accessibilityIdentifier("editor-host-io-mode")
             SmoothMarkdownEditor(
                 controller: controller,
                 onPickImage: {
-                    MarkdownEditorImageSelection(url: "https://picsum.photos/640/360",
-                                                 alt: "Sample image", title: "Demo image")
+                    if useDeviceIO { return await hostFiles.pickImageURL() }
+                    return MarkdownEditorImageSelection(url: "https://picsum.photos/640/360",
+                                                        alt: "Sample image", title: "Demo image")
                 },
                 onImportMarkdown: {
-                    "## Imported markdown\n\nThis came from the host callback."
+                    if useDeviceIO { return try await hostFiles.importMarkdown() }
+                    return "## Imported markdown\n\nThis came from the host callback."
                 },
                 onExportMarkdown: { markdown in
+                    if useDeviceIO { try await hostFiles.exportMarkdown(markdown) }
                     lastExport = markdown
                 },
                 onExportPDF: { markdown, _ in
@@ -44,9 +53,9 @@ struct DemoEditorView: View {
                 },
                 onHostIOEvent: { event in
                     switch (event.operation, event.status) {
-                    case (.imagePick, .completed): hostMessage = "Image picker callback requested"
-                    case (.markdownImport, .completed): hostMessage = "Markdown import callback requested"
-                    case (.markdownExport, .completed): hostMessage = "Markdown export requested"
+                    case (.imagePick, .completed): hostMessage = useDeviceIO ? "Image URL inserted" : "Image picker callback requested"
+                    case (.markdownImport, .completed): hostMessage = useDeviceIO ? "Markdown file imported" : "Markdown import callback requested"
+                    case (.markdownExport, .completed): hostMessage = useDeviceIO ? "Markdown file exported" : "Markdown export requested"
                     case (.pdfExport, .completed): hostMessage = "PDF export callback requested"
                     case (_, .failed): hostMessage = event.errorDescription ?? "Editor action failed"
                     case (_, .cancelled): hostMessage = "Editor action cancelled"
@@ -70,5 +79,25 @@ struct DemoEditorView: View {
             }
         }
         .padding(16)
+        .fileImporter(isPresented: $hostFiles.importing,
+                      allowedContentTypes: DemoMarkdownFile.readableContentTypes) { result in
+            hostFiles.finishImport(result)
+        }
+        .fileExporter(isPresented: $hostFiles.exporting,
+                      document: hostFiles.exportDocument,
+                      contentType: DemoMarkdownFile.markdownType,
+                      defaultFilename: "smooth-markdown") { result in
+            hostFiles.finishExport(result)
+        }
+        .alert("Insert image URL", isPresented: $hostFiles.choosingImageURL) {
+            TextField("https://example.com/image.png", text: $hostFiles.imageURL)
+                .textInputAutocapitalization(.never)
+            TextField("Alt text", text: $hostFiles.imageAlt)
+            Button("Insert") { hostFiles.finishImageURL(insert: true) }
+            Button("Cancel", role: .cancel) { hostFiles.finishImageURL(insert: false) }
+        } message: {
+            Text("Enter an HTTP(S) image URL. The editor validates it before insertion.")
+        }
+        .onDisappear { hostFiles.cancelPending() }
     }
 }
