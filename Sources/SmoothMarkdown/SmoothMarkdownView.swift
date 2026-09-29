@@ -12,6 +12,7 @@ public struct SmoothMarkdownView: View {
     public static func clearCache() { MarkdownParseCache.shared.clear() }
 
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
@@ -262,8 +263,7 @@ public struct SmoothMarkdownView: View {
     }
 
     private func headingFont(_ level: Int) -> Font {
-        let styles: [Font.TextStyle] = [.largeTitle, .title, .title2, .title3, .headline, .subheadline]
-        return .system(styles[min(max(level - 1, 0), styles.count - 1)], weight: .bold)
+        MarkdownTypography.heading(level)
     }
 
     @ViewBuilder
@@ -682,7 +682,8 @@ public struct SmoothMarkdownView: View {
         let monospaced = inlineStyle.monospaced == true
         if monospaced { result = result.font(.system(.body, design: .monospaced)) }
         if let fontSize = htmlFontSize ?? inlineStyle.fontSize {
-            result = result.font(.system(size: fontSize, design: monospaced ? .monospaced : .default))
+            result = result.font(.system(size: fontSize * inlineFontScale,
+                                         design: monospaced ? .monospaced : .default))
         }
         if inlineStyle.bold == true { result = result.bold() }
         if inlineStyle.italic == true { result = result.italic() }

@@ -5,6 +5,7 @@ import UIKit
 /// A single read-only UITextView gives adjacent Markdown blocks one native selection range.
 @available(iOS 17.0, *)
 struct ReaderSelectionTextView: UIViewRepresentable {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let document: ReaderSelectionDocument
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
@@ -57,7 +58,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         context.coordinator.longPress?.isEnabled = onTextLongPress != nil
         if onTextLongPress == nil { view.isSelectable = selectable }
         view.accessibilityCustomActions = selectionAccessibilityActions(for: view)
-        let built = attributedContent()
+        let built = attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize))
         if !view.attributedText.isEqual(to: built.text) {
             view.attributedText = built.text
             view.isSelectable = selectable && onTextLongPress == nil
@@ -175,7 +176,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         }
     }
 
-    func attributedContent() -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
+    func attributedContent(traits: UITraitCollection) -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
         let output = NSMutableAttributedString(string: "")
         var quoteBounds: [Int: (start: Int, end: Int, depth: Int)] = [:]
         var quoteOrder: [Int] = []
@@ -191,11 +192,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         for (index, line) in document.lines.enumerated() {
             if index > 0 { output.append(NSAttributedString(string: "\n")) }
             let start = output.length
-            let size: CGFloat
+            let headingLevel: Int?
             let weight: UIFont.Weight
             switch line.kind {
-            case let .heading(level): size = CGFloat(32 - (level - 1) * 3); weight = .bold
-            case .paragraph, .list, .quote: size = 16; weight = .regular
+            case let .heading(level): headingLevel = level; weight = .semibold
+            case .paragraph, .list, .quote: headingLevel = nil; weight = .regular
             }
             let paragraph = NSMutableParagraphStyle()
             paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
@@ -212,16 +213,23 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             } else {
                 paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
             }
-            paragraph.lineSpacing = 2
+            paragraph.lineSpacing = UIFontMetrics(forTextStyle: .body).scaledValue(for: 2, compatibleWith: traits)
             for run in line.runs {
                 let inlineStyle = styleSheet.resolvedInlineStyle(
                     bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
                     link: run.style.link != nil, code: run.code)
-                let fontSize = inlineStyle.fontSize ?? size
-                let fontWeight: UIFont.Weight = inlineStyle.bold == true || weight == .bold ? .bold : .regular
+                let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
+                let semanticStyle = headingLevel.flatMap { level -> Font.TextStyle? in
+                    let index = level - 1
+                    return styleSheet.readerHeadingTextStyles.indices.contains(index)
+                        ? styleSheet.readerHeadingTextStyles[index] : nil
+                } ?? styleSheet.readerParagraphTextStyle
+                let scaledFont = MarkdownTypography.font(textStyle: MarkdownTypography.uiTextStyle(semanticStyle),
+                                                         weight: fontWeight, customSize: inlineStyle.fontSize,
+                                                         traits: traits)
                 let font = inlineStyle.monospaced == true
-                    ? UIFont.monospacedSystemFont(ofSize: fontSize, weight: fontWeight)
-                    : UIFont.systemFont(ofSize: fontSize, weight: fontWeight)
+                    ? UIFont.monospacedSystemFont(ofSize: scaledFont.pointSize, weight: fontWeight)
+                    : scaledFont
                 var attributes: [NSAttributedString.Key: Any] = [
                     .font: font,
                     .foregroundColor: inlineStyle.textColor.map(UIColor.init) ?? {

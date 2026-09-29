@@ -14,10 +14,12 @@ enum DemoTypography {
     static func chatMarkdown(_ style: inout MarkdownStyleSheet, compactHeading: Bool = false) {
         // Keep chat text compact while preserving the Flutter heading hierarchy.
         style.paragraphFont = message
+        style.readerParagraphTextStyle = .subheadline
         let headingStyles: [Font.TextStyle] = compactHeading
             ? [.title3, .headline, .subheadline, .subheadline, .caption, .caption2]
             : [.title2, .title3, .headline, .subheadline, .subheadline, .caption]
         style.headingFonts = headingStyles.map { .system($0, weight: .semibold) }
+        style.readerHeadingTextStyles = headingStyles
         style.codeFont = .system(.subheadline, design: .monospaced)
         style.tableHeaderFont = message.weight(.semibold)
         style.tableCellFont = message

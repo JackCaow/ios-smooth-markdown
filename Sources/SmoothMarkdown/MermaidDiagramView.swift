@@ -5,6 +5,7 @@ public struct MermaidDiagramView: View {
     public let diagram: MermaidDiagram
     public let onNodeTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
 
     public init(diagram: MermaidDiagram, onNodeTap: ((String) -> Void)? = nil) {
         self.diagram = diagram
@@ -13,9 +14,12 @@ public struct MermaidDiagramView: View {
 
     public var body: some View {
         let layout = MermaidLayout.compute(diagram)
+        let scale = max(1, diagramScale)
         ScrollView(.horizontal) {
             ZStack(alignment: .topLeading) {
             Canvas { context, _ in
+                var context = context
+                context.scaleBy(x: scale, y: scale)
                 let ink: Color = colorScheme == .dark ? .white : Color(red: 0.15, green: 0.18, blue: 0.24)
                 let fill: Color = colorScheme == .dark ? Color(red: 0.18, green: 0.22, blue: 0.31) : Color(red: 0.92, green: 0.95, blue: 1)
                 if diagram.kind == .pie {
@@ -90,23 +94,25 @@ public struct MermaidDiagramView: View {
                     }
                 }
             }
-            .frame(width: max(layout.size.width, 180), height: max(layout.size.height, 100))
+            .frame(width: max(layout.size.width, 180) * scale,
+                   height: max(layout.size.height, 100) * scale)
                 if let onNodeTap {
                     ForEach(diagram.nodes) { node in
                         if let frame = layout.nodes[node.id] {
                             Button { onNodeTap(node.id) } label: {
-                                Color.clear.frame(width: frame.width, height: frame.height)
+                                Color.clear.frame(width: frame.width * scale, height: frame.height * scale)
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .position(x: frame.midX, y: frame.midY)
+                            .position(x: frame.midX * scale, y: frame.midY * scale)
                             .accessibilityLabel("Mermaid node \(node.label)")
                             .accessibilityIdentifier("mermaid-node-\(node.id)")
                         }
                     }
                 }
             }
-            .frame(width: max(layout.size.width, 180), height: max(layout.size.height, 100))
+            .frame(width: max(layout.size.width, 180) * scale,
+                   height: max(layout.size.height, 100) * scale)
         }
         .background(colorScheme == .dark ? Color(red: 0.10, green: 0.12, blue: 0.17) : .white,
                     in: RoundedRectangle(cornerRadius: 8))
@@ -165,7 +171,7 @@ public struct MermaidDiagramView: View {
                 context.draw(Text(event.title).font(.system(size: 12)).foregroundColor(ink),
                              at: CGPoint(x: x, y: y))
                 if let description = event.description {
-                    context.draw(Text(description).font(.system(size: 10)).foregroundColor(ink.opacity(0.7)),
+                    context.draw(Text(description).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
                                  at: CGPoint(x: x, y: y + 13))
                 }
             }
@@ -256,7 +262,7 @@ public struct MermaidDiagramView: View {
                              at: CGPoint(x: card.minX + 14, y: card.minY + 22), anchor: .leading)
                 let detail = [task.assigned, task.ticket].compactMap { $0 }.joined(separator: " · ")
                 if !detail.isEmpty {
-                    context.draw(Text(String(detail.prefix(27))).font(.system(size: 10)).foregroundColor(ink.opacity(0.65)),
+                    context.draw(Text(String(detail.prefix(27))).font(.system(size: 11)).foregroundColor(ink.opacity(0.65)),
                                  at: CGPoint(x: card.minX + 14, y: card.minY + 51), anchor: .leading)
                 }
             }
@@ -351,7 +357,7 @@ public struct MermaidDiagramView: View {
                 grid.move(to: CGPoint(x: plot.minX, y: point.y)); grid.addLine(to: CGPoint(x: plot.maxX, y: point.y))
             }
             context.stroke(grid, with: .color(ink.opacity(0.12)), lineWidth: 1)
-            context.draw(Text((minimum + span * Double(fraction)).formatted(.number.precision(.fractionLength(0)))).font(.system(size: 10)).foregroundColor(ink),
+            context.draw(Text((minimum + span * Double(fraction)).formatted(.number.precision(.fractionLength(0)))).font(.system(size: 11)).foregroundColor(ink),
                          at: horizontal ? CGPoint(x: point.x, y: plot.maxY + 14) : CGPoint(x: plot.minX - 10, y: point.y),
                          anchor: horizontal ? .center : .trailing)
         }
@@ -391,7 +397,7 @@ public struct MermaidDiagramView: View {
             let point = horizontal
                 ? CGPoint(x: plot.minX - 8, y: plot.minY + (CGFloat(index) + 0.5) / CGFloat(count) * plot.height)
                 : CGPoint(x: plot.minX + (CGFloat(index) + 0.5) / CGFloat(count) * plot.width, y: plot.maxY + 32)
-            context.draw(Text(String(label.prefix(12))).font(.system(size: 10)).foregroundColor(ink), at: point,
+            context.draw(Text(String(label.prefix(12))).font(.system(size: 11)).foregroundColor(ink), at: point,
                          anchor: horizontal ? .trailing : .center)
         }
         if let axisTitle = horizontal ? diagram.xyYAxisTitle : diagram.xyXAxisTitle {
@@ -438,7 +444,7 @@ public struct MermaidDiagramView: View {
         }
         for (text, point) in [(placed.edge.sourceLabel, start), (placed.edge.targetLabel, end)] {
             guard let text, !text.isEmpty else { continue }
-            context.draw(Text(text).font(.system(size: 10)).foregroundColor(ink),
+            context.draw(Text(text).font(.system(size: 11)).foregroundColor(ink),
                          at: CGPoint(x: point.x + 16, y: point.y - 13))
         }
     }
@@ -523,7 +529,7 @@ public struct MermaidDiagramView: View {
                   in: context, ink: ink)
         if let label = placed.edge.label, let frame = loop.labelFrame {
             context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(background))
-            context.draw(Text(label).font(.system(size: 10)).foregroundColor(ink),
+            context.draw(Text(label).font(.system(size: 11)).foregroundColor(ink),
                          at: CGPoint(x: frame.midX, y: frame.midY))
         }
     }
