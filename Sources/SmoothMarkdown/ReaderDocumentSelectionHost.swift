@@ -395,7 +395,8 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         guard width.isFinite, width > 0 else { return }
         let renderer = ReaderSelectionTextView(document: selectionDocument, styleSheet: styleSheet,
                                                onLinkTap: onLinkTap, onTextLongPress: nil,
-                                               selectable: true, onCharacterTap: nil)
+                                               selectable: true, onCharacterTap: nil,
+                                               useEnhancedComponents: sourceView.useEnhancedComponents)
         let built = renderer.attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize))
         var controllers: [String: UIHostingController<AnyView>] = [:]
         var measured: [String: CGSize] = [:]
@@ -451,10 +452,17 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.ruleThickness = styleSheet.horizontalRuleThickness
-        view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
-        view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
-        view.quoteBorderWidth = decoration.borderWidth
-        view.quotePadding = styleSheet.blockquotePadding
+        view.enhancedBlockquotes = sourceView.useEnhancedComponents
+        view.quoteBarColor = sourceView.useEnhancedComponents
+            ? (view.tintColor ?? UIColor.systemBlue).withAlphaComponent(0.6)
+                                                           : UIColor(decoration.borderColor ?? .accentColor)
+        view.quoteBackgroundColor = sourceView.useEnhancedComponents ? nil : decoration.backgroundColor.map(UIColor.init)
+        view.quoteBorderWidth = sourceView.useEnhancedComponents ? 4 : decoration.borderWidth
+        let basePadding = styleSheet.blockquotePadding
+        view.quotePadding = sourceView.useEnhancedComponents
+            ? EdgeInsets(top: basePadding.top, leading: basePadding.leading + 36,
+                         bottom: basePadding.bottom, trailing: basePadding.trailing)
+            : basePadding
     }
 }
 #endif

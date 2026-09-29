@@ -108,6 +108,7 @@ struct DemoStreamingView: View {
                     StreamMarkdownView(
                         chunks: stream,
                         streamID: runID.uuidString,
+                        useEnhancedComponents: true,
                         onError: { _ in
                             phase = .error
                         },

@@ -45,6 +45,8 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     private let builderRegistry: BuilderRegistry?
+    /// Controls the Reader used by Preview and Split modes, matching Flutter's editor default.
+    public let useEnhancedComponents: Bool
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 editorTheme: MarkdownEditorTheme? = nil,
@@ -74,7 +76,8 @@ public struct SmoothMarkdownEditor: View {
                 customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)? = nil,
                 customBlockBuilder: MarkdownEditorCustomBlockBuilder? = nil,
                 customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil,
-                builderRegistry: BuilderRegistry? = nil) {
+                builderRegistry: BuilderRegistry? = nil,
+                useEnhancedComponents: Bool = true) {
         self.controller = controller
         self.onSave = onSave
         self.editorTheme = editorTheme
@@ -100,6 +103,7 @@ public struct SmoothMarkdownEditor: View {
         self.customBlockBuilder = customBlockBuilder
         self.customBlockEditorBuilder = customBlockEditorBuilder
         self.builderRegistry = builderRegistry
+        self.useEnhancedComponents = useEnhancedComponents
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onExportPDF: onExportPDF,
@@ -259,7 +263,8 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private var previewView: some View {
-        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins,
+        SmoothMarkdownView(markdown: controller.text, useEnhancedComponents: useEnhancedComponents,
+                           plugins: previewPlugins,
                            builderRegistry: builderRegistry)
             .padding(effectiveTheme.previewPadding ?? EdgeInsets())
             .background(effectiveTheme.previewBackgroundColor ?? .clear)

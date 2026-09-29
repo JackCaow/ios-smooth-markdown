@@ -203,9 +203,11 @@ struct DemoChatListView: View {
                     DemoStreamingMarkdownBubble(stream: stream,
                                                 styleSheet: bubbleStyle(isUser: false),
                                                 plugins: nil,
-                                                emptyLabel: "Assistant is typing")
+                                                emptyLabel: "Assistant is typing",
+                                                useEnhancedComponents: true)
                 } else {
                     SmoothMarkdownView(markdown: message.content,
+                                       useEnhancedComponents: !message.isUser,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
                                        selectable: true,
                                        scrollable: false)

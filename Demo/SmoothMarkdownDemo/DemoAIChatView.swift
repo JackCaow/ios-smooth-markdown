@@ -262,9 +262,11 @@ struct DemoAIChatView: View {
                     DemoStreamingMarkdownBubble(stream: stream,
                                                 styleSheet: bubbleStyle(isUser: false),
                                                 plugins: plugins,
-                                                emptyLabel: "AI 正在输入")
+                                                emptyLabel: "AI 正在输入",
+                                                useEnhancedComponents: true)
                 } else {
                     SmoothMarkdownView(markdown: message.content,
+                                       useEnhancedComponents: !message.isUser,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
                                        plugins: plugins,
                                        scrollable: false)

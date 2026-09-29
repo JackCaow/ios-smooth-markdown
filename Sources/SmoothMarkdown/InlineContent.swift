@@ -17,6 +17,11 @@ enum InlineContent {
         case footnote(String)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
+
+        func hasLink(_ url: URL) -> Bool {
+            if case let .text(_, style, _, _) = self { return style.link == url }
+            return false
+        }
     }
 
     static func runs(in node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry? = nil,

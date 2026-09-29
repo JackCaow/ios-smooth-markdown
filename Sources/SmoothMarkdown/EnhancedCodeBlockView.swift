@@ -5,6 +5,37 @@ import UIKit
 import AppKit
 #endif
 
+/// Flutter's default code builder: source text inside the configured decoration,
+/// without a language badge, copy control, or syntax coloring.
+struct StandardCodeBlockView: View {
+    let code: String
+    let styleSheet: MarkdownStyleSheet
+    let selectable: Bool
+
+    var body: some View {
+        ScrollView(.horizontal) {
+            Text(code)
+                .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
+                .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
+                .fixedSize(horizontal: true, vertical: false)
+                .markdownTextSelection(selectable)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
+        .padding(styleSheet.resolvedCodeBlockPadding)
+        .background {
+            let decoration = styleSheet.resolvedCodeBlockDecoration
+            RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                .fill(decoration.backgroundColor ?? .clear)
+                .overlay {
+                    RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                        .strokeBorder(decoration.borderColor ?? .clear, lineWidth: decoration.borderWidth)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: styleSheet.resolvedCodeBlockDecoration.cornerRadius))
+    }
+}
+
 struct EnhancedCodeBlockView: View {
     let code: String
     let language: String?
