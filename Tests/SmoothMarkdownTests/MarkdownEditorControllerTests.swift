@@ -1,9 +1,61 @@
+import Combine
 import Foundation
-import SmoothMarkdown
+@testable import SmoothMarkdown
 import XCTest
 
 @MainActor
 final class MarkdownEditorControllerTests: XCTestCase {
+    func testHostEventSourcesTrackEditsUndoModesAndUTF16Selection() {
+        let controller = MarkdownEditorController(text: "A")
+        var sources: [String] = []
+        var modes: [MarkdownEditorMode] = []
+        var selections: [NSRange] = []
+        let subscriptions = [
+            controller.committedTextChanges.sink { sources.append($0) },
+            controller.$mode.dropFirst().removeDuplicates().sink { modes.append($0) },
+            controller.$selection.dropFirst().removeDuplicates().sink { selections.append($0) },
+        ]
+
+        controller.setSelection(NSRange(location: 0, length: 1))
+        controller.setSelection(NSRange(location: 0, length: 1))
+        controller.updateFromInput(text: "A😀", selection: NSRange(location: 3, length: 0))
+        controller.replaceSelection("!")
+        controller.mode = .formatted
+        controller.mode = .preview
+        XCTAssertTrue(controller.undo())
+        XCTAssertTrue(controller.redo())
+        controller.transaction {
+            controller.replaceSelection("x")
+            controller.replaceSelection("y")
+        }
+
+        XCTAssertEqual(sources, ["A😀", "A😀!", "A😀", "A😀!", "A😀!xy"])
+        XCTAssertEqual(modes, [.formatted, .preview])
+        XCTAssertEqual(selections, [NSRange(location: 0, length: 1),
+                                    NSRange(location: 3, length: 0),
+                                    NSRange(location: 4, length: 0),
+                                    NSRange(location: 3, length: 0),
+                                    NSRange(location: 4, length: 0),
+                                    NSRange(location: 5, length: 0),
+                                    NSRange(location: 6, length: 0)])
+        withExtendedLifetime(subscriptions) { }
+    }
+
+    func testSourceCompositionEmitsOnlyFinalCommittedText() {
+        let controller = MarkdownEditorController(text: "A")
+        var sources: [String] = []
+        let subscription = controller.committedTextChanges.sink { sources.append($0) }
+        controller.updateFromInput(text: "Ap", selection: NSRange(location: 2, length: 0), isComposing: true)
+        controller.updateFromInput(text: "A拼", selection: NSRange(location: 2, length: 0), isComposing: true)
+        XCTAssertTrue(sources.isEmpty)
+        controller.updateFromInput(text: "A拼", selection: NSRange(location: 2, length: 0), isComposing: false)
+        XCTAssertEqual(sources, ["A拼"])
+        controller.updateFromInput(text: "A临", selection: NSRange(location: 2, length: 0), isComposing: true)
+        controller.updateFromInput(text: "A拼", selection: NSRange(location: 2, length: 0), isComposing: false)
+        XCTAssertEqual(sources, ["A拼"])
+        withExtendedLifetime(subscription) { }
+    }
+
     func testWrapsUTF16SelectionAndRestoresHistory() {
         let controller = MarkdownEditorController(text: "😀hi")
         controller.setSelection(NSRange(location: 2, length: 2))

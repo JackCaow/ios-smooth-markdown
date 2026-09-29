@@ -1,4 +1,5 @@
 #if os(iOS)
+import Combine
 import SwiftUI
 import UIKit
 import struct Markdown.Paragraph
@@ -16,6 +17,9 @@ public struct SmoothMarkdownEditor: View {
     @FocusState private var searchFieldFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let onSave: ((String) -> Void)?
+    private let onChanged: ((String) -> Void)?
+    private let onModeChanged: ((MarkdownEditorMode) -> Void)?
+    private let onSelectionChanged: ((NSRange) -> Void)?
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
     private let hasMarkdownImporter: Bool
@@ -31,6 +35,9 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
+                onChanged: ((String) -> Void)? = nil,
+                onModeChanged: ((MarkdownEditorMode) -> Void)? = nil,
+                onSelectionChanged: ((NSRange) -> Void)? = nil,
                 onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
                 onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
                 onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil,
@@ -49,6 +56,9 @@ public struct SmoothMarkdownEditor: View {
                 customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
         self.controller = controller
         self.onSave = onSave
+        self.onChanged = onChanged
+        self.onModeChanged = onModeChanged
+        self.onSelectionChanged = onSelectionChanged
         self.hasImagePicker = onPickImage != nil
         self.hasMarkdownImporter = onImportMarkdown != nil
         self.enableWikilinks = enableWikilinks
@@ -180,7 +190,13 @@ public struct SmoothMarkdownEditor: View {
             }
         }
         .onChange(of: searchQuery) { _, _ in searchIndex = 0; searchHasNavigated = false }
-        .onChange(of: controller.text) { _, _ in searchIndex = 0; searchHasNavigated = false }
+        .onReceive(controller.committedTextChanges) { next in
+            searchIndex = 0
+            searchHasNavigated = false
+            onChanged?(next)
+        }
+        .onReceive(controller.$mode.dropFirst().removeDuplicates()) { next in onModeChanged?(next) }
+        .onReceive(controller.$selection.dropFirst().removeDuplicates()) { next in onSelectionChanged?(next) }
     }
 
     @ViewBuilder
@@ -1951,7 +1967,8 @@ private struct SourceTextView: UIViewRepresentable {
         init(parent: SourceTextView) { self.parent = parent }
 
         func textViewDidChange(_ textView: UITextView) {
-            parent.controller.updateFromInput(text: textView.text, selection: textView.selectedRange)
+            parent.controller.updateFromInput(text: textView.text, selection: textView.selectedRange,
+                                              isComposing: textView.markedTextRange != nil)
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
