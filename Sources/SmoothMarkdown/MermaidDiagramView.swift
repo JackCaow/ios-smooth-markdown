@@ -202,6 +202,12 @@ public struct MermaidDiagramView: View {
         weekFormatter.locale = monthFormatter.locale
         weekFormatter.timeZone = monthFormatter.timeZone
         weekFormatter.dateFormat = "M/d"
+        let dayFormatter = DateFormatter()
+        dayFormatter.calendar = monthFormatter.calendar
+        dayFormatter.locale = monthFormatter.locale
+        dayFormatter.timeZone = monthFormatter.timeZone
+        dayFormatter.dateFormat = "d"
+        let dayWidth = MermaidLayout.ganttDayWidth(diagram)
         let gridBottom = max(104, bars.last?.maxY ?? 104)
         var baseline = Path()
         baseline.move(to: CGPoint(x: 180, y: 80))
@@ -217,7 +223,11 @@ public struct MermaidDiagramView: View {
                 context.draw(Text(monthFormatter.string(from: tick.date)).font(.system(size: 10, weight: .semibold))
                     .foregroundColor(ink.opacity(0.85)), at: CGPoint(x: tick.x + 4, y: 52), anchor: .leading)
             }
-            if tick.isWeek {
+            if tick.isDay && dayWidth >= 25 {
+                context.draw(Text(dayFormatter.string(from: tick.date))
+                    .font(.system(size: 10)).foregroundColor(ink.opacity(0.7)),
+                             at: CGPoint(x: tick.x + dayWidth / 2, y: 68))
+            } else if tick.isWeek {
                 context.draw(Text(weekFormatter.string(from: tick.date)).font(.system(size: 10))
                     .foregroundColor(ink.opacity(0.7)), at: CGPoint(x: tick.x + 4, y: 68), anchor: .leading)
             }

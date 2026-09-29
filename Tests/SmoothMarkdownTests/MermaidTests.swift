@@ -274,7 +274,8 @@ final class MermaidTests: XCTestCase {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         let utc = TimeZone(secondsFromGMT: 0)!
         XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-01")!, timeZone: utc), 180)
-        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-02")!, timeZone: utc), 192)
+        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-02")!, timeZone: utc),
+                       180 + MermaidLayout.ganttDayWidth(diagram))
         XCTAssertNil(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-04")!, timeZone: utc))
         let hidden = MermaidParser.parse(source.replacingOccurrences(of: "section Build", with: "todayMarker off\n          section Build"))!
         XCTAssertNil(MermaidLayout.ganttTodayMarkerX(hidden, today: formatter.date(from: "2024-06-02")!, timeZone: utc))
@@ -306,13 +307,34 @@ final class MermaidTests: XCTestCase {
         XCTAssertTrue(ticks.allSatisfy { $0.x <= MermaidLayout.compute(diagram).size.width })
     }
 
+    func testGanttShortTimelineHasDailyMarkersAndReadableDayWidth() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-06-01, 3d")!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        let width = MermaidLayout.ganttDayWidth(diagram)
+        XCTAssertGreaterThanOrEqual(width, 25)
+        XCTAssertEqual(ticks.count, 3)
+        XCTAssertTrue(ticks.allSatisfy { $0.isDay })
+        XCTAssertEqual(ticks.map(\.x), [180, 180 + width, 180 + 2 * width])
+        XCTAssertEqual(MermaidLayout.ganttBars(diagram)[0].width, 3 * width)
+    }
+
+    func testGanttLongTimelineKeepsMarkerCountBounded() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-01-01, 2044-01-01")!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        XCTAssertLessThanOrEqual(ticks.count, 600)
+        XCTAssertEqual(ticks.first?.x, 180)
+        XCTAssertTrue(ticks.contains { $0.isMonth && $0.x > 180 })
+        XCTAssertTrue(ticks.contains { $0.isWeek && $0.x > 180 })
+    }
+
     func testGanttDayScaleRemainsContinuousAcrossDaylightSavingChange() {
         let diagram = MermaidParser.parse("gantt\nTask :a, 2024-03-09, 4d")!
         let bar = MermaidLayout.ganttBars(diagram)[0]
-        XCTAssertEqual(bar.width, 48)
+        XCTAssertEqual(bar.width, 4 * MermaidLayout.ganttDayWidth(diagram))
         let monday = MermaidLayout.ganttTimelineTicks(diagram).first { $0.isWeek }
-        XCTAssertEqual(monday?.x, 204)
-        XCTAssertEqual(monday?.x, bar.minX + 24)
+        XCTAssertNil(monday) // Short charts use day markers instead of separate weekly markers.
+        XCTAssertEqual(MermaidLayout.ganttTimelineTicks(diagram)[2].x,
+                       bar.minX + 2 * MermaidLayout.ganttDayWidth(diagram))
     }
 
     func testKanbanFixtureYAMLMetadataWIPAndFallback() {
