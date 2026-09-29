@@ -9,23 +9,30 @@ struct PendingListParagraph: Equatable {
     let insertedTerminator: String
 }
 
-/// A UTF-16 offset in formatted prose, a root list item's primary line,
+/// A UTF-16 offset in formatted prose, a list item's physical source line,
 /// a fenced code body, or the visible text of one GFM table cell.
 public struct MarkdownSemanticTextPosition: Equatable {
     public let blockID: String
     public let offset: Int
-    /// The root item within a source-backed list. `nil` outside lists.
+    /// The item within a source-backed list. `nil` outside lists.
     public let listItemIndex: Int?
+    /// A paragraph continuation before nested children, or a deferred
+    /// continuation after children. Both are `nil` for the item's primary line.
+    public let listContinuationIndex: Int?
+    public let listTrailingIndex: Int?
     /// A table row and column, with row zero denoting the header. Both are
     /// required for a cell endpoint; its offset excludes cell padding and escapes.
     public let tableRow: Int?
     public let tableColumn: Int?
 
     public init(blockID: String, offset: Int, listItemIndex: Int? = nil,
+                listContinuationIndex: Int? = nil, listTrailingIndex: Int? = nil,
                 tableRow: Int? = nil, tableColumn: Int? = nil) {
         self.blockID = blockID
         self.offset = offset
         self.listItemIndex = listItemIndex
+        self.listContinuationIndex = listContinuationIndex
+        self.listTrailingIndex = listTrailingIndex
         self.tableRow = tableRow
         self.tableColumn = tableColumn
     }
@@ -260,6 +267,7 @@ public final class MarkdownEditorController: ObservableObject {
         if resolved.endOffset == 0 && isHeading(last) {
             end = document.sourceRange(of: last.id)!.location
         } else if let index = resolved.end.listItemIndex, resolved.endOffset == 0,
+                  resolved.end.listContinuationIndex == nil, resolved.end.listTrailingIndex == nil,
                   case let .list(list) = last.kind, let itemStart = list.sourceOffset(ofItemAt: index) {
             end = document.sourceRange(of: last.id)!.location + itemStart
         } else {
@@ -271,7 +279,13 @@ public final class MarkdownEditorController: ObservableObject {
         let listPrefix: String
         if let index = resolved.start.listItemIndex, case let .list(list) = first.kind {
             let item = list.items[index]
-            listPrefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
+            if let line = resolved.start.listContinuationIndex {
+                listPrefix = item.continuations[line].indent
+            } else if let line = resolved.start.listTrailingIndex {
+                listPrefix = item.trailingContinuations[line].indent
+            } else {
+                listPrefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
+            }
         } else { listPrefix = "" }
         if resolved.firstIndex != resolved.lastIndex {
             let opener: String
@@ -315,30 +329,56 @@ public final class MarkdownEditorController: ObservableObject {
         return result
     }
 
-    /// UTF-16 character tints for root list item primary fields touched by a
-    /// semantic range. Nested items and continuation lines have no endpoint map.
+    /// UTF-16 character tints for list item primary fields touched by a range.
     public func semanticListItemHighlightRanges(_ selection: MarkdownSemanticTextSelection)
         -> [String: [Int: NSRange]]? {
+        semanticListLineHighlightRanges(selection)?.mapValues(\.primary)
+    }
+
+    struct ListLineHighlights {
+        var primary: [Int: NSRange] = [:]
+        var continuations: [Int: [Int: NSRange]] = [:]
+        var trailing: [Int: [Int: NSRange]] = [:]
+    }
+
+    /// Map the source interval back onto physical list fields. Source offsets
+    /// keep nested items and deferred continuations in their real order.
+    func semanticListLineHighlightRanges(_ selection: MarkdownSemanticTextSelection)
+        -> [String: ListLineHighlights]? {
         guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
-        let blocks = semanticDocument.blocks
-        var result: [String: [Int: NSRange]] = [:]
+        let document = semanticDocument
+        let blocks = document.blocks
+        var result: [String: ListLineHighlights] = [:]
         for blockIndex in resolved.firstIndex...resolved.lastIndex {
             let block = blocks[blockIndex]
-            guard case let .list(list) = block.kind else { continue }
-            // A complete intermediary list keeps its existing whole-row tint.
-            let startsHere = blockIndex == resolved.firstIndex && resolved.start.listItemIndex != nil
-            let endsHere = blockIndex == resolved.lastIndex && resolved.end.listItemIndex != nil
-            guard startsHere || endsHere else { continue }
-            let first = startsHere ? resolved.start.listItemIndex! : 0
-            let last = endsHere ? resolved.end.listItemIndex! : list.items.count - 1
-            var items: [Int: NSRange] = [:]
-            for index in first...last {
-                let length = (list.items[index].content as NSString).length
-                let lower = startsHere && index == first ? resolved.startOffset : 0
-                let upper = endsHere && index == last ? resolved.endOffset : length
-                items[index] = NSRange(location: lower, length: upper - lower)
+            guard case let .list(list) = block.kind,
+                  let sourceRange = document.sourceRange(of: block.id) else { continue }
+            let lower = blockIndex == resolved.firstIndex ? resolved.startSourceOffset : sourceRange.location
+            let upper = blockIndex == resolved.lastIndex ? resolved.endSourceOffset : NSMaxRange(sourceRange)
+            var lines = ListLineHighlights()
+            func tint(_ line: (offset: Int, content: String)?) -> NSRange? {
+                guard let line else { return nil }
+                let start = sourceRange.location + line.offset
+                let end = start + (line.content as NSString).length
+                let from = max(lower, start)
+                let to = min(upper, end)
+                guard from < to else { return nil }
+                return NSRange(location: from - start, length: to - from)
             }
-            result[block.id] = items
+            for index in list.items.indices {
+                if let highlight = tint(list.sourceLine(at: index)) { lines.primary[index] = highlight }
+                for continuation in list.items[index].continuations.indices {
+                    if let highlight = tint(list.sourceLine(at: index, continuationIndex: continuation)) {
+                        lines.continuations[index, default: [:]][continuation] = highlight
+                    }
+                }
+                for trailing in list.items[index].trailingContinuations.indices {
+                    if let highlight = tint(list.sourceLine(at: index, trailingIndex: trailing)) {
+                        lines.trailing[index, default: [:]][trailing] = highlight
+                    }
+                }
+            }
+            result[block.id] = lines
         }
         return result
     }
@@ -382,7 +422,25 @@ public final class MarkdownEditorController: ObservableObject {
 
     public func copySemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> String? {
         guard let (list, range) = resolvedListItems(selection) else { return nil }
-        return list.items[range].map(\.source).joined()
+        let source = list.items[range].map(\.source).joined()
+        let indent = list.items[range.lowerBound].indent
+        guard !indent.isEmpty else { return source }
+        // Flutter serializes a selected nested list as a standalone list.
+        // Remove only the shared structural indent and final row terminator;
+        // retain relative child/continuation indentation and content bytes.
+        var lines = source.components(separatedBy: "\n")
+        if lines.last == "" {
+            lines.removeLast()
+            if source.hasSuffix("\r\n"), let last = lines.last, last.hasSuffix("\r") {
+                lines[lines.count - 1] = String(last.dropLast())
+            }
+        }
+        var copied: [String] = []
+        for line in lines {
+            guard line.hasPrefix(indent) || line.isEmpty || line == "\r" else { return nil }
+            copied.append(line.hasPrefix(indent) ? String(line.dropFirst(indent.count)) : line)
+        }
+        return copied.joined(separator: "\n")
     }
 
     private func deletedListItemMarkdown(_ selection: MarkdownSemanticListItemSelection) -> String? {
@@ -918,7 +976,8 @@ public final class MarkdownEditorController: ObservableObject {
             let body: String
             switch block.kind {
             case .paragraph, .heading:
-                guard position.listItemIndex == nil, position.tableRow == nil,
+                guard position.listItemIndex == nil, position.listContinuationIndex == nil,
+                      position.listTrailingIndex == nil, position.tableRow == nil,
                       position.tableColumn == nil else { return nil }
                 body = block.plainText
                 let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
@@ -926,20 +985,22 @@ public final class MarkdownEditorController: ObservableObject {
             case let .list(list):
                 guard position.tableRow == nil, position.tableColumn == nil,
                       let index = position.listItemIndex, list.items.indices.contains(index),
-                      let root = list.items.first,
-                      list.items.allSatisfy({ $0.indent == root.indent &&
-                          $0.continuations.isEmpty && $0.trailingContinuations.isEmpty }),
-                      let line = list.sourceLine(at: index) else { return nil }
+                      position.listContinuationIndex == nil || position.listTrailingIndex == nil,
+                      let line = list.sourceLine(at: index,
+                          continuationIndex: position.listContinuationIndex,
+                          trailingIndex: position.listTrailingIndex) else { return nil }
                 body = line.content
                 bodyStart = line.offset
             case .fencedCode:
-                guard position.listItemIndex == nil, position.tableRow == nil,
+                guard position.listItemIndex == nil, position.listContinuationIndex == nil,
+                      position.listTrailingIndex == nil, position.tableRow == nil,
                       position.tableColumn == nil,
                       let codeStart = Self.codeBodyStart(in: block) else { return nil }
                 body = block.plainText
                 bodyStart = codeStart
             case let .table(table):
-                guard position.listItemIndex == nil,
+                guard position.listItemIndex == nil, position.listContinuationIndex == nil,
+                      position.listTrailingIndex == nil,
                       let row = position.tableRow, let column = position.tableColumn,
                       row >= 0, row <= table.rows.count,
                       table.headers.indices.contains(column),
@@ -991,6 +1052,12 @@ public final class MarkdownEditorController: ObservableObject {
         let original = semanticDocument
         let first = original.blocks[resolved.firstIndex]
         let last = original.blocks[resolved.lastIndex]
+        if case .list = first.kind, resolved.firstIndex == resolved.lastIndex,
+           resolved.start.listItemIndex == resolved.end.listItemIndex,
+           resolved.start.listContinuationIndex == resolved.end.listContinuationIndex,
+           resolved.start.listTrailingIndex == resolved.end.listTrailingIndex {
+            return replacementForOneListLine(resolved, with: replacement, document: original)
+        }
         if case .table = first.kind {
             return replacementForTableEndpointRange(resolved, with: replacement, document: original)
         }
@@ -1002,6 +1069,16 @@ public final class MarkdownEditorController: ObservableObject {
         }
         if case .fencedCode = last.kind {
             return replacementForCodeEndpointRange(resolved, with: replacement, document: original)
+        }
+        // Cross-line list edits currently have merge semantics only for flat
+        // primary lines. Other list lines remain copyable, but mutating them
+        // across a structural boundary would require moving child ownership.
+        for block in original.blocks[resolved.firstIndex...resolved.lastIndex] {
+            if case let .list(list) = block.kind {
+                guard let root = list.items.first,
+                      list.items.allSatisfy({ $0.indent == root.indent &&
+                          $0.continuations.isEmpty && $0.trailingContinuations.isEmpty }) else { return nil }
+            }
         }
         if resolved.start.listItemIndex != nil || resolved.end.listItemIndex != nil {
             guard !replacement.contains("\n"), !replacement.contains("\r") else { return nil }
@@ -1068,6 +1145,51 @@ public final class MarkdownEditorController: ObservableObject {
                   parsed.blocks[newIndex].leadingTrivia == original.blocks[oldIndex].leadingTrivia else { return nil }
         }
         guard parsed.trailingTrivia == original.trailingTrivia else { return nil }
+        return (next, resolved.startSourceOffset + (replacement as NSString).length)
+    }
+
+    /// Edit exactly one physical list field. Reparse and compare the complete
+    /// source-backed list so a changed marker, item boundary, blank-line owner,
+    /// or nested subtree cannot silently move while editing a character range.
+    private func replacementForOneListLine(_ resolved: ResolvedSemanticTextSelection,
+                                           with replacement: String, document: MarkdownDocument)
+        -> (markdown: String, caret: Int)? {
+        guard !replacement.contains("\n"), !replacement.contains("\r"),
+              let index = resolved.start.listItemIndex,
+              case let .list(list) = document.blocks[resolved.firstIndex].kind,
+              let line = list.sourceLine(at: index,
+                  continuationIndex: resolved.start.listContinuationIndex,
+                  trailingIndex: resolved.start.listTrailingIndex) else { return nil }
+        let body = line.content as NSString
+        let range = NSRange(location: resolved.startOffset,
+                            length: resolved.endOffset - resolved.startOffset)
+        guard range.location >= 0, range.length > 0, NSMaxRange(range) <= body.length else { return nil }
+        let nextBody = body.replacingCharacters(in: range, with: replacement)
+        let expected: MarkdownSourceList?
+        if let continuation = resolved.start.listContinuationIndex {
+            expected = list.replacingContinuationContent(at: index, lineIndex: continuation, with: nextBody)
+        } else if let trailing = resolved.start.listTrailingIndex {
+            expected = list.replacingTrailingContinuationContent(at: index, lineIndex: trailing, with: nextBody)
+        } else {
+            expected = list.replacingItemContent(at: index, with: nextBody)
+        }
+        guard let expected,
+              let blockRange = document.sourceRange(of: resolved.start.blockID) else { return nil }
+        let sourceRange = NSRange(location: resolved.startSourceOffset,
+                                  length: resolved.endSourceOffset - resolved.startSourceOffset)
+        let next = (text as NSString).replacingCharacters(in: sourceRange, with: replacement)
+        guard next != text else { return nil }
+        let parsed = codec.parse(next)
+        guard parsed.toMarkdown() == next, parsed.blocks.count == document.blocks.count,
+              parsed.trailingTrivia == document.trailingTrivia,
+              parsed.blocks[resolved.firstIndex].source == expected.toMarkdown(),
+              parsed.blocks[resolved.firstIndex].leadingTrivia == document.blocks[resolved.firstIndex].leadingTrivia,
+              case let .list(actual) = parsed.blocks[resolved.firstIndex].kind,
+              actual == expected,
+              zip(parsed.blocks, document.blocks).enumerated().allSatisfy({ offset, pair in
+                  offset == resolved.firstIndex || Self.sameSourceBlock(pair.0, pair.1)
+              }),
+              blockRange.location + line.offset + resolved.startOffset == resolved.startSourceOffset else { return nil }
         return (next, resolved.startSourceOffset + (replacement as NSString).length)
     }
 
