@@ -24,10 +24,13 @@ public struct MarkdownSemanticTextPosition: Equatable {
     /// required for a cell endpoint; its offset excludes cell padding and escapes.
     public let tableRow: Int?
     public let tableColumn: Int?
+    /// Physical explicit `>` line inside a simple source-backed quote.
+    public let quoteLineIndex: Int?
 
     public init(blockID: String, offset: Int, listItemIndex: Int? = nil,
                 listContinuationIndex: Int? = nil, listTrailingIndex: Int? = nil,
-                tableRow: Int? = nil, tableColumn: Int? = nil) {
+                tableRow: Int? = nil, tableColumn: Int? = nil,
+                quoteLineIndex: Int? = nil) {
         self.blockID = blockID
         self.offset = offset
         self.listItemIndex = listItemIndex
@@ -35,6 +38,7 @@ public struct MarkdownSemanticTextPosition: Equatable {
         self.listTrailingIndex = listTrailingIndex
         self.tableRow = tableRow
         self.tableColumn = tableColumn
+        self.quoteLineIndex = quoteLineIndex
     }
 }
 
@@ -261,6 +265,16 @@ public final class MarkdownEditorController: ObservableObject {
         let document = semanticDocument
         let first = document.blocks[resolved.firstIndex]
         let last = document.blocks[resolved.lastIndex]
+        if let lineIndex = resolved.start.quoteLineIndex,
+           resolved.firstIndex == resolved.lastIndex,
+           let quote = MarkdownSourceQuote(source: first.source),
+           quote.lines.indices.contains(lineIndex) {
+            let prefix = quote.lines[lineIndex].prefix
+            let copied = (text as NSString).substring(with: NSRange(
+                location: resolved.startSourceOffset,
+                length: resolved.endSourceOffset - resolved.startSourceOffset))
+            return prefix + copied
+        }
         let start = resolved.startOffset == 0 && isHeading(first) ?
             document.sourceRange(of: first.id)!.location : resolved.startSourceOffset
         let end: Int
@@ -381,6 +395,25 @@ public final class MarkdownEditorController: ObservableObject {
             result[block.id] = lines
         }
         return result
+    }
+
+    /// Character tints for simple quote rows touched by a semantic range.
+    func semanticQuoteLineHighlightRanges(_ selection: MarkdownSemanticTextSelection)
+        -> [String: [Int: NSRange]]? {
+        guard let resolved = resolveSemanticTextSelection(selection),
+              resolved.firstIndex == resolved.lastIndex else { return nil }
+        let document = semanticDocument
+        let block = document.blocks[resolved.firstIndex]
+        guard let quote = MarkdownSourceQuote(source: block.source),
+              let blockRange = document.sourceRange(of: block.id) else { return nil }
+        var result: [Int: NSRange] = [:]
+        for (index, line) in quote.lines.enumerated() {
+            let start = blockRange.location + line.bodyOffset
+            let lower = max(start, resolved.startSourceOffset)
+            let upper = min(start + (line.content as NSString).length, resolved.endSourceOffset)
+            if lower < upper { result[index] = NSRange(location: lower - start, length: upper - lower) }
+        }
+        return [block.id: result]
     }
 
     /// Character tints inside cells touched by a source-backed text range.
@@ -978,12 +1011,13 @@ public final class MarkdownEditorController: ObservableObject {
             case .paragraph, .heading:
                 guard position.listItemIndex == nil, position.listContinuationIndex == nil,
                       position.listTrailingIndex == nil, position.tableRow == nil,
-                      position.tableColumn == nil else { return nil }
+                      position.tableColumn == nil, position.quoteLineIndex == nil else { return nil }
                 body = block.plainText
                 let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
                 bodyStart = (block.source as NSString).length - (body as NSString).length - ending
             case let .list(list):
                 guard position.tableRow == nil, position.tableColumn == nil,
+                      position.quoteLineIndex == nil,
                       let index = position.listItemIndex, list.items.indices.contains(index),
                       position.listContinuationIndex == nil || position.listTrailingIndex == nil,
                       let line = list.sourceLine(at: index,
@@ -994,13 +1028,13 @@ public final class MarkdownEditorController: ObservableObject {
             case .fencedCode:
                 guard position.listItemIndex == nil, position.listContinuationIndex == nil,
                       position.listTrailingIndex == nil, position.tableRow == nil,
-                      position.tableColumn == nil,
+                      position.tableColumn == nil, position.quoteLineIndex == nil,
                       let codeStart = Self.codeBodyStart(in: block) else { return nil }
                 body = block.plainText
                 bodyStart = codeStart
             case let .table(table):
                 guard position.listItemIndex == nil, position.listContinuationIndex == nil,
-                      position.listTrailingIndex == nil,
+                      position.listTrailingIndex == nil, position.quoteLineIndex == nil,
                       let row = position.tableRow, let column = position.tableColumn,
                       row >= 0, row <= table.rows.count,
                       table.headers.indices.contains(column),
@@ -1013,7 +1047,16 @@ public final class MarkdownEditorController: ObservableObject {
                 let absolute = cellRange.location + mapped.boundaries[position.offset]
                 guard isValidSourceRange(NSRange(location: absolute, length: 0)) else { return nil }
                 return absolute
-            case .horizontalRule, .plugin, .raw: return nil
+            case .raw:
+                guard position.listItemIndex == nil, position.listContinuationIndex == nil,
+                      position.listTrailingIndex == nil, position.tableRow == nil,
+                      position.tableColumn == nil,
+                      let index = position.quoteLineIndex,
+                      let quote = MarkdownSourceQuote(source: block.source),
+                      quote.lines.indices.contains(index) else { return nil }
+                body = quote.lines[index].content
+                bodyStart = quote.lines[index].bodyOffset
+            case .horizontalRule, .plugin: return nil
             }
             guard position.offset >= 0, position.offset <= (body as NSString).length,
                   Range(NSRange(location: position.offset, length: 0), in: body) != nil,
@@ -1032,13 +1075,19 @@ public final class MarkdownEditorController: ObservableObject {
         let end = forward ? selection.focus : selection.anchor
         let startSourceOffset = forward ? anchorSourceOffset : focusSourceOffset
         let endSourceOffset = forward ? focusSourceOffset : anchorSourceOffset
+        if start.quoteLineIndex != nil || end.quoteLineIndex != nil {
+            guard firstIndex == lastIndex,
+                  start.quoteLineIndex != nil,
+                  end.quoteLineIndex != nil else { return nil }
+        }
         let sameCodeBlock: Bool
         if firstIndex == lastIndex, case .fencedCode = document.blocks[firstIndex].kind {
             sameCodeBlock = true
         } else { sameCodeBlock = false }
         let sameTableCell = firstIndex == lastIndex && start.tableRow != nil &&
             start.tableRow == end.tableRow && start.tableColumn == end.tableColumn
-        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock || sameTableCell),
+        let sameQuote = firstIndex == lastIndex && start.quoteLineIndex != nil && end.quoteLineIndex != nil
+        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock || sameTableCell || sameQuote),
               startSourceOffset < endSourceOffset else { return nil }
         return .init(firstIndex: firstIndex, lastIndex: lastIndex,
                      start: start, end: end,
@@ -1052,6 +1101,9 @@ public final class MarkdownEditorController: ObservableObject {
         let original = semanticDocument
         let first = original.blocks[resolved.firstIndex]
         let last = original.blocks[resolved.lastIndex]
+        if resolved.start.quoteLineIndex != nil || resolved.end.quoteLineIndex != nil {
+            return replacementForQuoteEndpointRange(resolved, with: replacement, document: original)
+        }
         if case .list = first.kind, resolved.firstIndex == resolved.lastIndex,
            resolved.start.listItemIndex == resolved.end.listItemIndex,
            resolved.start.listContinuationIndex == resolved.end.listContinuationIndex,
@@ -1191,6 +1243,86 @@ public final class MarkdownEditorController: ObservableObject {
               }),
               blockRange.location + line.offset + resolved.startOffset == resolved.startSourceOffset else { return nil }
         return (next, resolved.startSourceOffset + (replacement as NSString).length)
+    }
+
+    /// Replaces visible text on one quote line. UIKit's whole-field edits use
+    /// this path, while toolbar ranges use the endpoint method below.
+    @discardableResult
+    public func replaceSemanticQuoteLine(id: String, lineIndex: Int, with content: String) -> Bool {
+        guard !content.contains("\n"), !content.contains("\r"),
+              let block = semanticDocument.blockById(id), case .raw = block.kind,
+              let quote = MarkdownSourceQuote(source: block.source),
+              quote.lines.indices.contains(lineIndex),
+              let blockRange = semanticDocument.sourceRange(of: id) else { return false }
+        let line = quote.lines[lineIndex]
+        let range = NSRange(location: blockRange.location + line.bodyOffset,
+                            length: (line.content as NSString).length)
+        let next = (text as NSString).replacingCharacters(in: range, with: content)
+        guard validQuoteEdit(next, oldDocument: semanticDocument, blockID: id,
+                             expectedLineCount: quote.lines.count,
+                             expectedPrefix: line.prefix,
+                             changedLine: lineIndex) else { return false }
+        return replaceSemanticMarkdown(next)
+    }
+
+    private func replacementForQuoteEndpointRange(_ resolved: ResolvedSemanticTextSelection,
+                                                   with replacement: String,
+                                                   document: MarkdownDocument)
+        -> (markdown: String, caret: Int)? {
+        guard !replacement.contains("\n"), !replacement.contains("\r"),
+              resolved.firstIndex == resolved.lastIndex,
+              let startIndex = resolved.start.quoteLineIndex,
+              let endIndex = resolved.end.quoteLineIndex else { return nil }
+        let block = document.blocks[resolved.firstIndex]
+        guard case .raw = block.kind,
+              let quote = MarkdownSourceQuote(source: block.source),
+              quote.lines.indices.contains(startIndex),
+              quote.lines.indices.contains(endIndex),
+              startIndex <= endIndex else { return nil }
+        let prefix = quote.lines[startIndex].prefix
+        guard quote.lines[startIndex...endIndex].allSatisfy({ $0.prefix == prefix }) else { return nil }
+        let range = NSRange(location: resolved.startSourceOffset,
+                            length: resolved.endSourceOffset - resolved.startSourceOffset)
+        let next = (text as NSString).replacingCharacters(in: range, with: replacement)
+        guard validQuoteEdit(next, oldDocument: document, blockID: block.id,
+                             expectedLineCount: quote.lines.count - (endIndex - startIndex),
+                             expectedPrefix: prefix,
+                             changedLine: startIndex) else { return nil }
+        let parsed = codec.parse(next)
+        guard let updated = parsed.blockById(block.id),
+              let newQuote = MarkdownSourceQuote(source: updated.source) else { return nil }
+        for index in 0..<startIndex where newQuote.lines[index] != quote.lines[index] { return nil }
+        let removed = endIndex - startIndex
+        for index in (endIndex + 1)..<quote.lines.count {
+            let before = quote.lines[index]
+            let after = newQuote.lines[index - removed]
+            guard before.prefix == after.prefix, before.content == after.content,
+                  before.ending == after.ending else { return nil }
+        }
+        let expected = (quote.lines[startIndex].content as NSString).substring(to: resolved.startOffset)
+            + replacement + (quote.lines[endIndex].content as NSString).substring(from: resolved.endOffset)
+        guard newQuote.lines[startIndex].content == expected,
+              newQuote.lines[startIndex].ending == quote.lines[endIndex].ending else { return nil }
+        return (next, resolved.startSourceOffset + (replacement as NSString).length)
+    }
+
+    private func validQuoteEdit(_ next: String, oldDocument: MarkdownDocument,
+                                blockID: String, expectedLineCount: Int,
+                                expectedPrefix: String, changedLine: Int) -> Bool {
+        guard next != text else { return false }
+        let parsed = codec.parse(next)
+        guard parsed.toMarkdown() == next,
+              parsed.blocks.count == oldDocument.blocks.count,
+              parsed.trailingTrivia == oldDocument.trailingTrivia,
+              let index = oldDocument.blocks.firstIndex(where: { $0.id == blockID }),
+              parsed.blocks[index].leadingTrivia == oldDocument.blocks[index].leadingTrivia,
+              case .raw = parsed.blocks[index].kind,
+              let quote = MarkdownSourceQuote(source: parsed.blocks[index].source),
+              quote.lines.count == expectedLineCount,
+              quote.lines[changedLine].prefix == expectedPrefix else { return false }
+        return zip(parsed.blocks, oldDocument.blocks).enumerated().allSatisfy { offset, pair in
+            offset == index || Self.sameSourceBlock(pair.0, pair.1)
+        }
     }
 
     /// The parsed code body must occupy the bytes immediately after the opening

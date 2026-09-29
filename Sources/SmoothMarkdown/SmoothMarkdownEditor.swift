@@ -501,6 +501,11 @@ private struct FormattedBlocksView: View {
         return controller.semanticListLineHighlightRanges(textRange) ?? [:]
     }
 
+    private var quoteLineHighlights: [String: [Int: NSRange]] {
+        guard let textRange else { return [:] }
+        return controller.semanticQuoteLineHighlightRanges(textRange) ?? [:]
+    }
+
     private var tableCellHighlights: [String: [Int: [Int: NSRange]]] {
         guard let textRange else { return [:] }
         return controller.semanticTableCellHighlightRanges(textRange) ?? [:]
@@ -757,6 +762,7 @@ private struct FormattedBlocksView: View {
                                               customBlockEditorBuilder: customBlockEditorBuilder,
                                               crossBlockHighlight: textHighlights[block.id],
                                               listItemHighlights: listItemHighlights[block.id],
+                                              quoteLineHighlights: quoteLineHighlights[block.id],
                                               tableCellHighlights: tableCellHighlights[block.id],
                                               visibleCrossBlockHighlight: visibleHighlights[block.id],
                                               onCrossBlockDrag: { selection in
@@ -949,6 +955,7 @@ private struct FormattedBlockRow: View {
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
     let listItemHighlights: MarkdownEditorController.ListLineHighlights?
+    let quoteLineHighlights: [Int: NSRange]?
     let tableCellHighlights: [Int: [Int: NSRange]]?
     let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
@@ -972,7 +979,8 @@ private struct FormattedBlockRow: View {
         case .list: return listItemHighlights == nil
         case .fencedCode: return false
         case .table: return tableCellHighlights == nil
-        case .horizontalRule, .plugin, .raw: return true
+        case .raw: return quoteLineHighlights == nil
+        case .horizontalRule, .plugin: return true
         }
     }
 
@@ -1034,6 +1042,11 @@ private struct FormattedBlockRow: View {
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
+            case .raw where MarkdownSourceQuote(source: block.source) != nil:
+                FormattedQuoteView(controller: controller, blockID: block.id,
+                                   quote: MarkdownSourceQuote(source: block.source)!,
+                                   highlights: quoteLineHighlights,
+                                   onCaptureTextPosition: onCaptureTextPosition)
             case .plugin, .raw:
                 blockLabel("Source only")
                 Text(block.source.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -2155,6 +2168,58 @@ final class FormattedListKeyboardTextField: FormattedRangeTextField {
 
     @objc private func indentItem() { onIndent?(false) }
     @objc private func outdentItem() { onIndent?(true) }
+}
+
+@available(iOS 17.0, *)
+private struct FormattedQuoteView: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let quote: MarkdownSourceQuote
+    let highlights: [Int: NSRange]?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
+    @State private var selections: [Int: NSRange] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("QUOTE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(quote.lines.indices, id: \.self) { index in
+                let line = quote.lines[index]
+                let selection = selections[index] ?? NSRange(location: 0, length: 0)
+                HStack(alignment: .top, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.accentColor.opacity(0.55))
+                        .frame(width: 3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Button("Start at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: selection.location,
+                                                            quoteLineIndex: index), true)
+                            }
+                            .accessibilityIdentifier("quote-range-start-\(blockID)-\(index)")
+                            Button("End at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selection),
+                                                            quoteLineIndex: index), false)
+                            }
+                            .accessibilityIdentifier("quote-range-end-\(blockID)-\(index)")
+                        }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                        SemanticInlineTextView(
+                            text: line.content, selectedRange: selection,
+                            font: .preferredFont(forTextStyle: .body),
+                            identifier: "quote-line-\(blockID)-\(index)", blockID: blockID,
+                            crossBlockHighlight: highlights?[index],
+                            onEdit: { controller.replaceSemanticQuoteLine(id: blockID, lineIndex: index, with: $0) },
+                            onStructuredPaste: { _, _ in false },
+                            onSelection: { selections[index] = $0 },
+                            onCrossBlockDrag: { _ in },
+                            suggestionsVisible: false,
+                            onSuggestionKey: { _ in })
+                    }
+                }
+            }
+        }
+    }
 }
 
 @available(iOS 17.0, *)
