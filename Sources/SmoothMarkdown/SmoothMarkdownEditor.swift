@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import struct Markdown.Paragraph
 
 /// Source editing, live preview, and split view backed by MarkdownEditorController.
 @available(iOS 17.0, *)
@@ -345,6 +346,9 @@ private struct FormattedBlocksView: View {
     @State private var showingEditingTips = false
     @State private var textRangeLinkDestination = "https://"
     @State private var showingTextRangeLinkEditor = false
+    @State private var visibleTextRange: MarkdownVisibleTextSelection?
+    @State private var visibleLinkDestination = "https://"
+    @State private var showingVisibleLinkEditor = false
 
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
@@ -354,6 +358,32 @@ private struct FormattedBlocksView: View {
     private var textHighlights: [String: NSRange] {
         guard let textRange else { return [:] }
         return controller.semanticTextHighlightRanges(textRange) ?? [:]
+    }
+
+    private var visibleHighlights: [String: NSRange] {
+        guard let selected = visibleTextRange, selected.source == controller.text else { return [:] }
+        let blocks = controller.semanticDocument.blocks
+        guard let anchor = blocks.firstIndex(where: { $0.id == selected.anchor.blockID }),
+              let focus = blocks.firstIndex(where: { $0.id == selected.focus.blockID }) else { return [:] }
+        let first = min(anchor, focus)
+        let last = max(anchor, focus)
+        let forward = anchor < focus || (anchor == focus && selected.anchor.offset <= selected.focus.offset)
+        let start = forward ? selected.anchor.offset : selected.focus.offset
+        let end = forward ? selected.focus.offset : selected.anchor.offset
+        var highlights: [String: NSRange] = [:]
+        for index in first...last {
+            let block = blocks[index]
+            switch block.kind {
+            case .paragraph, .heading: break
+            default: return [:]
+            }
+            guard let length = MarkdownInlineMarkEditor.visibleUTF16Length(of: block.plainText) else { return [:] }
+            let lower = index == first ? start : 0
+            let upper = index == last ? end : length
+            guard lower >= 0, upper >= lower, upper <= length else { return [:] }
+            highlights[block.id] = NSRange(location: lower, length: upper - lower)
+        }
+        return highlights
     }
 
     private enum Row: Identifiable {
@@ -396,7 +426,7 @@ private struct FormattedBlocksView: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     DisclosureGroup("Editing tips", isExpanded: $showingEditingTips) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                            Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                             Text("Tap Start range on a block, then End range on another block.")
                             Text("Long press and drag between paragraphs or headings to select text. Start and End at selection also work with VoiceOver.")
                         }
@@ -404,7 +434,7 @@ private struct FormattedBlocksView: View {
                         .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                    Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -496,6 +526,25 @@ private struct FormattedBlocksView: View {
                     .font(.caption)
                     .buttonStyle(.bordered)
                 }
+                if let selected = visibleTextRange, selected.source == controller.text {
+                    HStack(spacing: 8) {
+                        Menu("Format rendered selection") {
+                            if capabilities.supports(.bold) {
+                                Button("Bold") { applyVisibleMark(.bold, to: selected) }
+                            }
+                            if capabilities.supports(.italic) {
+                                Button("Italic") { applyVisibleMark(.italic, to: selected) }
+                            }
+                            if capabilities.supports(.link) {
+                                Button("Link") { showingVisibleLinkEditor = true }
+                            }
+                        }
+                        .accessibilityIdentifier("visible-range-format")
+                        Text("Rendered characters selected")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.bordered)
+                }
                 if copiedRange {
                     Text("Markdown copied")
                         .font(.caption)
@@ -526,11 +575,21 @@ private struct FormattedBlocksView: View {
                                               customBlockBuilder: customBlockBuilder,
                                               customBlockEditorBuilder: customBlockEditorBuilder,
                                               crossBlockHighlight: textHighlights[block.id],
+                                              visibleCrossBlockHighlight: visibleHighlights[block.id],
                                               onCrossBlockDrag: { selection in
                         guard controller.copySemanticTextRange(selection) != nil else { return }
                         textRangeStart = selection.anchor
                         textRangeEnd = selection.focus
                         copiedRange = false
+                    },
+                                              onVisibleSelection: { range in
+                        guard range.length > 0 else { return }
+                        visibleTextRange = .init(source: controller.text,
+                                                 anchor: .init(blockID: block.id, offset: range.location),
+                                                 focus: .init(blockID: block.id, offset: NSMaxRange(range)))
+                    },
+                                              onVisibleCrossBlockDrag: { anchor, focus in
+                        visibleTextRange = .init(source: controller.text, anchor: anchor, focus: focus)
                     },
                                               onCaptureTextPosition: { position, isStart in
                         if isStart {
@@ -566,7 +625,25 @@ private struct FormattedBlocksView: View {
         } message: {
             Text("Only http, https, mailto, and tel links are accepted.")
         }
+        .alert("Rendered link URL", isPresented: $showingVisibleLinkEditor) {
+            TextField("https://example.com", text: $visibleLinkDestination)
+                .textInputAutocapitalization(.never)
+            Button("Apply") {
+                if let selected = visibleTextRange {
+                    applyVisibleMark(.link(destination: visibleLinkDestination), to: selected)
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Only safe Markdown link destinations are accepted.")
+        }
         .onChange(of: controller.text) { _, _ in clearRange() }
+    }
+
+    private func applyVisibleMark(_ mark: MarkdownInlineMark, to selected: MarkdownVisibleTextSelection) {
+        if controller.applySemanticInlineMarkToVisibleTextRange(selected, mark: mark) {
+            visibleTextRange = nil
+        }
     }
 
     private func clearRange() {
@@ -574,6 +651,7 @@ private struct FormattedBlocksView: View {
         rangeEndID = nil
         textRangeStart = nil
         textRangeEnd = nil
+        visibleTextRange = nil
         copiedRange = false
     }
 
@@ -653,7 +731,10 @@ private struct FormattedBlockRow: View {
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
+    let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
+    let onVisibleSelection: (NSRange) -> Void
+    let onVisibleCrossBlockDrag: (MarkdownVisibleTextPosition, MarkdownVisibleTextPosition) -> Void
     let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var customBlockEditing = false
     @State private var customBlockExpectedText: String?
@@ -662,6 +743,7 @@ private struct FormattedBlockRow: View {
     @State private var slashSelectedIndex = 0
     @State private var linkDestination = "https://"
     @State private var showLinkEditor = false
+    @State private var editingMarkdown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -671,20 +753,14 @@ private struct FormattedBlockRow: View {
             switch block.kind {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
-                inlineActions
-                textRangeActions
-                inlineTextView(font: UIFontMetrics(forTextStyle: headingTextStyle(level))
-                    .scaledFont(for: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold)),
-                               identifier: "heading-\(block.id)")
-                wikilinkSuggestionPanel
-                slashSuggestionPanel
+                let font = UIFontMetrics(forTextStyle: headingTextStyle(level))
+                    .scaledFont(for: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold))
+                proseContent(font: font, rawIdentifier: "heading-\(block.id)",
+                             visibleIdentifier: "rendered-heading-\(block.id)")
             case .paragraph:
                 blockLabel("Paragraph")
-                inlineActions
-                textRangeActions
-                inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
-                wikilinkSuggestionPanel
-                slashSuggestionPanel
+                proseContent(font: .preferredFont(forTextStyle: .body), rawIdentifier: "paragraph-\(block.id)",
+                             visibleIdentifier: "rendered-paragraph-\(block.id)")
             case let .fencedCode(_, info, _):
                 blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
                 TextEditor(text: contentBinding)
@@ -888,6 +964,31 @@ private struct FormattedBlockRow: View {
                                suggestionsVisible: !visibleWikilinkSuggestions.isEmpty || !visibleSlashCommands.isEmpty,
                                onSuggestionKey: handleSuggestionKey)
         .frame(minHeight: 44)
+    }
+
+    @ViewBuilder
+    private func proseContent(font: UIFont, rawIdentifier: String, visibleIdentifier: String) -> some View {
+        let markdown = controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText
+        if MarkdownInlineMarkEditor.visibleText(of: markdown) != nil {
+            VisibleInlineTextView(markdown: markdown, font: font, identifier: visibleIdentifier,
+                                  blockID: block.id, crossBlockHighlight: visibleCrossBlockHighlight,
+                                  onSelection: onVisibleSelection, onCrossBlockDrag: onVisibleCrossBlockDrag)
+                .frame(minHeight: 44)
+            DisclosureGroup("Edit Markdown", isExpanded: $editingMarkdown) {
+                inlineActions
+                textRangeActions
+                inlineTextView(font: font, identifier: rawIdentifier)
+                wikilinkSuggestionPanel
+                slashSuggestionPanel
+            }
+            .font(.caption)
+        } else {
+            inlineActions
+            textRangeActions
+            inlineTextView(font: font, identifier: rawIdentifier)
+            wikilinkSuggestionPanel
+            slashSuggestionPanel
+        }
     }
 
     private func headingTextStyle(_ level: Int) -> UIFont.TextStyle {
@@ -1513,6 +1614,7 @@ private class WikilinkInputTextView: UITextView {
 @available(iOS 17.0, *)
 private final class SemanticRangeTextView: WikilinkInputTextView {
     var semanticBlockID = ""
+    var isRenderedSelectionSurface = false
     var crossBlockHighlight: NSRange? { didSet { setNeedsLayout() } }
     private let rangeLayer = CAShapeLayer()
 
@@ -1660,6 +1762,133 @@ private struct SemanticInlineTextView: UIViewRepresentable {
                 return false
             }
             return true
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            if !isUpdating { parent.onSelection(textView.selectedRange) }
+        }
+    }
+}
+
+/// Selectable rendered prose; the adjacent disclosure keeps raw Markdown editing available.
+@available(iOS 17.0, *)
+private struct VisibleInlineTextView: UIViewRepresentable {
+    let markdown: String
+    let font: UIFont
+    let identifier: String
+    let blockID: String
+    let crossBlockHighlight: NSRange?
+    let onSelection: (NSRange) -> Void
+    let onCrossBlockDrag: (MarkdownVisibleTextPosition, MarkdownVisibleTextPosition) -> Void
+
+    func makeUIView(context: Context) -> UITextView {
+        let view = SemanticRangeTextView()
+        view.delegate = context.coordinator
+        view.semanticBlockID = blockID
+        view.isRenderedSelectionSurface = true
+        view.crossBlockHighlight = crossBlockHighlight
+        view.isEditable = false
+        view.isSelectable = true
+        view.isScrollEnabled = false
+        view.backgroundColor = .clear
+        view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
+        view.textContainer.lineFragmentPadding = 0
+        view.adjustsFontForContentSizeCategory = true
+        view.dataDetectorTypes = []
+        view.accessibilityIdentifier = identifier
+        view.attributedText = renderedText()
+        context.coordinator.lastMarkdown = markdown
+        context.coordinator.lastFontSize = font.pointSize
+        let drag = UILongPressGestureRecognizer(target: context.coordinator,
+                                                action: #selector(Coordinator.handleRangeDrag(_:)))
+        drag.minimumPressDuration = 0.4
+        drag.cancelsTouchesInView = false
+        drag.delegate = context.coordinator
+        view.addGestureRecognizer(drag)
+        return view
+    }
+
+    func updateUIView(_ view: UITextView, context: Context) {
+        context.coordinator.parent = self
+        if let view = view as? SemanticRangeTextView {
+            view.semanticBlockID = blockID
+            view.crossBlockHighlight = crossBlockHighlight
+        }
+        if context.coordinator.lastMarkdown != markdown || context.coordinator.lastFontSize != font.pointSize {
+            context.coordinator.isUpdating = true
+            view.attributedText = renderedText()
+            context.coordinator.lastMarkdown = markdown
+            context.coordinator.lastFontSize = font.pointSize
+            context.coordinator.isUpdating = false
+        }
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let measured = uiView.sizeThatFits(CGSize(width: proposal.width ?? 300, height: .greatestFiniteMagnitude))
+        return CGSize(width: proposal.width ?? 300, height: max(44, ceil(measured.height)))
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    private func renderedText() -> NSAttributedString {
+        let output = NSMutableAttributedString(string: "")
+        let parsed = MarkdownSyntax.parse(markdown, useCache: false)
+        guard let paragraph = Array(parsed.children).first as? Paragraph else {
+            return NSAttributedString(string: markdown, attributes: [.font: font])
+        }
+        for run in InlineContent.runs(in: paragraph, enableHTML: false) {
+            guard case let .text(value, style, _, _) = run else { continue }
+            var traits = font.fontDescriptor.symbolicTraits
+            if style.bold { traits.insert(.traitBold) }
+            if style.italic { traits.insert(.traitItalic) }
+            let descriptor = font.fontDescriptor.withSymbolicTraits(traits) ?? font.fontDescriptor
+            let styledFont = UIFont(descriptor: descriptor, size: font.pointSize)
+            var attributes: [NSAttributedString.Key: Any] = [.font: styledFont]
+            if style.link != nil {
+                attributes[.foregroundColor] = UIColor.systemBlue
+                attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            output.append(NSAttributedString(string: value, attributes: attributes))
+        }
+        return output
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
+        var parent: VisibleInlineTextView
+        var isUpdating = false
+        var lastMarkdown: String?
+        var lastFontSize: CGFloat?
+        private var dragAnchor: MarkdownVisibleTextPosition?
+
+        init(parent: VisibleInlineTextView) { self.parent = parent }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            true
+        }
+
+        @objc func handleRangeDrag(_ gesture: UILongPressGestureRecognizer) {
+            guard let source = gesture.view as? SemanticRangeTextView else { return }
+            switch gesture.state {
+            case .began:
+                guard source.markedTextRange == nil,
+                      let position = source.closestPosition(to: gesture.location(in: source)) else { return }
+                let offset = source.offset(from: source.beginningOfDocument, to: position)
+                dragAnchor = .init(blockID: source.semanticBlockID, offset: offset)
+            case .changed:
+                guard let anchor = dragAnchor, let window = source.window else { return }
+                let point = gesture.location(in: window)
+                var hit = window.hitTest(point, with: nil)
+                while hit != nil && !(hit is SemanticRangeTextView) { hit = hit?.superview }
+                guard let target = hit as? SemanticRangeTextView, target.isRenderedSelectionSurface,
+                      target.semanticBlockID != anchor.blockID,
+                      target.markedTextRange == nil,
+                      let position = target.closestPosition(to: gesture.location(in: target)) else { return }
+                let offset = target.offset(from: target.beginningOfDocument, to: position)
+                parent.onCrossBlockDrag(anchor, .init(blockID: target.semanticBlockID, offset: offset))
+            case .ended, .cancelled, .failed: dragAnchor = nil
+            default: break
+            }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {

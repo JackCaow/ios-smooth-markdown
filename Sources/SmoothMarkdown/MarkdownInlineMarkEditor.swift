@@ -74,6 +74,11 @@ enum MarkdownInlineMarkEditor {
 
     static func visibleUTF16Length(of markdown: String) -> Int? { inlineMap(markdown)?.units.count }
 
+    static func visibleText(of markdown: String) -> String? {
+        guard let mapped = inlineMap(markdown) else { return nil }
+        return String(decoding: mapped.units, as: UTF16.self)
+    }
+
     /// Wraps visible UTF-16 text inside existing emphasis and links only when
     /// reparsing preserves every original text unit and existing mark.
     static func applyVerifiedVisibleRange(_ mark: MarkdownInlineMark, to markdown: String,

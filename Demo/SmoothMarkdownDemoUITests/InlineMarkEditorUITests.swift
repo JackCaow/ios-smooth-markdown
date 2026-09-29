@@ -6,6 +6,7 @@ final class InlineMarkEditorUITests: XCTestCase {
         app.launchArguments = ["--inline-editor-fixture"]
         app.launch()
 
+        revealRawEditor(in: app)
         let paragraph = app.textViews["paragraph-block-0"]
         XCTAssertTrue(paragraph.waitForExistence(timeout: 10))
 
@@ -19,6 +20,7 @@ final class InlineMarkEditorUITests: XCTestCase {
         assertSource("Alpha", in: app)
 
         app.segmentedControls.buttons["Blocks"].tap()
+        revealRawEditor(in: app)
         selectFixtureWord(in: paragraph, app: app)
         let link = app.buttons["Link selection"]
         XCTAssertTrue(link.isEnabled)
@@ -40,6 +42,12 @@ final class InlineMarkEditorUITests: XCTestCase {
         paragraph.doubleTap()
         XCTAssertTrue(app.buttons["Bold selection"].isEnabled,
                       "Double-tapping the one-word fixture should select Alpha")
+    }
+
+    private func revealRawEditor(in app: XCUIApplication) {
+        if !app.textViews["paragraph-block-0"].exists {
+            app.buttons["Edit Markdown"].firstMatch.tap()
+        }
     }
 
     private func assertSource(_ expected: String, in app: XCUIApplication) {
