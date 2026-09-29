@@ -21,12 +21,16 @@ final class DemoEditorUITests: XCTestCase {
         XCTAssertTrue(find.waitForExistence(timeout: 5))
         find.tap()
         find.typeText("Mermaid")
-        XCTAssertEqual(app.staticTexts["editor-find-count"].label, "1/2")
+        XCTAssertEqual(app.staticTexts["editor-find-count"].label, "1/1")
         focus.tap()
         XCTAssertTrue(find.exists)
         focus.tap()
         app.buttons["editor-find-next"].tap()
-        XCTAssertTrue(app.textViews["markdown-source"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.segmentedControls.buttons["Blocks"].isSelected)
+        XCTAssertFalse(app.textViews["markdown-source"].exists)
+        let quote = app.textViews.matching(NSPredicate(format: "identifier BEGINSWITH %@", "quote-line-")).firstMatch
+        XCTAssertTrue(quote.waitForExistence(timeout: 5))
+        XCTAssertTrue((quote.value as? String)?.contains("active") == true)
         app.buttons["editor-find-close"].tap()
         XCTAssertFalse(find.exists)
     }
