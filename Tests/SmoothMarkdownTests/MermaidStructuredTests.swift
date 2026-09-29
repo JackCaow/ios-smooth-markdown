@@ -124,10 +124,33 @@ final class MermaidStructuredTests: XCTestCase {
             XCTAssertEqual(edge.targetMarker, targetMarker)
         }
         let edge = MermaidParser.parse("classDiagram\nA \"1\" <-- \"many\" B : feeds")!.edges[0]
-        XCTAssertEqual(edge.sourceArrow, .arrow)
-        XCTAssertEqual(edge.sourceLabel, "1")
-        XCTAssertEqual(edge.targetLabel, "many")
+        XCTAssertEqual(edge.from, "B")
+        XCTAssertEqual(edge.to, "A")
+        XCTAssertEqual(edge.arrow, .arrow)
+        XCTAssertEqual(edge.sourceArrow, .none)
+        XCTAssertEqual(edge.sourceLabel, "many")
+        XCTAssertEqual(edge.targetLabel, "1")
         XCTAssertEqual(edge.label, "feeds")
+    }
+
+    func testReverseClassRelationsDriveLayoutAndPreserveEndpointLabels() {
+        for token in ["<--", "<.."] {
+            let diagram = MermaidParser.parse("""
+            classDiagram
+            direction LR
+            A "1" \(token) "many" B : feeds
+            """)!
+            let edge = diagram.edges[0]
+            XCTAssertEqual(edge.from, "B", token)
+            XCTAssertEqual(edge.to, "A", token)
+            XCTAssertEqual(edge.arrow, .arrow, token)
+            XCTAssertEqual(edge.sourceLabel, "many", token)
+            XCTAssertEqual(edge.targetLabel, "1", token)
+            XCTAssertEqual(edge.line, token == "<.." ? .dotted : .solid, token)
+            let layout = MermaidLayout.compute(diagram)
+            XCTAssertLessThan(layout.nodes["B"]!.midX, layout.nodes["A"]!.midX, token)
+            XCTAssertLessThan(layout.edges[0].start.x, layout.edges[0].end.x, token)
+        }
     }
 
     func testERFixtureKeepsAttributesAndCardinalities() {
