@@ -1,0 +1,104 @@
+#if os(iOS)
+import SwiftUI
+import UIKit
+
+/// Keeps the host's original SwiftUI image (including custom builders and tap
+/// callbacks) while exposing a block range that can cross that image.
+@available(iOS 17.0, *)
+struct ReaderImageRangeView: View {
+    let document: ReaderImageRangeDocument
+    let enableHTML: Bool
+    let plugins: ParserPluginRegistry?
+    let spacing: CGFloat
+    let renderSegment: (ReaderImageRangeDocument.Segment) -> AnyView
+
+    @State private var selecting = false
+    @State private var anchor: Int?
+    @State private var focus: Int?
+
+    private var selectedRange: ClosedRange<Int>? {
+        guard let anchor, let focus, anchor != focus else { return nil }
+        return min(anchor, focus)...max(anchor, focus)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(document.segments.indices, id: \.self) { index in
+                let segment = document.segments[index]
+                renderSegment(segment)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .overlay(alignment: .topTrailing) {
+                        if segment.isImage && !selecting {
+                            Button {
+                                selecting = true
+                                anchor = nil
+                                focus = nil
+                            } label: {
+                                Image(systemName: "text.badge.checkmark")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(7)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel("Select range across image")
+                            .accessibilityIdentifier("reader-image-range-start")
+                        }
+                    }
+                    .overlay {
+                        if selecting {
+                            Button {
+                                if anchor == nil || focus != nil {
+                                    anchor = index
+                                    focus = nil
+                                } else {
+                                    focus = index
+                                }
+                            } label: {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.accentColor.opacity(isSelected(index) ? 0.12 : 0.001))
+                                    .overlay(RoundedRectangle(cornerRadius: 6)
+                                        .stroke(Color.accentColor.opacity(isSelected(index) ? 0.55 : 0), lineWidth: 2))
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Select block \(index + 1)")
+                            .accessibilityIdentifier("reader-image-range-block-\(index)")
+                        }
+                    }
+            }
+            if selecting {
+                HStack(spacing: 12) {
+                    Text(anchor == nil ? "Choose first block" : focus == nil ? "Choose last block" : "Range selected")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Copy") {
+                        if let selectedRange,
+                           let copied = document.copiedText(in: selectedRange,
+                                                            enableHTML: enableHTML, plugins: plugins) {
+                            UIPasteboard.general.string = copied
+                            reset()
+                        }
+                    }
+                    .disabled(selectedRange == nil)
+                    .accessibilityIdentifier("reader-image-range-copy")
+                    Button("Cancel") { reset() }
+                        .accessibilityIdentifier("reader-image-range-cancel")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func isSelected(_ index: Int) -> Bool {
+        if let selectedRange { return selectedRange.contains(index) }
+        return anchor == index
+    }
+
+    private func reset() {
+        selecting = false
+        anchor = nil
+        focus = nil
+    }
+}
+#endif

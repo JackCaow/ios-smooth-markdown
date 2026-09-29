@@ -126,24 +126,87 @@ struct ReaderSelectionDocument {
     }
 }
 
+/// A logical copy range across standalone image widgets. Image views stay in
+/// SwiftUI; copying omits their invisible selection anchor, as Flutter does.
+struct ReaderImageRangeDocument {
+    struct Segment {
+        let nodes: [Markup]
+        let isImage: Bool
+    }
+
+    let segments: [Segment]
+
+    init?(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) {
+        var result: [Segment] = []
+        var textRun: [Markup] = []
+        func flushText() {
+            if !textRun.isEmpty { result.append(.init(nodes: textRun, isImage: false)) }
+            textRun.removeAll()
+        }
+        for node in nodes {
+            if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
+                flushText()
+                result.append(.init(nodes: [node], isImage: true))
+            } else if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) {
+                textRun.append(node)
+            } else { return nil }
+        }
+        flushText()
+        guard result.contains(where: \.isImage), result.contains(where: { !$0.isImage }) else { return nil }
+        segments = result
+    }
+
+    func copiedText(in range: ClosedRange<Int>, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
+        guard range.lowerBound >= 0, range.upperBound < segments.count else { return nil }
+        let nodes = segments[range].filter { !$0.isImage }.flatMap(\.nodes)
+        return ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins)?.copiedText
+    }
+}
+
 enum ReaderSelectionGroup {
     case selectable([Markup])
+    case imageBridge([Markup])
     case individual(Markup)
+
+    static func isStandaloneImage(_ node: Markup, enableHTML: Bool) -> Bool {
+        guard let paragraph = node as? Paragraph else { return false }
+        let meaningful = Array(paragraph.children).filter { child in
+            guard let text = child as? Markdown.Text else { return true }
+            return !text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        guard meaningful.count == 1, let only = meaningful.first else { return false }
+        if let image = only as? Markdown.Image, let source = image.source {
+            return ImageSource.parse(source) != nil
+        }
+        if enableHTML, let html = only as? InlineHTML,
+           let image = SafeHTML.imageTag(html.rawHTML) {
+            return ImageSource.parse(image.source) != nil
+        }
+        return false
+    }
 
     static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?, enabled: Bool = true) -> [ReaderSelectionGroup] {
         guard enabled else { return nodes.map(ReaderSelectionGroup.individual) }
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
         func flush() {
-            if pending.count > 1 { result.append(.selectable(pending)) }
+            let hasImage = pending.contains { isStandaloneImage($0, enableHTML: enableHTML) }
+            let hasText = pending.contains { !isStandaloneImage($0, enableHTML: enableHTML) }
+            if hasImage && hasText { result.append(.imageBridge(pending)) }
+            else if pending.count > 1 && !hasImage { result.append(.selectable(pending)) }
             else if let one = pending.first {
-                let lineCount = ReaderSelectionDocument.compose([one], enableHTML: enableHTML, plugins: plugins)?.lines.count ?? 0
-                result.append(lineCount > 1 ? .selectable(pending) : .individual(one))
+                let lineCount = ReaderSelectionDocument.compose([one], enableHTML: enableHTML,
+                                                                 plugins: plugins)?.lines.count ?? 0
+                result.append(lineCount > 1 && !hasImage ? .selectable(pending) : .individual(one))
+            }
+            if hasImage && !hasText && pending.count > 1 {
+                result.append(contentsOf: pending.dropFirst().map(ReaderSelectionGroup.individual))
             }
             pending.removeAll()
         }
         for node in nodes {
-            if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) {
+            if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
+                isStandaloneImage(node, enableHTML: enableHTML) {
                 pending.append(node)
             } else {
                 flush()
