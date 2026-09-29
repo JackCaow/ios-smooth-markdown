@@ -13,14 +13,16 @@ struct ReaderVisibleDocumentProjection {
     }
 
     struct Atom {
-        enum Kind: Equatable { case text, image, formula(String), opaque }
+        enum Kind: Equatable { case text, image(SafeHTML.ImageSpec), formula(String), opaque }
         let kind: Kind
         let text: String
         /// An attachment may copy a semantic value such as LaTeX.
         let copyText: String
 
         static func text(_ value: String) -> Self { .init(kind: .text, text: value, copyText: value) }
-        static let image = Self(kind: .image, text: ReaderVisibleDocumentProjection.attachment, copyText: "")
+        static func image(_ spec: SafeHTML.ImageSpec) -> Self {
+            .init(kind: .image(spec), text: ReaderVisibleDocumentProjection.attachment, copyText: "")
+        }
         static func formula(_ latex: String) -> Self {
             .init(kind: .formula(latex), text: ReaderVisibleDocumentProjection.attachment, copyText: latex)
         }
@@ -204,8 +206,8 @@ struct ReaderVisibleDocumentProjection {
                 append(.heading, atoms, identity: identity(for: atoms))
             } else if let paragraph = node as? Paragraph {
                 let atoms = inlineAtoms(paragraph)
-                append(atoms.count == 1 && atoms[0].kind == .image
-                       ? .image : .text, atoms, identity: identity(for: atoms))
+                let standaloneImage: Bool = if atoms.count == 1, case .image = atoms[0].kind { true } else { false }
+                append(standaloneImage ? .image : .text, atoms, identity: identity(for: atoms))
             } else if let code = node as? CodeBlock {
                 append(.code, [.text(code.code)], identity: code.format())
             } else if let table = node as? Markdown.Table {
@@ -264,8 +266,8 @@ struct ReaderVisibleDocumentProjection {
         }
 
         private mutating func appendHTML(_ source: String) {
-            if enableHTML, SafeHTML.imageTag(source) != nil {
-                append(.image, [.image], identity: source)
+            if enableHTML, let spec = SafeHTML.imageTag(source) {
+                append(.image, [.image(spec)], identity: source)
             } else if enableHTML, let alt = SafeHTML.imageAlt(source) {
                 append(.text, [.text(alt)], identity: source)
             } else if enableHTML, let block = SafeHTML.parseBlock(source) {
@@ -286,7 +288,7 @@ struct ReaderVisibleDocumentProjection {
                                           hasCustomBuilder: { builderRegistry?.findBuilder($0) != nil }) {
                 switch run {
                 case let .text(value, _, _, _): atoms.append(.text(value))
-                case .image: atoms.append(.image)
+                case let .image(spec): atoms.append(.image(spec))
                 case .custom: atoms.append(.attachment)
                 case let .math(latex):
                     atoms.append(builderRegistry?.findBuilder(.inlineMath(latex)) == nil
@@ -364,7 +366,16 @@ struct ReaderVisibleDocumentProjection {
         }
 
         private func identity(for atoms: [Atom]) -> String {
-            atoms.map { $0.text + "\u{0}" + $0.copyText }.joined(separator: "\u{1}")
+            atoms.map { atom in
+                switch atom.kind {
+                case .text, .opaque: return atom.text + "\u{0}" + atom.copyText
+                case let .formula(latex): return "formula\u{0}" + latex
+                case let .image(spec):
+                    return "image\u{0}" + spec.source + "\u{0}" + spec.alt + "\u{0}" +
+                        (spec.title ?? "") + "\u{0}" + (spec.width.map { String($0) } ?? "") + "\u{0}" +
+                        (spec.height.map { String($0) } ?? "")
+                }
+            }.joined(separator: "\u{1}")
         }
 
         private mutating func append(_ kind: Kind, _ atoms: [Atom], id: String) {
