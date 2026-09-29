@@ -477,6 +477,7 @@ private struct FormattedBlocksView: View {
     @State private var rangeEndID: String?
     @State private var textRangeStart: MarkdownSemanticTextPosition?
     @State private var textRangeEnd: MarkdownSemanticTextPosition?
+    @State private var textRangeSource: String?
     @State private var copiedRange = false
     @State private var showingEditingTips = false
     @State private var textRangeLinkDestination = "https://"
@@ -487,12 +488,17 @@ private struct FormattedBlocksView: View {
 
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
-        return .init(anchor: textRangeStart, focus: textRangeEnd)
+        return .init(anchor: textRangeStart, focus: textRangeEnd, source: textRangeSource)
     }
 
     private var textHighlights: [String: NSRange] {
         guard let textRange else { return [:] }
         return controller.semanticTextHighlightRanges(textRange) ?? [:]
+    }
+
+    private var listItemHighlights: [String: [Int: NSRange]] {
+        guard let textRange else { return [:] }
+        return controller.semanticListItemHighlightRanges(textRange) ?? [:]
     }
 
     private var visibleHighlights: [String: NSRange] {
@@ -745,11 +751,13 @@ private struct FormattedBlocksView: View {
                                               customBlockBuilder: customBlockBuilder,
                                               customBlockEditorBuilder: customBlockEditorBuilder,
                                               crossBlockHighlight: textHighlights[block.id],
+                                              listItemHighlights: listItemHighlights[block.id],
                                               visibleCrossBlockHighlight: visibleHighlights[block.id],
                                               onCrossBlockDrag: { selection in
                         guard controller.copySemanticTextRange(selection) != nil else { return }
                         textRangeStart = selection.anchor
                         textRangeEnd = selection.focus
+                        textRangeSource = controller.text
                         copiedRange = false
                     },
                                               onVisibleSelection: { range in
@@ -765,6 +773,16 @@ private struct FormattedBlocksView: View {
                         if isStart {
                             textRangeStart = position
                             textRangeEnd = nil
+                            textRangeSource = controller.text
+                        } else {
+                            textRangeEnd = position
+                        }
+                        copiedRange = false
+                    }, onCaptureListTextPosition: { position, isStart in
+                        if isStart {
+                            textRangeStart = position
+                            textRangeEnd = nil
+                            textRangeSource = controller.text
                         } else {
                             textRangeEnd = position
                         }
@@ -822,6 +840,7 @@ private struct FormattedBlocksView: View {
         rangeEndID = nil
         textRangeStart = nil
         textRangeEnd = nil
+        textRangeSource = nil
         visibleTextRange = nil
         copiedRange = false
     }
@@ -923,11 +942,13 @@ private struct FormattedBlockRow: View {
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
+    let listItemHighlights: [Int: NSRange]?
     let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let onVisibleSelection: (NSRange) -> Void
     let onVisibleCrossBlockDrag: (MarkdownVisibleTextPosition, MarkdownVisibleTextPosition) -> Void
     let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
+    let onCaptureListTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var customBlockEditing = false
     @State private var customBlockExpectedText: String?
     @State private var inlineSelection = NSRange(location: 0, length: 0)
@@ -941,7 +962,8 @@ private struct FormattedBlockRow: View {
         guard crossBlockHighlight != nil else { return false }
         switch block.kind {
         case .paragraph, .heading: return false
-        case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return true
+        case .list: return listItemHighlights == nil
+        case .fencedCode, .table, .horizontalRule, .plugin, .raw: return true
         }
     }
 
@@ -976,7 +998,9 @@ private struct FormattedBlockRow: View {
             case let .table(table):
                 FormattedTableView(controller: controller, blockID: block.id, table: table)
             case let .list(list):
-                FormattedListView(controller: controller, blockID: block.id, list: list)
+                FormattedListView(controller: controller, blockID: block.id, list: list,
+                                  textHighlights: listItemHighlights,
+                                  onCaptureTextPosition: onCaptureListTextPosition)
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
@@ -1643,7 +1667,10 @@ private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
+    let textHighlights: [Int: NSRange]?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var focusRequest: (index: Int, continuationIndex: Int?, offset: Int, token: UUID)?
+    @State private var itemSelections: [Int: NSRange] = [:]
     @State private var selectedItems: MarkdownSemanticListItemSelection?
     @State private var rangeLinkDestination = "https://"
     @State private var showingRangeLinkEditor = false
@@ -1717,6 +1744,8 @@ private struct FormattedListView: View {
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            crossItemHighlight: textHighlights?[index],
+                            onSelection: { itemSelections[index] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1759,6 +1788,22 @@ private struct FormattedListView: View {
                         .accessibilityLabel("Indent item \(index + 1)")
                         .disabled(list.indentingItem(at: index) == nil)
                     }
+                    if let selected = itemSelections[index] {
+                        HStack(spacing: 8) {
+                            Button("Start at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                                            listItemIndex: index), true)
+                            }
+                            .accessibilityIdentifier("text-range-start-\(blockID)-item-\(index)")
+                            Button("End at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                                            listItemIndex: index), false)
+                            }
+                            .accessibilityIdentifier("text-range-end-\(blockID)-item-\(index)")
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                    }
                     ForEach(item.continuations.indices, id: \.self) { lineIndex in
                         let continuation = item.continuations[lineIndex]
                         let sourceAtRender = controller.text
@@ -1775,6 +1820,7 @@ private struct FormattedListView: View {
                                 $0.replacingContinuationContent(at: index, lineIndex: lineIndex, with: value)
                             }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            crossItemHighlight: nil, onSelection: nil,
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1806,7 +1852,7 @@ private struct FormattedListView: View {
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
                 .padding(4)
-                .background(isSelected(index) ?
+                .background(isSelected(index) || textHighlights?[index] != nil ?
                             (editorTheme.selectionColor ?? Color.accentColor.opacity(0.15)) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
                 ForEach(list.trailingOwners(after: index), id: \.self) { parentIndex in
@@ -1826,6 +1872,7 @@ private struct FormattedListView: View {
                                                                         lineIndex: lineIndex, with: value)
                             }
                         }), blockID: blockID, index: parentIndex, isRangeSelected: isSelected(parentIndex),
+                            crossItemHighlight: nil, onSelection: nil,
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1862,7 +1909,10 @@ private struct FormattedListView: View {
         } message: {
             Text("Only http, https, mailto, and tel links are accepted.")
         }
-        .onChange(of: controller.text) { _, _ in selectedItems = nil }
+        .onChange(of: controller.text) { _, _ in
+            selectedItems = nil
+            itemSelections.removeAll()
+        }
     }
 
     private func changeIndent(at index: Int, outdent: Bool) -> Bool {
@@ -1934,6 +1984,26 @@ class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
 final class FormattedListKeyboardTextField: FormattedRangeTextField {
     var onIndent: ((Bool) -> Void)?
     var onReturnAtCaret: ((Int) -> Void)?
+    var crossItemHighlight: NSRange? { didSet { setNeedsLayout() } }
+    var crossItemHighlightColor: UIColor? { didSet { setNeedsLayout() } }
+    private let rangeLayer = CAShapeLayer()
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if rangeLayer.superlayer == nil { layer.insertSublayer(rangeLayer, at: 0) }
+        rangeLayer.frame = bounds
+        rangeLayer.fillColor = (crossItemHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        let path = UIBezierPath()
+        if let highlight = crossItemHighlight, highlight.length > 0,
+           let first = position(from: beginningOfDocument, offset: highlight.location),
+           let last = position(from: first, offset: highlight.length),
+           let range = textRange(from: first, to: last) {
+            for rect in selectionRects(for: range) where !rect.rect.isEmpty {
+                path.append(UIBezierPath(roundedRect: rect.rect, cornerRadius: 2))
+            }
+        }
+        rangeLayer.path = path.cgPath
+    }
 
     /// Return from a one-line field only when the caret is collapsed.
     @discardableResult
@@ -1962,6 +2032,8 @@ private struct FormattedListItemField: UIViewRepresentable {
     let blockID: String
     let index: Int
     let isRangeSelected: Bool
+    let crossItemHighlight: NSRange?
+    let onSelection: ((NSRange) -> Void)?
     let onRangeDrag: (Int, Int) -> Void
     let focusRequest: (token: UUID, offset: Int)?
     let onSubmit: ((Int) -> Void)?
@@ -1981,6 +2053,8 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.text = text
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.crossItemHighlight = crossItemHighlight
+        field.crossItemHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         field.rangeIdentity = .list(blockID: blockID, index: index)
         field.onRangeDrag = { anchor, focus in
             guard case let .list(firstBlock, firstIndex) = anchor,
@@ -1997,6 +2071,8 @@ private struct FormattedListItemField: UIViewRepresentable {
         context.coordinator.parent = self
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.crossItemHighlight = crossItemHighlight
+        field.crossItemHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         field.rangeIdentity = .list(blockID: blockID, index: index)
         field.onRangeDrag = { anchor, focus in
             guard case let .list(firstBlock, firstIndex) = anchor,
@@ -2027,6 +2103,17 @@ private struct FormattedListItemField: UIViewRepresentable {
 
         @objc func textChanged(_ field: UITextField) {
             parent.text = field.text ?? ""
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            textFieldDidChangeSelection(textField)
+        }
+
+        func textFieldDidChangeSelection(_ textField: UITextField) {
+            guard let range = textField.selectedTextRange else { return }
+            let start = textField.offset(from: textField.beginningOfDocument, to: range.start)
+            let end = textField.offset(from: textField.beginningOfDocument, to: range.end)
+            parent.onSelection?(NSRange(location: min(start, end), length: abs(end - start)))
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
