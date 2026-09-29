@@ -5,10 +5,14 @@ import Markdown
 struct ReaderSelectionDocument {
     /// A selectable anchor for a visually drawn thematic break. Removed on copy.
     static let ruleAnchor = "\u{FFFC}"
+    /// Nonbreaking figure spaces reserve the keycap's horizontal inset in TextKit.
+    /// Copy strips only spaces carrying the keycap padding attribute.
+    static let keycapPadding = "\u{2007}"
     struct Run: Equatable {
         let text: String
         let style: InlineContent.Style
         let code: Bool
+        var keycap = false
     }
 
     struct Line: Equatable {
@@ -25,11 +29,44 @@ struct ReaderSelectionDocument {
 
     /// The exact UTF-16 text projection supplied to ReaderSelectionTextView.
     var selectionText: String {
-        lines.map { $0.runs.map(\.text).joined() }.joined(separator: "\n")
+        lines.map { line in
+            line.runs.map { $0.keycap ? Self.keycapPadding + $0.text + Self.keycapPadding : $0.text }.joined()
+        }.joined(separator: "\n")
     }
 
     var copiedText: String {
         lines.map { $0.kind == .rule ? "" : $0.runs.map(\.text).joined() }.joined(separator: "\n")
+    }
+
+    var canMapNativeOffsets: Bool { !lines.contains { $0.kind == .rule } }
+
+    /// Map native UTF-16 endpoints through invisible keycap insets without
+    /// dropping a literal figure space supplied by the document author.
+    func copiedTextSlice(lowerUTF16: Int?, upperUTF16: Int?) -> String? {
+        guard canMapNativeOffsets,
+              let slice = ReaderBlockRangeDocument.textSlice(selectionText,
+                                                              lowerUTF16: lowerUTF16,
+                                                              upperUTF16: upperUTF16) else { return nil }
+        let lower = lowerUTF16 ?? 0
+        let upper = upperUTF16 ?? selectionText.utf16.count
+        var paddingOffsets: [Int] = []
+        var offset = 0
+        for (index, line) in lines.enumerated() {
+            if index > 0 { offset += 1 }
+            for run in line.runs {
+                if run.keycap {
+                    if (lower..<upper).contains(offset) { paddingOffsets.append(offset - lower) }
+                    offset += 1 + run.text.utf16.count
+                    if (lower..<upper).contains(offset) { paddingOffsets.append(offset - lower) }
+                    offset += 1
+                } else { offset += run.text.utf16.count }
+            }
+        }
+        let copied = NSMutableString(string: slice)
+        for position in paddingOffsets.reversed() {
+            copied.deleteCharacters(in: NSRange(location: position, length: 1))
+        }
+        return copied as String
     }
 
     static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
@@ -122,16 +159,45 @@ struct ReaderSelectionDocument {
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
             case let .text(value, style, tags, code):
-                if !tags.isEmpty { return nil }
-                output.append(.init(text: value, style: style, code: code))
+                // Other HTML elements still use SwiftUI until TextKit can reproduce
+                // their styles. A keycap has its own native decoration and copy path.
+                guard tags.allSatisfy({ $0.name == "kbd" }), !code else {
+                    if tags.isEmpty { output.append(.init(text: value, style: style, code: code)); continue }
+                    return nil
+                }
+                output.append(.init(text: value, style: style, code: false,
+                                    keycap: !tags.isEmpty))
             case .image, .footnote, .math, .plugin: return nil
             }
+        }
+        let keycapRunCount = output.filter(\.keycap).count
+        if keycapRunCount > 0 {
+            // A styled child can split one <kbd> into several text runs. Until
+            // keycap groups carry a stable tag identity, drawing each as a
+            // separate box would misrepresent one Flutter keycap.
+            var openingTags = 0
+            func countOpenings(_ markup: Markup) {
+                if let html = markup as? InlineHTML,
+                   let tag = SafeHTML.lexTag(html.rawHTML), tag.name == "kbd",
+                   !tag.isClosing, !tag.isSelfClosing { openingTags += 1 }
+                for child in markup.children { countOpenings(child) }
+            }
+            countOpenings(node)
+            guard keycapRunCount == openingTags else { return nil }
         }
         return output
     }
 
     private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
         copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins)
+    }
+
+    /// Table cells and other inline containers also need the same native keycap path.
+    static func inline(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+        guard let runs = copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins),
+              runs.contains(where: \.keycap) else { return nil }
+        let kind: Line.Kind = (node as? Heading).map { .heading($0.level) } ?? .paragraph
+        return .init(lines: [.init(kind: kind, runs: runs, indent: 0, quoteDepth: 0, quoteIDs: [])])
     }
 }
 
@@ -213,13 +279,15 @@ struct ReaderBlockRangeDocument {
             case .text:
                 guard let document = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
                                                                      plugins: plugins),
-                      ((lower == nil && upper == nil) || document.selectionText == document.copiedText)
+                      ((lower == nil && upper == nil) || document.canMapNativeOffsets)
                 else { return nil }
-                text = document.copiedText
+                text = lower == nil && upper == nil ? document.copiedText
+                    : document.copiedTextSlice(lowerUTF16: lower, upperUTF16: upper)
             }
             guard let text else { return nil }
             if (lower != nil || upper != nil) && segment.kind != .text { return nil }
-            guard let slice = Self.textSlice(text, lowerUTF16: lower, upperUTF16: upper) else { return nil }
+            guard let slice = segment.kind == .text ? Optional(text)
+                : Self.textSlice(text, lowerUTF16: lower, upperUTF16: upper) else { return nil }
             if !slice.isEmpty { parts.append(slice) }
         }
         guard !parts.isEmpty else { return nil }
@@ -231,7 +299,7 @@ struct ReaderBlockRangeDocument {
         }
     }
 
-    private static func textSlice(_ text: String, lowerUTF16: Int?, upperUTF16: Int?) -> String? {
+    fileprivate static func textSlice(_ text: String, lowerUTF16: Int?, upperUTF16: Int?) -> String? {
         let length = text.utf16.count
         let lower = lowerUTF16 ?? 0
         let upper = upperUTF16 ?? length

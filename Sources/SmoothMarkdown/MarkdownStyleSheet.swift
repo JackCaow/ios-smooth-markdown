@@ -87,6 +87,8 @@ public struct MarkdownStyleSheet {
     public var strikethroughStyle: MarkdownInlineTextStyle?
     public var linkStyle: MarkdownInlineTextStyle?
     public var inlineCodeStyle: MarkdownInlineTextStyle?
+    /// Text inside HTML `<kbd>`; defaults to 13pt monospaced like Flutter.
+    public var kbdStyle: MarkdownInlineTextStyle?
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     /// Overrides the legacy quote colors and left border width when provided.
@@ -170,6 +172,7 @@ public struct MarkdownStyleSheet {
         strikethroughStyle: MarkdownInlineTextStyle? = nil,
         linkStyle: MarkdownInlineTextStyle? = nil,
         inlineCodeStyle: MarkdownInlineTextStyle? = nil,
+        kbdStyle: MarkdownInlineTextStyle? = nil,
         tableBorder: MarkdownTableBorder? = nil
     ) {
         self.backgroundColor = backgroundColor
@@ -188,6 +191,7 @@ public struct MarkdownStyleSheet {
         self.strikethroughStyle = strikethroughStyle
         self.linkStyle = linkStyle
         self.inlineCodeStyle = inlineCodeStyle
+        self.kbdStyle = kbdStyle
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
         self.blockquoteDecoration = blockquoteDecoration
