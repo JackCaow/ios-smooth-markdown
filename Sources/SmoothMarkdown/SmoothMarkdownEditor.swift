@@ -496,9 +496,9 @@ private struct FormattedBlocksView: View {
         return controller.semanticTextHighlightRanges(textRange) ?? [:]
     }
 
-    private var listItemHighlights: [String: [Int: NSRange]] {
+    private var listItemHighlights: [String: MarkdownEditorController.ListLineHighlights] {
         guard let textRange else { return [:] }
-        return controller.semanticListItemHighlightRanges(textRange) ?? [:]
+        return controller.semanticListLineHighlightRanges(textRange) ?? [:]
     }
 
     private var tableCellHighlights: [String: [Int: [Int: NSRange]]] {
@@ -1740,10 +1740,12 @@ private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
-    let textHighlights: [Int: NSRange]?
+    let textHighlights: MarkdownEditorController.ListLineHighlights?
     let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var focusRequest: (index: Int, continuationIndex: Int?, offset: Int, token: UUID)?
     @State private var itemSelections: [Int: NSRange] = [:]
+    @State private var continuationSelections: [Int: [Int: NSRange]] = [:]
+    @State private var trailingSelections: [Int: [Int: NSRange]] = [:]
     @State private var selectedItems: MarkdownSemanticListItemSelection?
     @State private var rangeLinkDestination = "https://"
     @State private var showingRangeLinkEditor = false
@@ -1817,7 +1819,7 @@ private struct FormattedListView: View {
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
-                            crossItemHighlight: textHighlights?[index],
+                            crossItemHighlight: textHighlights?.primary[index],
                             onSelection: { itemSelections[index] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
@@ -1893,7 +1895,8 @@ private struct FormattedListView: View {
                                 $0.replacingContinuationContent(at: index, lineIndex: lineIndex, with: value)
                             }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
-                            crossItemHighlight: nil, onSelection: nil,
+                            crossItemHighlight: textHighlights?.continuations[index]?[lineIndex],
+                            onSelection: { continuationSelections[index, default: [:]][lineIndex] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1921,11 +1924,28 @@ private struct FormattedListView: View {
                             })
                         .padding(.leading, CGFloat(continuation.indent.count - item.indent.count) * 8)
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                        if let selected = continuationSelections[index]?[lineIndex] {
+                            HStack(spacing: 8) {
+                                Button("Start at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                        listItemIndex: index, listContinuationIndex: lineIndex), true)
+                                }
+                                .accessibilityIdentifier("text-range-start-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                                Button("End at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                        listItemIndex: index, listContinuationIndex: lineIndex), false)
+                                }
+                                .accessibilityIdentifier("text-range-end-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
                     }
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
                 .padding(4)
-                .background(isSelected(index) || textHighlights?[index] != nil ?
+                .background(isSelected(index) || textHighlights?.primary[index] != nil ||
+                            textHighlights?.continuations[index] != nil ?
                             (editorTheme.selectionColor ?? Color.accentColor.opacity(0.15)) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
                 ForEach(list.trailingOwners(after: index), id: \.self) { parentIndex in
@@ -1945,7 +1965,8 @@ private struct FormattedListView: View {
                                                                         lineIndex: lineIndex, with: value)
                             }
                         }), blockID: blockID, index: parentIndex, isRangeSelected: isSelected(parentIndex),
-                            crossItemHighlight: nil, onSelection: nil,
+                            crossItemHighlight: textHighlights?.trailing[parentIndex]?[lineIndex],
+                            onSelection: { trailingSelections[parentIndex, default: [:]][lineIndex] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1965,6 +1986,22 @@ private struct FormattedListView: View {
                             .padding(.leading, CGFloat(continuation.indent.count) * 8 + 4)
                             .padding(.top, 4)
                             .accessibilityIdentifier("list-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                        if let selected = trailingSelections[parentIndex]?[lineIndex] {
+                            HStack(spacing: 8) {
+                                Button("Start at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                        listItemIndex: parentIndex, listTrailingIndex: lineIndex), true)
+                                }
+                                .accessibilityIdentifier("text-range-start-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                                Button("End at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                        listItemIndex: parentIndex, listTrailingIndex: lineIndex), false)
+                                }
+                                .accessibilityIdentifier("text-range-end-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
                     }
                 }
             }
@@ -1985,6 +2022,8 @@ private struct FormattedListView: View {
         .onChange(of: controller.text) { _, _ in
             selectedItems = nil
             itemSelections.removeAll()
+            continuationSelections.removeAll()
+            trailingSelections.removeAll()
         }
     }
 
