@@ -33,6 +33,10 @@ public struct SmoothMarkdownEditor: View {
     private let onTapWikilink: ((String) -> Void)?
     private let capabilities: MarkdownEditorCapabilities
     private let toolbarCommands: [MarkdownEditorCommand]?
+    private let showToolbar: Bool
+    private let toolbarLeading: [AnyView]
+    private let toolbarTrailing: [AnyView]
+    private let toolbarBuilder: ((AnyView) -> AnyView)?
     private let customSlashCommands: [MarkdownEditorSlashCommand]
     private let enableSlashCommands: Bool
     private let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
@@ -56,6 +60,11 @@ public struct SmoothMarkdownEditor: View {
                 onTapWikilink: ((String) -> Void)? = nil,
                 capabilities: MarkdownEditorCapabilities = .all,
                 toolbarCommands: [MarkdownEditorCommand]? = nil,
+                // Host slots wrap the native command row, following Flutter's toolbar order.
+                showToolbar: Bool = true,
+                toolbarLeading: [AnyView] = [],
+                toolbarTrailing: [AnyView] = [],
+                toolbarBuilder: ((AnyView) -> AnyView)? = nil,
                 enableSlashCommands: Bool = true,
                 customSlashCommands: [MarkdownEditorSlashCommand] = [],
                 customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)? = nil,
@@ -75,6 +84,10 @@ public struct SmoothMarkdownEditor: View {
         self.onTapWikilink = onTapWikilink
         self.capabilities = capabilities
         self.toolbarCommands = toolbarCommands
+        self.showToolbar = showToolbar
+        self.toolbarLeading = toolbarLeading
+        self.toolbarTrailing = toolbarTrailing
+        self.toolbarBuilder = toolbarBuilder
         self.enableSlashCommands = enableSlashCommands
         self.customSlashCommands = customSlashCommands
         self.customBlockMatcher = customBlockMatcher
@@ -99,23 +112,7 @@ public struct SmoothMarkdownEditor: View {
                 .padding(.horizontal)
             }
 
-            if !focusMode {
-                ScrollView(.horizontal) {
-                    HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 12 : 8) {
-                        Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
-                        Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
-                        if controller.mode != .formatted {
-                            ForEach(visibleToolbarCommands, id: \.self) { command in
-                                commandButton(command.toolbarTitle, command)
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    .padding(.horizontal)
-                    .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
-                }
-                .frame(minHeight: 44)
-            }
+            if !toolbarLayout.sections.isEmpty { toolbarView }
 
             if searchOpen || !focusMode {
                 HStack {
@@ -329,6 +326,38 @@ public struct SmoothMarkdownEditor: View {
 
     private var visibleToolbarCommands: [MarkdownEditorCommand] {
         capabilities.visibleToolbarCommands(toolbarCommands, enableWikilinks: enableWikilinks)
+    }
+
+    private var toolbarLayout: MarkdownEditorToolbarLayout {
+        .init(showToolbar: showToolbar, focusMode: focusMode,
+              leadingCount: toolbarLeading.count, trailingCount: toolbarTrailing.count)
+    }
+
+    private var toolbarView: AnyView {
+        let defaultToolbar = AnyView(ScrollView(.horizontal) {
+            HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 12 : 8) {
+                ForEach(toolbarLayout.sections, id: \.self) { section in
+                    switch section {
+                    case .leading(let index): toolbarLeading[index]
+                    case .history:
+                        Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
+                        Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
+                    case .commands:
+                        if controller.mode != .formatted {
+                            ForEach(visibleToolbarCommands, id: \.self) { command in
+                                commandButton(command.toolbarTitle, command)
+                            }
+                        }
+                    case .trailing(let index): toolbarTrailing[index]
+                    }
+                }
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal)
+            .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
+        }
+        .frame(minHeight: 44))
+        return toolbarBuilder?(defaultToolbar) ?? defaultToolbar
     }
 
     private func runHostIO(_ work: @escaping () async -> Bool) {
