@@ -123,8 +123,8 @@ public struct MarkdownDocumentCodec {
     private func isNewBlock(_ line: String, at index: Int, lines: [SourceLine], pluginLines: [String]) -> Bool {
         if pluginBlock(at: index, lines: lines, pluginLines: pluginLines) != nil { return true }
         switch classify(line) {
-        case .paragraph: false
-        default: true
+        case .paragraph: return false
+        default: return true
         }
     }
 
@@ -137,8 +137,8 @@ public struct MarkdownDocumentCodec {
     private func isDefiniteBreak(_ line: String, at index: Int, lines: [SourceLine], pluginLines: [String]) -> Bool {
         if pluginBlock(at: index, lines: lines, pluginLines: pluginLines) != nil { return true }
         switch classify(line) {
-        case .heading, .fence, .horizontalRule: true
-        case .paragraph, .list, .raw: false
+        case .heading, .fence, .horizontalRule: return true
+        case .paragraph, .list, .raw: return false
         }
     }
 
