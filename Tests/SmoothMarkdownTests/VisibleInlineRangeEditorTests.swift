@@ -5,6 +5,14 @@ import XCTest
 
 @MainActor
 final class VisibleInlineRangeEditorTests: XCTestCase {
+    func testRenderedTextProjectionMatchesVisibleUTF16Offsets() {
+        let source = "Start **bold** [link](https://example.com) 😀"
+        XCTAssertEqual(MarkdownInlineMarkEditor.visibleText(of: source), "Start bold link 😀")
+        XCTAssertEqual(MarkdownInlineMarkEditor.visibleUTF16Length(of: source),
+                       ("Start bold link 😀" as NSString).length)
+        XCTAssertNil(MarkdownInlineMarkEditor.visibleText(of: "Use `code` here"))
+    }
+
     private func selection(_ source: String, _ first: String, _ start: Int, _ last: String, _ end: Int)
         -> MarkdownVisibleTextSelection {
         .init(source: source, anchor: .init(blockID: first, offset: start),
