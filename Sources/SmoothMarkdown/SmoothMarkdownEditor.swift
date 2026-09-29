@@ -948,7 +948,7 @@ private struct FormattedBlockRow: View {
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
-    let listItemHighlights: [Int: NSRange]?
+    let listItemHighlights: MarkdownEditorController.ListLineHighlights?
     let tableCellHighlights: [Int: [Int: NSRange]]?
     let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
