@@ -3,7 +3,7 @@
 Device: physical iPhone 17, UDID `00008150-001C18E426F8401C`. The signed Demo ran on the device. No simulator was used for this change.
 
 - `DemoExamplesUITests/testHomeAndFeatureHaveNoSecondaryHeader`: passed. [Home screenshot](evidence/ios-demo-home-no-subheader-iphone17.png), [Math page screenshot](evidence/ios-demo-math-no-subheader-iphone17.png).
-- The same UI test passed again after the inline-code background fix. [Updated iPhone screenshot](evidence/ios-demo-inline-code-centered-iphone17.png) shows `var x = 42;` centered vertically in its gray background on the Basic Text Formatting page. The earlier screenshot placed the fill above the code glyphs.
+- The same UI test passed after the first inline-code background change in `b7ff5e8`. [This iPhone screenshot](evidence/ios-demo-inline-code-centered-iphone17.png) shows the gray fill on the code line, but its margins around `var x = 42;` remain visibly uneven. It predates the optical-centering work in Draft PR #29 and does not verify that later change; a fresh physical-device screenshot is pending.
 - `DemoAIChatUITests/testCompactDeepSeekChatOnPhysicalDevice`: passed. [DeepSeek chat screenshot](evidence/ios-demo-deepseek-chat-iphone17.png). The screenshot shows mock mode with no API Key injected into this app launch.
 - `DemoAIChatUITests/testDeepSeekSettingsExposeRuntimeKeyAndBothModels`: passed on the physical device.
 - `DemoAIChatUITests/testFlutterMockPromptStreamsWithThinkingPluginAndNewChatResets`: passed on the physical device after removing a transient status assertion. Thinking card, full mock response source, new chat and Help were checked. [Mock reply screenshot](evidence/ios-demo-deepseek-mock-reply-iphone17.png) records the bubble typography and spacing on the iPhone.

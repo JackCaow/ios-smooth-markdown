@@ -43,6 +43,17 @@ struct ReaderSelectionDocument {
         return lines.isEmpty ? nil : .init(lines: lines)
     }
 
+    /// Single paragraphs normally use SwiftUI Text when reader selection is off.
+    /// Route copyable inline code through the same native text layout used by
+    /// selectable paragraphs so its background follows the glyph baseline.
+    static func inlineCodeParagraph(_ paragraph: Paragraph, enableHTML: Bool,
+                                    plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+        guard let document = compose([paragraph], enableHTML: enableHTML, plugins: plugins),
+              document.lines.contains(where: { line in line.runs.contains(where: \.code) })
+        else { return nil }
+        return document
+    }
+
     static func isSelectable(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> Bool {
         compose([node], enableHTML: enableHTML, plugins: plugins) != nil
     }
