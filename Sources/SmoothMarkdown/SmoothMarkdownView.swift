@@ -40,6 +40,8 @@ public struct SmoothMarkdownView: View {
     public let enableCache: Bool
     /// Enables native text selection in the reader. Defaults to false, like Flutter.
     public let selectable: Bool
+    /// Programmatic selection for a complete native TextKit reader host.
+    public let selectionController: SmoothSelectionController?
     public let enableCrossBlockSelection: Bool
     /// Set to false when a host scroll view owns vertical scrolling, such as a chat list.
     public let scrollable: Bool
@@ -60,6 +62,7 @@ public struct SmoothMarkdownView: View {
         builderRegistry: BuilderRegistry? = nil,
         enableCache: Bool = true,
         selectable: Bool = false,
+        selectionController: SmoothSelectionController? = nil,
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true
     ) {
@@ -78,6 +81,7 @@ public struct SmoothMarkdownView: View {
         self.builderRegistry = builderRegistry
         self.enableCache = enableCache
         self.selectable = selectable
+        self.selectionController = selectionController
         self.enableCrossBlockSelection = enableCrossBlockSelection
         self.scrollable = scrollable
     }
@@ -108,7 +112,8 @@ public struct SmoothMarkdownView: View {
         if let unified = wholeDocumentSelection {
             ReaderWholeDocumentSelectionView(selectionDocument: unified.selection,
                                              projection: unified.projection,
-                                             styleSheet: styleSheet, onLinkTap: onLinkTap)
+                                             styleSheet: styleSheet, onLinkTap: onLinkTap,
+                                             selectionController: selectionController)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(styleSheet.contentPadding)
         } else {
@@ -147,7 +152,10 @@ public struct SmoothMarkdownView: View {
         let mathSections = MathSyntax.sections(footnoteSource)
         guard mathSections.count == 1, case let .markdown(mathSource) = mathSections[0] else { return nil }
         let nodes = Array(parse(mathSource).children)
-        guard nodes.count > 1, !nodes.contains(where: containsCustomBlockBuilder),
+        // Single blocks keep their existing renderer unless the caller needs
+        // a native host for programmatic selection.
+        guard !nodes.isEmpty, (nodes.count > 1 || selectionController != nil),
+              !nodes.contains(where: containsCustomBlockBuilder),
               let selection = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML,
                                                                plugins: plugins) else { return nil }
         let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(

@@ -23,6 +23,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let builderRegistry: BuilderRegistry?
     /// Enables native selection, as in `SmoothMarkdownView`.
     public let selectable: Bool
+    public let selectionController: SmoothSelectionController?
     public let enableCrossBlockSelection: Bool
     public let scrollable: Bool
     /// Shown until the first text is published; defaults to an empty view.
@@ -53,6 +54,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         plugins: ParserPluginRegistry? = nil,
         builderRegistry: BuilderRegistry? = nil,
         selectable: Bool = false,
+        selectionController: SmoothSelectionController? = nil,
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true,
         loadingView: AnyView? = nil,
@@ -76,6 +78,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.plugins = plugins
         self.builderRegistry = builderRegistry
         self.selectable = selectable
+        self.selectionController = selectionController
         self.enableCrossBlockSelection = enableCrossBlockSelection
         self.scrollable = scrollable
         self.loadingView = loadingView
@@ -97,7 +100,9 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                                    onCodeCopy: onCodeCopy, onTextLongPress: onTextLongPress,
                                    styleSheet: styleSheet, plugins: plugins, builderRegistry: builderRegistry,
                                    enableCache: false,
-                                   selectable: selectable, enableCrossBlockSelection: enableCrossBlockSelection,
+                                   selectable: selectable,
+                                   selectionController: selectionController,
+                                   enableCrossBlockSelection: enableCrossBlockSelection,
                                    scrollable: scrollable)
             }
         }

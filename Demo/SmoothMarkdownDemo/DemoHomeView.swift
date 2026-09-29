@@ -273,6 +273,8 @@ struct DemoHomeView: View {
             DemoAIChatView(parentIsDark: theme.isDark)
         } else if feature == .conversationList {
             DemoConversationListView()
+        } else if feature == .selection {
+            DemoSelectionControllerView(styleSheet: theme.styleSheet)
         } else if feature == .plugins, let featureMarkdown {
             DemoPluginView(markdown: featureMarkdown, styleSheet: theme.styleSheet)
         } else if let featureMarkdown {
