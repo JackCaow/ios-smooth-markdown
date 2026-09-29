@@ -598,12 +598,12 @@ public struct SmoothMarkdownView: View {
         var bold = style.bold
         var italic = style.italic
         var strike = style.strike
-        var underline = false
-        var monospaced = code
+        var htmlUnderline = false
+        var htmlCode = false
         var baseline: CGFloat = 0
-        var foreground: Color? = code ? styleSheet.inlineCodeTextColor : nil
-        var background: Color? = code ? styleSheet.inlineCodeBackground : nil
-        var fontSize: CGFloat?
+        var htmlForeground: Color?
+        var htmlBackground: Color?
+        var htmlFontSize: CGFloat?
         var link = style.link
         if enableHTML {
             for tag in tags {
@@ -611,40 +611,42 @@ public struct SmoothMarkdownView: View {
                 case "b", "strong": bold = true
                 case "i", "em": italic = true
                 case "s", "del", "strike": strike = true
-                case "u", "ins": underline = true
-                case "mark": background = styleSheet.highlightColor ?? .yellow.opacity(0.4)
+                case "u", "ins": htmlUnderline = true
+                case "mark": htmlBackground = styleSheet.highlightColor ?? .yellow.opacity(0.4)
                 case "sub": baseline = -4
                 case "sup": baseline = 4
                 case "code", "kbd":
-                    monospaced = true
-                    background = styleSheet.inlineCodeBackground
-                    foreground = styleSheet.inlineCodeTextColor
+                    htmlCode = true
                 case "a":
                     if let href = tag.attributes["href"], SafeHTML.isSafeLink(href) { link = URL(string: href) }
                 case "font", "span":
                     let css = tag.name == "span" ? SafeHTML.cssDeclarations(tag.attributes["style"] ?? "") : [:]
                     if let value = tag.name == "font" ? tag.attributes["color"] : css["color"],
-                       let color = SafeHTML.color(value) { foreground = colorFromARGB(color) }
-                    if let value = css["background-color"], let color = SafeHTML.color(value) { background = colorFromARGB(color) }
+                       let color = SafeHTML.color(value) { htmlForeground = colorFromARGB(color) }
+                    if let value = css["background-color"], let color = SafeHTML.color(value) { htmlBackground = colorFromARGB(color) }
                     if let size = tag.name == "font" ? tag.attributes["size"].flatMap(SafeHTML.legacyFontSize)
-                        : css["font-size"].flatMap(SafeHTML.fontSize) { fontSize = CGFloat(size) }
+                        : css["font-size"].flatMap(SafeHTML.fontSize) { htmlFontSize = CGFloat(size) }
                 default: break
                 }
             }
         }
+        let inlineStyle = styleSheet.resolvedInlineStyle(bold: bold, italic: italic, strike: strike,
+                                                         link: link != nil, code: code || htmlCode)
         var attributed = AttributedString(value)
-        if let background { attributed.backgroundColor = background }
+        if let background = htmlBackground ?? inlineStyle.backgroundColor { attributed.backgroundColor = background }
         if let link { attributed.link = link }
         var result = SwiftUI.Text(attributed)
-        if bold { result = result.bold() }
-        if italic { result = result.italic() }
-        if strike { result = result.strikethrough() }
-        if underline { result = result.underline() }
+        let monospaced = inlineStyle.monospaced == true
         if monospaced { result = result.font(.system(.body, design: .monospaced)) }
+        if let fontSize = htmlFontSize ?? inlineStyle.fontSize {
+            result = result.font(.system(size: fontSize, design: monospaced ? .monospaced : .default))
+        }
+        if inlineStyle.bold == true { result = result.bold() }
+        if inlineStyle.italic == true { result = result.italic() }
+        if inlineStyle.strikethrough == true { result = result.strikethrough() }
+        if htmlUnderline || inlineStyle.underline == true { result = result.underline() }
         if baseline != 0 { result = result.baselineOffset(baseline) }
-        if let fontSize { result = result.font(.system(size: fontSize)) }
-        if let foreground { result = result.foregroundColor(foreground) }
-        else if link != nil { result = result.foregroundColor(styleSheet.linkColor ?? .blue) }
+        if let foreground = htmlForeground ?? inlineStyle.textColor { result = result.foregroundColor(foreground) }
         return result
     }
 

@@ -1,5 +1,43 @@
 import SwiftUI
 
+/// Text attributes applied to an inline Markdown span. Nil values inherit the
+/// surrounding text; a false mark explicitly removes that mark.
+public struct MarkdownInlineTextStyle {
+    public var fontSize: CGFloat?
+    public var textColor: Color?
+    public var backgroundColor: Color?
+    public var bold: Bool?
+    public var italic: Bool?
+    public var strikethrough: Bool?
+    public var underline: Bool?
+    public var monospaced: Bool?
+
+    public init(fontSize: CGFloat? = nil, textColor: Color? = nil, backgroundColor: Color? = nil,
+                bold: Bool? = nil, italic: Bool? = nil, strikethrough: Bool? = nil,
+                underline: Bool? = nil, monospaced: Bool? = nil) {
+        self.fontSize = fontSize.map { max(0, $0) }
+        self.textColor = textColor
+        self.backgroundColor = backgroundColor
+        self.bold = bold
+        self.italic = italic
+        self.strikethrough = strikethrough
+        self.underline = underline
+        self.monospaced = monospaced
+    }
+
+    fileprivate mutating func apply(_ other: Self?) {
+        guard let other else { return }
+        if let value = other.fontSize { fontSize = value }
+        if let value = other.textColor { textColor = value }
+        if let value = other.backgroundColor { backgroundColor = value }
+        if let value = other.bold { bold = value }
+        if let value = other.italic { italic = value }
+        if let value = other.strikethrough { strikethrough = value }
+        if let value = other.underline { underline = value }
+        if let value = other.monospaced { monospaced = value }
+    }
+}
+
 /// Fill and left border of a Markdown blockquote. Nil colors inherit the legacy quote colors.
 public struct MarkdownBlockquoteDecoration {
     public var backgroundColor: Color?
@@ -44,6 +82,11 @@ public struct MarkdownStyleSheet {
     public var codeTextColor: Color?
     public var inlineCodeBackground: Color?
     public var inlineCodeTextColor: Color?
+    public var boldStyle: MarkdownInlineTextStyle?
+    public var italicStyle: MarkdownInlineTextStyle?
+    public var strikethroughStyle: MarkdownInlineTextStyle?
+    public var linkStyle: MarkdownInlineTextStyle?
+    public var inlineCodeStyle: MarkdownInlineTextStyle?
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     /// Overrides the legacy quote colors and left border width when provided.
@@ -111,7 +154,12 @@ public struct MarkdownStyleSheet {
         blockquoteDecoration: MarkdownBlockquoteDecoration? = nil,
         blockquotePadding: EdgeInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16),
         codeBlockDecoration: MarkdownCodeBlockDecoration? = nil,
-        codeBlockPadding: EdgeInsets? = nil
+        codeBlockPadding: EdgeInsets? = nil,
+        boldStyle: MarkdownInlineTextStyle? = nil,
+        italicStyle: MarkdownInlineTextStyle? = nil,
+        strikethroughStyle: MarkdownInlineTextStyle? = nil,
+        linkStyle: MarkdownInlineTextStyle? = nil,
+        inlineCodeStyle: MarkdownInlineTextStyle? = nil
     ) {
         self.backgroundColor = backgroundColor
         self.textColor = textColor
@@ -124,6 +172,11 @@ public struct MarkdownStyleSheet {
         self.codeTextColor = codeTextColor
         self.inlineCodeBackground = inlineCodeBackground
         self.inlineCodeTextColor = inlineCodeTextColor
+        self.boldStyle = boldStyle
+        self.italicStyle = italicStyle
+        self.strikethroughStyle = strikethroughStyle
+        self.linkStyle = linkStyle
+        self.inlineCodeStyle = inlineCodeStyle
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
         self.blockquoteDecoration = blockquoteDecoration
@@ -243,5 +296,20 @@ public struct MarkdownStyleSheet {
     internal var resolvedCodeBlockPadding: EdgeInsets {
         codeBlockPadding ?? EdgeInsets(top: codePadding, leading: codePadding,
                                        bottom: codePadding, trailing: codePadding)
+    }
+
+    internal func resolvedInlineStyle(bold: Bool, italic: Bool, strike: Bool,
+                                      link: Bool, code: Bool) -> MarkdownInlineTextStyle {
+        var result = MarkdownInlineTextStyle(
+            textColor: code ? inlineCodeTextColor : link ? (linkColor ?? .blue) : nil,
+            backgroundColor: code ? inlineCodeBackground : nil,
+            bold: bold, italic: italic, strikethrough: strike,
+            underline: link, monospaced: code)
+        if bold { result.apply(boldStyle) }
+        if italic { result.apply(italicStyle) }
+        if strike { result.apply(strikethroughStyle) }
+        if link { result.apply(linkStyle) }
+        if code { result.apply(inlineCodeStyle) }
+        return result
     }
 }

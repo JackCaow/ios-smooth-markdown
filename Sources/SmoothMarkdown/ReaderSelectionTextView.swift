@@ -133,7 +133,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         }
     }
 
-    private func attributedContent() -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
+    func attributedContent() -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
         let output = NSMutableAttributedString(string: "")
         var quoteBounds: [Int: (start: Int, end: Int, depth: Int)] = [:]
         var quoteOrder: [Int] = []
@@ -172,11 +172,17 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             }
             paragraph.lineSpacing = 2
             for run in line.runs {
-                let font = UIFont.systemFont(ofSize: size,
-                                             weight: run.style.bold || weight == .bold ? .bold : .regular)
+                let inlineStyle = styleSheet.resolvedInlineStyle(
+                    bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
+                    link: run.style.link != nil, code: run.code)
+                let fontSize = inlineStyle.fontSize ?? size
+                let fontWeight: UIFont.Weight = inlineStyle.bold == true || weight == .bold ? .bold : .regular
+                let font = inlineStyle.monospaced == true
+                    ? UIFont.monospacedSystemFont(ofSize: fontSize, weight: fontWeight)
+                    : UIFont.systemFont(ofSize: fontSize, weight: fontWeight)
                 var attributes: [NSAttributedString.Key: Any] = [
-                    .font: run.code ? UIFont.monospacedSystemFont(ofSize: size, weight: .regular) : font,
-                    .foregroundColor: {
+                    .font: font,
+                    .foregroundColor: inlineStyle.textColor.map(UIColor.init) ?? {
                         if case .heading = line.kind {
                             return UIColor(styleSheet.headingColor ?? styleSheet.textColor ?? .primary)
                         }
@@ -184,14 +190,18 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     }(),
                     .paragraphStyle: paragraph,
                 ]
-                if run.style.italic { attributes[.obliqueness] = 0.18 }
-                if run.style.strike { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
-                if run.code, let background = styleSheet.inlineCodeBackground {
+                if inlineStyle.italic == true { attributes[.obliqueness] = 0.18 }
+                if inlineStyle.strikethrough == true {
+                    attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+                }
+                if inlineStyle.underline == true {
+                    attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                }
+                if let background = inlineStyle.backgroundColor {
                     attributes[.backgroundColor] = UIColor(background)
                 }
                 if let link = run.style.link {
                     attributes[.link] = link
-                    attributes[.foregroundColor] = UIColor(styleSheet.linkColor ?? .blue)
                 }
                 output.append(NSAttributedString(string: run.text, attributes: attributes))
             }
