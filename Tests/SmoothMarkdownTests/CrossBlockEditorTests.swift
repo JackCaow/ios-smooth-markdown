@@ -110,6 +110,103 @@ final class CrossBlockEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, "Start X omega\n\nKeep")
     }
 
+    func testPartialCodeToProsePreservesFenceTriviaAndOneUndo() {
+        let original = "Before\r\n\r\n```swift\r\nalpha beta\r\n```\r\n\r\n| A | B |\r\n| - | - |\r\n| 1 | 2 |\r\n\r\nAfter omega\r\n\r\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-1", 6, "block-3", 5)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "```swift\r\nbeta\r\n```\r\n\r\n| A | B |\r\n| - | - |\r\n| 1 | 2 |\r\n\r\nAfter")
+        XCTAssertEqual(controller.semanticTextHighlightRanges(selected)?["block-1"],
+                       NSRange(location: 6, length: 4))
+        XCTAssertTrue(controller.canReplaceSemanticTextRange(selected, with: "X"))
+        XCTAssertTrue(controller.replaceSemanticTextRange(selected, with: "X"))
+        XCTAssertEqual(controller.text,
+                       "Before\r\n\r\n```swift\r\nalpha X\r\n```\r\n\r\n omega\r\n\r\nKeep")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testPartialProseToCodeRetainsOpeningFenceAndCodeSuffix() {
+        let original = "Before alpha\r\n\r\nMiddle\r\n\r\n~~~txt\r\ncode omega\r\n~~~\r\n\r\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-0", 7, "block-2", 5)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "alpha\r\n\r\nMiddle\r\n\r\n~~~txt\r\ncode \r\n~~~\r\n")
+        XCTAssertTrue(controller.replaceSemanticTextRange(selected, with: "X"))
+        XCTAssertEqual(controller.text,
+                       "Before X\r\n\r\n~~~txt\r\nomega\r\n~~~\r\n\r\nKeep")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testReverseCodeRangeAndStaleSnapshotStayAtomic() {
+        let original = "Before alpha\n\n```txt\ncode omega\n```\n\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticTextSelection(
+            anchor: .init(blockID: "block-1", offset: 5),
+            focus: .init(blockID: "block-0", offset: 7), source: original)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "alpha\n\n```txt\ncode \n```\n")
+        XCTAssertTrue(controller.deleteSemanticTextRange(selected))
+        XCTAssertEqual(controller.text, "Before \n\n```txt\nomega\n```\n\nKeep")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        controller.replaceRange(NSRange(location: 0, length: 0), with: "New\n\n")
+        let changed = controller.text
+        XCTAssertNil(controller.copySemanticTextRange(selected))
+        XCTAssertFalse(controller.deleteSemanticTextRange(selected))
+        XCTAssertEqual(controller.text, changed)
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testCodeAndHeadingEndpointsKeepHeadingMarker() {
+        let original = "```js\nlet value\n```\n\n# Heading tail\n\nEnd"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-0", 4, "block-1", 7)
+        XCTAssertTrue(controller.replaceSemanticTextRange(selected, with: "X"))
+        XCTAssertEqual(controller.text, "```js\nlet X\n```\n\n#  tail\n\nEnd")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+
+        let headingFirst = MarkdownEditorController(text: "# Heading tail\n\n```js\nlet value\n```\n\nEnd")
+        XCTAssertTrue(headingFirst.deleteSemanticTextRange(range("block-0", 8, "block-1", 4)))
+        XCTAssertEqual(headingFirst.text, "# Heading \n\n```js\nvalue\n```\n\nEnd")
+        XCTAssertTrue(headingFirst.undo())
+    }
+
+    func testListToCodeCopyBalancesBothMarkersWithoutMutatingSource() {
+        let original = "- first item\n\n```txt\ncode tail\n```\n\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticTextSelection(
+            anchor: .init(blockID: "block-0", offset: 6, listItemIndex: 0),
+            focus: .init(blockID: "block-1", offset: 4), source: original)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "- item\n\n```txt\ncode\n```\n")
+        XCTAssertFalse(controller.canReplaceSemanticTextRange(selected))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testWithinCodeBodyUsesExactSourceAndRejectsUnsafeFence() {
+        let original = "Intro\n\n```swift\nfirst 😀 line\n```\n\nEnd"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-1", 6, "block-1", 8)
+        XCTAssertEqual(controller.copySemanticTextRange(selected), "😀")
+        XCTAssertTrue(controller.deleteSemanticTextRange(selected))
+        XCTAssertEqual(controller.text, "Intro\n\n```swift\nfirst  line\n```\n\nEnd")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.deleteSemanticTextRange(range("block-1", 7, "block-1", 8)),
+                       "A code endpoint cannot split a UTF-16 surrogate pair")
+        XCTAssertFalse(controller.replaceSemanticTextRange(selected, with: "\n```\n"))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
     func testCharacterRangeDeletesCompleteRuleAndRawHtmlWithoutChangingOuterSource() {
         let original = "Start alpha\r\n\r\n---\r\n\r\n<div>raw</div>\r\n\r\nEnd omega\r\n\r\nKeep"
         let controller = MarkdownEditorController(text: original)
