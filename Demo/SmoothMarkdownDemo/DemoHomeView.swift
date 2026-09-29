@@ -404,6 +404,7 @@ private struct DemoNavigationSheet: View {
                     }
                 }
             }
+            .accessibilityIdentifier("demo-navigation-list")
             .navigationTitle(DemoLocalizations.text("examples_demos", in: language))
             .scrollContentBackground(.hidden)
             .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)

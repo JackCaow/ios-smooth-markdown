@@ -7,8 +7,10 @@ final class DemoAIChatUITests: XCTestCase {
         app.launchEnvironment["DEEPSEEK_API_KEY"] = ""
         app.launch()
         app.buttons["open-examples"].tap()
+        let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+        XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
         let entry = app.buttons["feature-aiChat"]
-        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
+        for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         entry.tap()
         app.buttons["ai-chat-settings"].tap()
@@ -30,8 +32,10 @@ final class DemoAIChatUITests: XCTestCase {
         app.launchEnvironment["QWEN_API_KEY"] = ""
         app.launch()
         app.buttons["open-examples"].tap()
+        let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+        XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
         let entry = app.buttons["feature-aiChat"]
-        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
+        for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         entry.tap()
         app.buttons["ai-chat-settings"].tap()
@@ -40,7 +44,8 @@ final class DemoAIChatUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["ai-chat-model"].exists)
         XCTAssertTrue(app.switches["ai-chat-thinking"].exists)
         let realAPI = app.switches["ai-chat-real-api"]
-        for _ in 0..<4 where !realAPI.isHittable { app.swipeUp() }
+        let settingsForm = app.descendants(matching: .any)["ai-chat-settings-form"]
+        for _ in 0..<4 where !realAPI.isHittable { settingsForm.swipeUp() }
         XCTAssertTrue(realAPI.exists)
         realAPI.tap()
         app.buttons["关闭"].tap()
@@ -52,8 +57,10 @@ final class DemoAIChatUITests: XCTestCase {
         app.launchEnvironment["QWEN_API_KEY"] = ""
         app.launch()
         app.buttons["open-examples"].tap()
+        let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+        XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
         let entry = app.buttons["feature-aiChat"]
-        for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
+        for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         entry.tap()
 
@@ -87,8 +94,8 @@ final class DemoAIChatUITests: XCTestCase {
         XCTAssertTrue(thinkingPrompt.isEnabled)
 
         // The renderer must expose the Thinking plugin, not only its raw XML.
-        let thinkingCard = app.buttons["Thinking..."]
-        let chatScroll = app.scrollViews.element(boundBy: 1)
+        let thinkingCard = app.buttons["thinking-card-toggle"]
+        let chatScroll = app.scrollViews["ai-chat-message-list"]
         XCTAssertTrue(chatScroll.exists)
         for _ in 0..<6 where !thinkingCard.isHittable { chatScroll.swipeDown() }
         XCTAssertTrue(thinkingCard.waitForExistence(timeout: 5))

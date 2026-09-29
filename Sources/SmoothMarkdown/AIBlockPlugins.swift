@@ -251,6 +251,7 @@ private struct ThinkingCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("thinking-card-toggle")
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             if expanded {
                 Text(block.content).font(.body).textSelection(.enabled)

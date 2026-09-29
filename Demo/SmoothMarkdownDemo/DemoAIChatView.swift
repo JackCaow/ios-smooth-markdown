@@ -146,6 +146,7 @@ struct DemoAIChatView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 16)
                         }
+                        .accessibilityIdentifier("ai-chat-message-list")
                         .defaultScrollAnchor(.bottom)
                         .onChange(of: scrollRevision) { _, _ in
                             reader.scrollTo("ai-chat-bottom", anchor: .bottom)
@@ -241,8 +242,7 @@ struct DemoAIChatView: View {
                     DemoStreamingMarkdownBubble(stream: stream,
                                                 styleSheet: bubbleStyle(isUser: false),
                                                 plugins: plugins,
-                                                emptyLabel: "AI 正在输入",
-                                                onVisibleChange: { scrollRevision += 1 })
+                                                emptyLabel: "AI 正在输入")
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
@@ -379,6 +379,7 @@ struct DemoAIChatView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityIdentifier("ai-chat-settings-form")
             .navigationTitle("API 设置")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

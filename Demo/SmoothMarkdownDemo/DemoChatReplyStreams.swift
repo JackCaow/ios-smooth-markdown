@@ -48,7 +48,6 @@ struct DemoStreamingMarkdownBubble: View {
     let styleSheet: MarkdownStyleSheet
     let plugins: ParserPluginRegistry?
     let emptyLabel: String
-    let onVisibleChange: () -> Void
 
     var body: some View {
         Group {
@@ -62,6 +61,5 @@ struct DemoStreamingMarkdownBubble: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .onChange(of: stream.visibleText) { _, _ in onVisibleChange() }
     }
 }
