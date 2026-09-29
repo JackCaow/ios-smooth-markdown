@@ -9,6 +9,29 @@ struct PendingListParagraph: Equatable {
     let insertedTerminator: String
 }
 
+/// A UTF-16 offset in the editable body of a formatted paragraph or heading.
+/// Markdown markers are visible in that body, as they are in the formatted editor.
+public struct MarkdownSemanticTextPosition: Equatable {
+    public let blockID: String
+    public let offset: Int
+
+    public init(blockID: String, offset: Int) {
+        self.blockID = blockID
+        self.offset = offset
+    }
+}
+
+/// Two character endpoints in the formatted document; either direction is valid.
+public struct MarkdownSemanticTextSelection: Equatable {
+    public let anchor: MarkdownSemanticTextPosition
+    public let focus: MarkdownSemanticTextPosition
+
+    public init(anchor: MarkdownSemanticTextPosition, focus: MarkdownSemanticTextPosition) {
+        self.anchor = anchor
+        self.focus = focus
+    }
+}
+
 /// Source-backed editing commands. Offsets use UTF-16, matching UITextView selections.
 @MainActor
 public final class MarkdownEditorController: ObservableObject {
@@ -140,6 +163,135 @@ public final class MarkdownEditorController: ObservableObject {
             return nil
         }
         return updated == text ? nil : updated
+    }
+
+    private struct ResolvedSemanticTextSelection {
+        let firstIndex: Int
+        let lastIndex: Int
+        let startOffset: Int
+        let endOffset: Int
+        let startSourceOffset: Int
+        let endSourceOffset: Int
+    }
+
+    /// Copies the selected text fragments as Markdown, preserving their exact
+    /// source markers and intervening whitespace without normalizing them.
+    public func copySemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> String? {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
+        let document = semanticDocument
+        let first = document.blocks[resolved.firstIndex]
+        let last = document.blocks[resolved.lastIndex]
+        let start = resolved.startOffset == 0 && isHeading(first) ?
+            document.sourceRange(of: first.id)!.location : resolved.startSourceOffset
+        let end = resolved.endOffset == 0 && isHeading(last) ?
+            document.sourceRange(of: last.id)!.location : resolved.endSourceOffset
+        let range = NSRange(location: start, length: end - start)
+        return (text as NSString).substring(with: range)
+    }
+
+    private func isHeading(_ block: MarkdownDocumentBlock) -> Bool {
+        if case .heading = block.kind { return true }
+        return false
+    }
+
+    /// Reports whether a cross-block character replacement is source safe.
+    public func canReplaceSemanticTextRange(_ selection: MarkdownSemanticTextSelection,
+                                             with replacement: String = "") -> Bool {
+        replacementForSemanticTextRange(selection, with: replacement) != nil
+    }
+
+    /// Replaces a character range spanning paragraph/heading rows as one undo step.
+    /// The start row retains its style. Intervening rows are removed, and untouched
+    /// source before and after the range is preserved exactly.
+    @discardableResult
+    public func replaceSemanticTextRange(_ selection: MarkdownSemanticTextSelection,
+                                         with replacement: String) -> Bool {
+        guard let edit = replacementForSemanticTextRange(selection, with: replacement) else { return false }
+        let changed = replaceSemanticMarkdown(edit.markdown)
+        if changed { setSelection(NSRange(location: edit.caret, length: 0)) }
+        return changed
+    }
+
+    @discardableResult
+    public func deleteSemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
+        replaceSemanticTextRange(selection, with: "")
+    }
+
+    private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection)
+        -> ResolvedSemanticTextSelection? {
+        let document = semanticDocument
+        guard let anchorIndex = document.blocks.firstIndex(where: { $0.id == selection.anchor.blockID }),
+              let focusIndex = document.blocks.firstIndex(where: { $0.id == selection.focus.blockID }),
+              anchorIndex != focusIndex else { return nil }
+        let forward = anchorIndex < focusIndex
+        let firstIndex = min(anchorIndex, focusIndex)
+        let lastIndex = max(anchorIndex, focusIndex)
+        let start = forward ? selection.anchor : selection.focus
+        let end = forward ? selection.focus : selection.anchor
+        for block in document.blocks[firstIndex...lastIndex] {
+            switch block.kind {
+            case .paragraph, .heading: break
+            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
+            }
+        }
+        func sourceOffset(_ position: MarkdownSemanticTextPosition) -> Int? {
+            guard let block = document.blockById(position.blockID),
+                  let range = document.sourceRange(of: position.blockID),
+                  position.offset >= 0, position.offset <= (block.plainText as NSString).length,
+                  Range(NSRange(location: position.offset, length: 0), in: block.plainText) != nil else {
+                return nil
+            }
+            let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+            let bodyStart = (block.source as NSString).length - (block.plainText as NSString).length - ending
+            guard bodyStart >= 0,
+                  (block.source as NSString).substring(with: NSRange(location: bodyStart,
+                                                                     length: (block.plainText as NSString).length)) == block.plainText else {
+                return nil
+            }
+            let absolute = range.location + bodyStart + position.offset
+            guard isValidSourceRange(NSRange(location: absolute, length: 0)) else { return nil }
+            return absolute
+        }
+        guard let startSourceOffset = sourceOffset(start), let endSourceOffset = sourceOffset(end),
+              startSourceOffset < endSourceOffset else { return nil }
+        return .init(firstIndex: firstIndex, lastIndex: lastIndex,
+                     startOffset: start.offset, endOffset: end.offset,
+                     startSourceOffset: startSourceOffset, endSourceOffset: endSourceOffset)
+    }
+
+    private func replacementForSemanticTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                  with replacement: String) -> (markdown: String, caret: Int)? {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
+        let original = semanticDocument
+        let source = text as NSString
+        let replacementRange = NSRange(location: resolved.startSourceOffset,
+                                       length: resolved.endSourceOffset - resolved.startSourceOffset)
+        let next = source.replacingCharacters(in: replacementRange, with: replacement)
+        guard next != text else { return nil }
+        let parsed = codec.parse(next)
+        let expectedCount = original.blocks.count - (resolved.lastIndex - resolved.firstIndex)
+        guard parsed.toMarkdown() == next, parsed.blocks.count == expectedCount else { return nil }
+        for index in 0..<resolved.firstIndex {
+            guard parsed.blocks[index].kind == original.blocks[index].kind,
+                  parsed.blocks[index].source == original.blocks[index].source,
+                  parsed.blocks[index].leadingTrivia == original.blocks[index].leadingTrivia else { return nil }
+        }
+        let merged = parsed.blocks[resolved.firstIndex]
+        let first = original.blocks[resolved.firstIndex]
+        guard merged.leadingTrivia == first.leadingTrivia else { return nil }
+        switch (first.kind, merged.kind) {
+        case (.paragraph, .paragraph): break
+        case let (.heading(oldLevel, _), .heading(newLevel, _)) where oldLevel == newLevel: break
+        default: return nil
+        }
+        for oldIndex in (resolved.lastIndex + 1)..<original.blocks.count {
+            let newIndex = oldIndex - (resolved.lastIndex - resolved.firstIndex)
+            guard parsed.blocks[newIndex].kind == original.blocks[oldIndex].kind,
+                  parsed.blocks[newIndex].source == original.blocks[oldIndex].source,
+                  parsed.blocks[newIndex].leadingTrivia == original.blocks[oldIndex].leadingTrivia else { return nil }
+        }
+        guard parsed.trailingTrivia == original.trailingTrivia else { return nil }
+        return (next, resolved.startSourceOffset + (replacement as NSString).length)
     }
 
     /// Applies one semantic body edit through the existing source undo history.

@@ -327,7 +327,14 @@ private struct FormattedBlocksView: View {
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     @State private var rangeStartID: String?
     @State private var rangeEndID: String?
+    @State private var textRangeStart: MarkdownSemanticTextPosition?
+    @State private var textRangeEnd: MarkdownSemanticTextPosition?
     @State private var copiedRange = false
+
+    private var textRange: MarkdownSemanticTextSelection? {
+        guard let textRangeStart, let textRangeEnd else { return nil }
+        return .init(anchor: textRangeStart, focus: textRangeEnd)
+    }
 
     private enum Row: Identifiable {
         case block(MarkdownDocumentBlock)
@@ -399,6 +406,40 @@ private struct FormattedBlocksView: View {
                     .font(.caption)
                     .buttonStyle(.bordered)
                 }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        if let textRange {
+                            Button("Copy text range") {
+                                if let copied = controller.copySemanticTextRange(textRange) {
+                                    UIPasteboard.general.string = copied
+                                    copiedRange = true
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-copy")
+                            Button("Delete text range", role: .destructive) {
+                                if controller.deleteSemanticTextRange(textRange) { clearRange() }
+                            }
+                            .disabled(!controller.canReplaceSemanticTextRange(textRange))
+                            .accessibilityIdentifier("text-range-delete")
+                            Button("Replace from clipboard") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceSemanticTextRange(textRange, with: value) {
+                                    clearRange()
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-replace")
+                        }
+                        if textRangeStart != nil {
+                            Button("Clear text range") { clearRange() }
+                                .accessibilityIdentifier("text-range-clear")
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
                 if copiedRange {
                     Text("Markdown copied")
                         .font(.caption)
@@ -427,7 +468,16 @@ private struct FormattedBlocksView: View {
                                               customSlashCommands: customSlashCommands,
                                               customBlockMatcher: customBlockMatcher,
                                               customBlockBuilder: customBlockBuilder,
-                                              customBlockEditorBuilder: customBlockEditorBuilder)
+                                              customBlockEditorBuilder: customBlockEditorBuilder,
+                                              onCaptureTextPosition: { position, isStart in
+                        if isStart {
+                            textRangeStart = position
+                            textRangeEnd = nil
+                        } else {
+                            textRangeEnd = position
+                        }
+                        copiedRange = false
+                    })
                         }
                         .padding(4)
                         .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
@@ -446,6 +496,8 @@ private struct FormattedBlocksView: View {
     private func clearRange() {
         rangeStartID = nil
         rangeEndID = nil
+        textRangeStart = nil
+        textRangeEnd = nil
         copiedRange = false
     }
 
@@ -523,6 +575,7 @@ private struct FormattedBlockRow: View {
     let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var customBlockEditing = false
     @State private var customBlockExpectedText: String?
     @State private var inlineSelection = NSRange(location: 0, length: 0)
@@ -540,6 +593,7 @@ private struct FormattedBlockRow: View {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
                 inlineActions
+                textRangeActions
                 inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
                                identifier: "heading-\(block.id)")
                 wikilinkSuggestionPanel
@@ -547,6 +601,7 @@ private struct FormattedBlockRow: View {
             case .paragraph:
                 blockLabel("Paragraph")
                 inlineActions
+                textRangeActions
                 inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
                 wikilinkSuggestionPanel
                 slashSuggestionPanel
@@ -800,6 +855,21 @@ private struct FormattedBlockRow: View {
         .font(.caption.weight(.semibold))
         .buttonStyle(.bordered)
         .disabled(inlineSelection.length == 0)
+    }
+
+    private var textRangeActions: some View {
+        HStack(spacing: 8) {
+            Button("Start at selection") {
+                onCaptureTextPosition(.init(blockID: block.id, offset: inlineSelection.location), true)
+            }
+            .accessibilityIdentifier("text-range-start-\(block.id)")
+            Button("End at selection") {
+                onCaptureTextPosition(.init(blockID: block.id, offset: NSMaxRange(inlineSelection)), false)
+            }
+            .accessibilityIdentifier("text-range-end-\(block.id)")
+        }
+        .font(.caption)
+        .buttonStyle(.bordered)
     }
 
     private func apply(_ mark: MarkdownInlineMark) {
