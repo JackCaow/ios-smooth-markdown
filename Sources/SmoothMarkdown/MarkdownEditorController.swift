@@ -539,6 +539,171 @@ public final class MarkdownEditorController: ObservableObject {
         replaceSemanticTextRange(selection, with: "")
     }
 
+    private struct ResolvedVisibleTextSelection {
+        let document: MarkdownDocument
+        let firstIndex: Int
+        let lastIndex: Int
+        let startOffset: Int
+        let endOffset: Int
+        let firstVisible: String
+        let lastVisible: String
+        let startBoundary: MarkdownInlineMarkEditor.VisibleBoundary
+        let endBoundary: MarkdownInlineMarkEditor.VisibleBoundary
+    }
+
+    private func resolveVisibleTextSelection(_ selection: MarkdownVisibleTextSelection)
+        -> ResolvedVisibleTextSelection? {
+        guard selection.source == text else { return nil }
+        let document = semanticDocument
+        guard let anchorIndex = document.blocks.firstIndex(where: { $0.id == selection.anchor.blockID }),
+              let focusIndex = document.blocks.firstIndex(where: { $0.id == selection.focus.blockID }) else { return nil }
+        let forward = anchorIndex < focusIndex ||
+            (anchorIndex == focusIndex && selection.anchor.offset <= selection.focus.offset)
+        let firstIndex = min(anchorIndex, focusIndex)
+        let lastIndex = max(anchorIndex, focusIndex)
+        let startOffset = forward ? selection.anchor.offset : selection.focus.offset
+        let endOffset = forward ? selection.focus.offset : selection.anchor.offset
+        guard firstIndex != lastIndex || startOffset < endOffset else { return nil }
+        for block in document.blocks[firstIndex...lastIndex] {
+            switch block.kind {
+            case .paragraph, .heading: break
+            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
+            }
+            guard MarkdownInlineMarkEditor.visibleText(of: block.plainText) != nil else { return nil }
+        }
+        let first = document.blocks[firstIndex]
+        let last = document.blocks[lastIndex]
+        guard let firstVisible = MarkdownInlineMarkEditor.visibleText(of: first.plainText),
+              let lastVisible = MarkdownInlineMarkEditor.visibleText(of: last.plainText),
+              startOffset >= 0, startOffset <= (firstVisible as NSString).length,
+              endOffset >= 0, endOffset <= (lastVisible as NSString).length,
+              Range(NSRange(location: startOffset, length: 0), in: firstVisible) != nil,
+              Range(NSRange(location: endOffset, length: 0), in: lastVisible) != nil,
+              let startBoundary = MarkdownInlineMarkEditor.visibleBoundary(in: first.plainText, at: startOffset),
+              let endBoundary = MarkdownInlineMarkEditor.visibleBoundary(in: last.plainText, at: endOffset),
+              firstIndex != lastIndex || startBoundary.sourceOffset <= endBoundary.sourceOffset else { return nil }
+        return .init(document: document, firstIndex: firstIndex, lastIndex: lastIndex,
+                     startOffset: startOffset, endOffset: endOffset,
+                     firstVisible: firstVisible, lastVisible: lastVisible,
+                     startBoundary: startBoundary, endBoundary: endBoundary)
+    }
+
+    /// Copies a rendered-text selection as balanced Markdown, including the
+    /// exact source whitespace between its top-level paragraph/heading rows.
+    public func copyVisibleTextRange(_ selection: MarkdownVisibleTextSelection) -> String? {
+        guard let resolved = resolveVisibleTextSelection(selection) else { return nil }
+        let first = resolved.document.blocks[resolved.firstIndex]
+        let last = resolved.document.blocks[resolved.lastIndex]
+        let firstLength = (resolved.firstVisible as NSString).length
+        guard MarkdownInlineMarkEditor.copyVisibleRange(
+            in: first.plainText,
+            range: NSRange(location: resolved.startOffset,
+                           length: (resolved.firstIndex == resolved.lastIndex ? resolved.endOffset : firstLength)
+                               - resolved.startOffset)) != nil else { return nil }
+        if resolved.firstIndex != resolved.lastIndex {
+            guard MarkdownInlineMarkEditor.copyVisibleRange(
+                in: last.plainText, range: NSRange(location: 0, length: resolved.endOffset)) != nil else { return nil }
+        }
+        guard let firstRange = resolved.document.sourceRange(of: first.id),
+              let lastRange = resolved.document.sourceRange(of: last.id),
+              let firstBodyStart = Self.editableBodyStart(in: first),
+              let lastBodyStart = Self.editableBodyStart(in: last) else { return nil }
+        let sourceStart = resolved.startOffset == 0 && isHeading(first) ? firstRange.location :
+            firstRange.location + firstBodyStart + resolved.startBoundary.sourceOffset
+        let sourceEnd = resolved.endOffset == 0 && isHeading(last) && resolved.firstIndex != resolved.lastIndex ?
+            lastRange.location : lastRange.location + lastBodyStart + resolved.endBoundary.sourceOffset
+        guard sourceStart <= sourceEnd else { return nil }
+        return resolved.startBoundary.openTokens
+            + (text as NSString).substring(with: NSRange(location: sourceStart, length: sourceEnd - sourceStart))
+            + resolved.endBoundary.closeTokens
+    }
+
+    public func canReplaceVisibleTextRange(_ selection: MarkdownVisibleTextSelection,
+                                           with replacement: String = "") -> Bool {
+        replacementForVisibleTextRange(selection, with: replacement) != nil
+    }
+
+    /// Replaces rendered UTF-16 text in one or several adjacent prose rows as
+    /// one undo step. The first row keeps its paragraph or heading style.
+    @discardableResult
+    public func replaceVisibleTextRange(_ selection: MarkdownVisibleTextSelection,
+                                        with replacement: String) -> Bool {
+        guard let edit = replacementForVisibleTextRange(selection, with: replacement),
+              replaceSemanticMarkdown(edit.markdown) else { return false }
+        setSelection(NSRange(location: edit.caret, length: 0))
+        return true
+    }
+
+    @discardableResult
+    public func deleteVisibleTextRange(_ selection: MarkdownVisibleTextSelection) -> Bool {
+        replaceVisibleTextRange(selection, with: "")
+    }
+
+    private static func editableBodyStart(in block: MarkdownDocumentBlock) -> Int? {
+        let source = block.source as NSString
+        let body = block.plainText as NSString
+        let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+        let offset = source.length - body.length - ending
+        guard offset >= 0, source.substring(with: NSRange(location: offset, length: body.length)) == block.plainText
+        else { return nil }
+        return offset
+    }
+
+    private func replacementForVisibleTextRange(_ selection: MarkdownVisibleTextSelection,
+                                                with replacement: String) -> (markdown: String, caret: Int)? {
+        guard let resolved = resolveVisibleTextSelection(selection),
+              !replacement.contains("\n"), !replacement.contains("\r") else { return nil }
+        let first = resolved.document.blocks[resolved.firstIndex]
+        let last = resolved.document.blocks[resolved.lastIndex]
+        guard let firstRange = resolved.document.sourceRange(of: first.id),
+              let lastRange = resolved.document.sourceRange(of: last.id),
+              let firstBodyStart = Self.editableBodyStart(in: first),
+              let lastBodyStart = Self.editableBodyStart(in: last),
+              let firstStyles = MarkdownInlineMarkEditor.visibleStyles(of: first.plainText),
+              let lastStyles = MarkdownInlineMarkEditor.visibleStyles(of: last.plainText) else { return nil }
+        let start = firstRange.location + firstBodyStart + resolved.startBoundary.sourceOffset
+        let end = lastRange.location + lastBodyStart + resolved.endBoundary.sourceOffset
+        guard start <= end else { return nil }
+        let firstVisible = resolved.firstVisible as NSString
+        let lastVisible = resolved.lastVisible as NSString
+        let expectedVisible = firstVisible.substring(to: resolved.startOffset)
+            + replacement + lastVisible.substring(from: resolved.endOffset)
+        let expectedPrefixStyles = Array(firstStyles[..<resolved.startOffset])
+        let expectedSuffixStyles = Array(lastStyles[resolved.endOffset...])
+        let source = text as NSString
+        let range = NSRange(location: start, length: end - start)
+        let repairs = [("", ""),
+                       (resolved.startBoundary.closeTokens, resolved.endBoundary.openTokens)]
+        for (closing, opening) in repairs {
+            let inserted = closing + replacement + opening
+            let next = source.replacingCharacters(in: range, with: inserted)
+            guard next != text else { continue }
+            let parsed = codec.parse(next)
+            let expectedCount = resolved.document.blocks.count - (resolved.lastIndex - resolved.firstIndex)
+            guard parsed.toMarkdown() == next, parsed.blocks.count == expectedCount,
+                  parsed.trailingTrivia == resolved.document.trailingTrivia else { continue }
+            let merged = parsed.blocks[resolved.firstIndex]
+            guard merged.leadingTrivia == first.leadingTrivia else { continue }
+            switch (first.kind, merged.kind) {
+            case (.paragraph, .paragraph): break
+            case let (.heading(oldLevel, _), .heading(newLevel, _)) where oldLevel == newLevel: break
+            default: continue
+            }
+            guard MarkdownInlineMarkEditor.visibleText(of: merged.plainText) == expectedVisible,
+                  let styles = MarkdownInlineMarkEditor.visibleStyles(of: merged.plainText),
+                  styles.count == (expectedVisible as NSString).length,
+                  Array(styles.prefix(expectedPrefixStyles.count)) == expectedPrefixStyles,
+                  Array(styles.suffix(expectedSuffixStyles.count)) == expectedSuffixStyles else { continue }
+            let before = zip(parsed.blocks[..<resolved.firstIndex],
+                             resolved.document.blocks[..<resolved.firstIndex]).allSatisfy(Self.sameSourceBlock)
+            let after = zip(parsed.blocks[(resolved.firstIndex + 1)...],
+                            resolved.document.blocks[(resolved.lastIndex + 1)...]).allSatisfy(Self.sameSourceBlock)
+            guard before, after else { continue }
+            return (next, start + (inserted as NSString).length)
+        }
+        return nil
+    }
+
     /// Applies one mark to the selected character fragment in each adjacent
     /// paragraph or heading. Each row retains its marker, trivia, and ending.
     @discardableResult
