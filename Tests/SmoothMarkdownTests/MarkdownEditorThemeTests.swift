@@ -33,5 +33,40 @@ final class MarkdownEditorThemeTests: XCTestCase {
         XCTAssertNil(theme.sourcePadding)
         XCTAssertNil(theme.previewPadding)
         XCTAssertNil(theme.contentPadding)
+        XCTAssertNil(theme.blockBorderColor)
+        XCTAssertNil(theme.tableBorderColor)
+        XCTAssertNil(theme.selectionColor)
+        XCTAssertNil(theme.suggestionPanelColor)
+    }
+
+    func testBlockAndSuggestionOverridesMergeWithoutLosingAmbientValues() {
+        let ambient = MarkdownEditorTheme(
+            blockBorderColor: .gray, blockBorderRadius: 8,
+            tableBorderColor: .blue, selectionColor: .yellow,
+            suggestionPanelColor: .black)
+        let explicit = MarkdownEditorTheme(
+            blockBorderRadius: 0, tableBorderColor: .orange,
+            suggestionSelectedBackgroundColor: .green)
+        let merged = ambient.merging(explicit)
+
+        XCTAssertEqual(merged.blockBorderColor, .gray)
+        XCTAssertEqual(merged.blockBorderRadius, 0)
+        XCTAssertEqual(merged.tableBorderColor, .orange)
+        XCTAssertEqual(merged.selectionColor, .yellow)
+        XCTAssertEqual(merged.suggestionPanelColor, .black)
+        XCTAssertEqual(merged.suggestionSelectedBackgroundColor, .green)
+    }
+
+    func testTableCellSelectionAndActiveBorderTakePriorityOverHeaderAndGrid() {
+        let theme = MarkdownEditorTheme(
+            tableBorderColor: .gray, tableHeaderColor: .blue,
+            tableSelectionColor: .yellow, tableActiveBorderColor: .orange)
+
+        XCTAssertEqual(theme.tableCellBackground(isSelected: false, isHeader: true), .blue)
+        XCTAssertEqual(theme.tableCellBackground(isSelected: true, isHeader: true), .yellow)
+        XCTAssertNil(theme.tableCellBackground(isSelected: false, isHeader: false))
+        XCTAssertEqual(theme.tableCellBorder(isActive: false), .gray)
+        XCTAssertEqual(theme.tableCellBorder(isActive: true), .orange)
+        XCTAssertNil(MarkdownEditorTheme().tableCellBorder(isActive: true))
     }
 }

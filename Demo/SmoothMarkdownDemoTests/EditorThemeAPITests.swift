@@ -12,7 +12,11 @@ final class EditorThemeAPITests: XCTestCase {
                 toolbarColor: .yellow,
                 sourceTextColor: .primary,
                 sourceFontSize: 17,
-                sourcePadding: EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10)))
+                sourcePadding: EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10),
+                blockBorderColor: .gray,
+                tableHeaderColor: .blue,
+                selectionColor: .yellow,
+                suggestionPanelColor: .white))
             .markdownEditorTheme(MarkdownEditorTheme(
                 previewPadding: EdgeInsets(top: 12, leading: 0, bottom: 0, trailing: 0)))
         _ = editor

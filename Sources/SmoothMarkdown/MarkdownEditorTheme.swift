@@ -17,6 +17,19 @@ public struct MarkdownEditorTheme {
     public var previewBackgroundColor: Color?
     public var previewPadding: EdgeInsets?
     public var contentPadding: EdgeInsets?
+    public var blockBorderColor: Color?
+    public var blockHeaderColor: Color?
+    public var blockHeaderTextColor: Color?
+    public var blockBorderRadius: CGFloat?
+    public var blockPadding: EdgeInsets?
+    public var tableBorderColor: Color?
+    public var tableHeaderColor: Color?
+    public var tableSelectionColor: Color?
+    public var tableActiveBorderColor: Color?
+    public var tablePadding: EdgeInsets?
+    public var selectionColor: Color?
+    public var suggestionPanelColor: Color?
+    public var suggestionSelectedBackgroundColor: Color?
 
     public init(editorBackgroundColor: Color? = nil, editorBorderColor: Color? = nil,
                 editorBorderRadius: CGFloat? = nil, toolbarColor: Color? = nil,
@@ -25,7 +38,14 @@ public struct MarkdownEditorTheme {
                 sourceTextColor: Color? = nil, sourceFontName: String? = nil,
                 sourceFontSize: CGFloat? = nil, sourcePadding: EdgeInsets? = nil,
                 previewBackgroundColor: Color? = nil, previewPadding: EdgeInsets? = nil,
-                contentPadding: EdgeInsets? = nil) {
+                contentPadding: EdgeInsets? = nil, blockBorderColor: Color? = nil,
+                blockHeaderColor: Color? = nil, blockHeaderTextColor: Color? = nil,
+                blockBorderRadius: CGFloat? = nil, blockPadding: EdgeInsets? = nil,
+                tableBorderColor: Color? = nil, tableHeaderColor: Color? = nil,
+                tableSelectionColor: Color? = nil, tableActiveBorderColor: Color? = nil,
+                tablePadding: EdgeInsets? = nil, selectionColor: Color? = nil,
+                suggestionPanelColor: Color? = nil,
+                suggestionSelectedBackgroundColor: Color? = nil) {
         self.editorBackgroundColor = editorBackgroundColor
         self.editorBorderColor = editorBorderColor
         self.editorBorderRadius = editorBorderRadius
@@ -41,6 +61,19 @@ public struct MarkdownEditorTheme {
         self.previewBackgroundColor = previewBackgroundColor
         self.previewPadding = previewPadding
         self.contentPadding = contentPadding
+        self.blockBorderColor = blockBorderColor
+        self.blockHeaderColor = blockHeaderColor
+        self.blockHeaderTextColor = blockHeaderTextColor
+        self.blockBorderRadius = blockBorderRadius
+        self.blockPadding = blockPadding
+        self.tableBorderColor = tableBorderColor
+        self.tableHeaderColor = tableHeaderColor
+        self.tableSelectionColor = tableSelectionColor
+        self.tableActiveBorderColor = tableActiveBorderColor
+        self.tablePadding = tablePadding
+        self.selectionColor = selectionColor
+        self.suggestionPanelColor = suggestionPanelColor
+        self.suggestionSelectedBackgroundColor = suggestionSelectedBackgroundColor
     }
 
     /// Explicit editor values override the theme installed in the environment.
@@ -61,7 +94,31 @@ public struct MarkdownEditorTheme {
             sourcePadding: override.sourcePadding ?? sourcePadding,
             previewBackgroundColor: override.previewBackgroundColor ?? previewBackgroundColor,
             previewPadding: override.previewPadding ?? previewPadding,
-            contentPadding: override.contentPadding ?? contentPadding)
+            contentPadding: override.contentPadding ?? contentPadding,
+            blockBorderColor: override.blockBorderColor ?? blockBorderColor,
+            blockHeaderColor: override.blockHeaderColor ?? blockHeaderColor,
+            blockHeaderTextColor: override.blockHeaderTextColor ?? blockHeaderTextColor,
+            blockBorderRadius: override.blockBorderRadius ?? blockBorderRadius,
+            blockPadding: override.blockPadding ?? blockPadding,
+            tableBorderColor: override.tableBorderColor ?? tableBorderColor,
+            tableHeaderColor: override.tableHeaderColor ?? tableHeaderColor,
+            tableSelectionColor: override.tableSelectionColor ?? tableSelectionColor,
+            tableActiveBorderColor: override.tableActiveBorderColor ?? tableActiveBorderColor,
+            tablePadding: override.tablePadding ?? tablePadding,
+            selectionColor: override.selectionColor ?? selectionColor,
+            suggestionPanelColor: override.suggestionPanelColor ?? suggestionPanelColor,
+            suggestionSelectedBackgroundColor:
+                override.suggestionSelectedBackgroundColor ?? suggestionSelectedBackgroundColor)
+    }
+
+    func tableCellBackground(isSelected: Bool, isHeader: Bool) -> Color? {
+        if isSelected { return tableSelectionColor }
+        return isHeader ? tableHeaderColor : nil
+    }
+
+    func tableCellBorder(isActive: Bool) -> Color? {
+        if isActive, let tableActiveBorderColor { return tableActiveBorderColor }
+        return tableBorderColor
     }
 }
 
