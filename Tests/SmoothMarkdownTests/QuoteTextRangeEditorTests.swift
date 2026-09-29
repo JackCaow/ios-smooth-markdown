@@ -52,6 +52,8 @@ final class QuoteTextRangeEditorTests: XCTestCase {
         let structured = "> Alpha\n> - child\n> Beta"
         let structuredController = MarkdownEditorController(text: structured)
         XCTAssertFalse(structuredController.replaceSemanticQuoteLine(id: "block-0", lineIndex: 0, with: "Changed"))
+        let indentedCode = MarkdownEditorController(text: ">     code\n> prose")
+        XCTAssertFalse(indentedCode.replaceSemanticQuoteLine(id: "block-0", lineIndex: 1, with: "Changed"))
         let emojiController = MarkdownEditorController(text: "> 😀 done")
         let splitEmoji = MarkdownSemanticTextSelection(
             anchor: .init(blockID: "block-0", offset: 1, quoteLineIndex: 0),

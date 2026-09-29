@@ -40,7 +40,8 @@ public struct MarkdownSourceQuote: Equatable {
             let prefix = String(chars[..<index])
             let content = String(chars[index...])
             let trimmed = content.trimmingCharacters(in: .whitespaces)
-            guard !Self.isStructuredBody(trimmed) else { return nil }
+            guard !content.hasPrefix("    "), !content.hasPrefix("\t"),
+                  !Self.isStructuredBody(trimmed) else { return nil }
             let ending = newline.location == NSNotFound ? "" : (hasCR ? "\r\n" : "\n")
             result.append(.init(prefix: prefix, content: content, ending: ending, sourceOffset: offset))
             offset = newline.location == NSNotFound ? ns.length : newline.location + 1
