@@ -26,7 +26,7 @@ enum ReaderImageSelectionEligibility {
                       text.lines.allSatisfy({ line in
                           switch line.kind {
                           case .paragraph, .heading: return true
-                          case .list, .quote, .rule: return false
+                          case .list, .quote, .rule, .detailsSummary, .footnoteDefinition: return false
                           }
                       }) else { return nil }
                 hasText = true

@@ -4,6 +4,40 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderTextKitProjectionTests: XCTestCase {
+    func testInlineMathAndFootnoteDefinitionUseSourceBackedAnchors() throws {
+        let source = "Before $x+y$ reference[^1].\n\n[^1]: Definition **bold**.\n\nAfter."
+        let sections = FootnoteSyntax.sections(source)
+        var items: [ReaderBlockRangeDocument.Item] = []
+        for section in sections {
+            switch section {
+            case let .markdown(markdown):
+                items += Array(MarkdownSyntax.parse(markdown).children)
+                    .map(ReaderBlockRangeDocument.Item.markup)
+            case let .definition(definition): items.append(.footnoteDefinition(definition))
+            }
+        }
+        let styled = try XCTUnwrap(ReaderSelectionDocument.composeItems(
+            items, enableHTML: false, plugins: nil, visualBlockAnchors: true))
+        let projection = ReaderTextKitProjection(document: .init(markdown: source))
+        XCTAssertEqual(styled.selectionText, projection.attributedText.string)
+        XCTAssertEqual(styled.copiedText, "Before x+y reference[1].\n[1]: Definition bold.\nAfter.")
+        let formula = try XCTUnwrap(projection.attachments.first)
+        XCTAssertEqual(projection.copiedText(in: formula.range), "x+y")
+        XCTAssertEqual(styled.copiedTextSlice(lowerUTF16: formula.range.location,
+                                             upperUTF16: NSMaxRange(formula.range)), "x+y")
+        XCTAssertEqual(projection.copiedText(in: NSRange(location: 0,
+                                                        length: projection.attributedText.length)),
+                       styled.copiedText)
+        let complex = FootnoteSyntax.Definition(label: "1", content: "First.\n# Second block")
+        XCTAssertNil(ReaderSelectionDocument.composeItems(
+            [.footnoteDefinition(complex)], enableHTML: false, plugins: nil,
+            visualBlockAnchors: true))
+        let paragraphs = FootnoteSyntax.Definition(label: "1", content: "First.\n\nSecond.")
+        XCTAssertNil(ReaderSelectionDocument.composeItems(
+            [.footnoteDefinition(paragraphs)], enableHTML: false, plugins: nil,
+            visualBlockAnchors: true), "A multi-paragraph definition cannot enter a one-line native projection")
+    }
+
     func testImageFixtureSharesSourceBackedOffsetsAndSkipsAltOnCopy() throws {
         let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
             forResource: "ReaderImageHost", withExtension: "md")), encoding: .utf8)

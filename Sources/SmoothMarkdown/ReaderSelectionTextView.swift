@@ -275,11 +275,15 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let weight: UIFont.Weight
             switch line.kind {
             case let .heading(level): headingLevel = level; weight = .semibold
-            case .paragraph, .list, .quote, .rule: headingLevel = nil; weight = .regular
+            case .detailsSummary: headingLevel = nil; weight = .semibold
+            case .paragraph, .list, .quote, .rule, .footnoteDefinition:
+                headingLevel = nil; weight = .regular
             }
             let paragraph = NSMutableParagraphStyle()
             paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
                 + CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.leading
+            if line.kind == .detailsSummary { paragraph.firstLineHeadIndent += 28 }
+            if line.kind == .footnoteDefinition { paragraph.firstLineHeadIndent += 16 }
             if let headingLevel, headingLevel <= 2 {
                 paragraph.firstLineHeadIndent += 16
             }
@@ -294,6 +298,10 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     : styleSheet.quoteSpacing
             } else {
                 paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
+            }
+            if line.kind == .detailsSummary || line.kind == .footnoteDefinition {
+                paragraph.paragraphSpacingBefore += 8
+                paragraph.paragraphSpacing += 8
             }
             if let headingLevel, headingLevel <= 2 {
                 paragraph.paragraphSpacingBefore += 8
@@ -370,6 +378,12 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                                                  weight: .regular, customSize: nil,
                                                                  traits: traits)
                     attributes[.baselineOffset] = 5
+                    attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
+                }
+                if run.footnoteDefinitionLabel {
+                    attributes[.font] = MarkdownTypography.font(textStyle: textStyle,
+                                                                 weight: .bold, customSize: nil,
+                                                                 traits: traits)
                     attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
                 }
                 // Keep short inline code together when wrapping. NBSP has the

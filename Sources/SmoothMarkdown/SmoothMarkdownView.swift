@@ -136,42 +136,107 @@ public struct SmoothMarkdownView: View {
     }
 
     #if os(iOS)
-    /// One native selection surface can include built-in code, GFM tables, and display math
-    /// when every visual block has a measured host and an exact Copy value.
+    /// One native selection surface includes built-in visual blocks when every
+    /// attachment has a measured host and a semantic Copy value.
     var wholeDocumentSelection: (selection: ReaderSelectionDocument,
                                  projection: ReaderTextKitProjection)? {
+        wholeDocumentSelection(expansion: [:])
+    }
+
+    func wholeDocumentSelection(expansion: [String: Bool]) ->
+        (selection: ReaderSelectionDocument, projection: ReaderTextKitProjection)? {
+        wholeDocumentSelection(expansion: expansion, validateExpandedDetails: true)
+    }
+
+    private func wholeDocumentSelection(expansion: [String: Bool], validateExpandedDetails: Bool) ->
+        (selection: ReaderSelectionDocument, projection: ReaderTextKitProjection)? {
         guard selectable, enableCrossBlockSelection, onTextLongPress == nil, !voiceOverEnabled else { return nil }
+        let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
+            markdown: markdown, enableHTML: enableHTML, plugins: plugins,
+            builderRegistry: builderRegistry, expansion: expansion))
         let details = DetailsSyntax.sections(markdown)
-        guard details.count == 1, case let .markdown(detailsSource) = details[0] else { return nil }
-        let pluginSections = PluginBlockSyntax.sections(detailsSource, registry: plugins)
-        guard pluginSections.count == 1,
-              case let .markdown(pluginSource) = pluginSections[0] else { return nil }
-        let footnoteSections = FootnoteSyntax.sections(pluginSource)
-        guard footnoteSections.count == 1,
-              case let .markdown(footnoteSource) = footnoteSections[0] else { return nil }
-        let items = MathSyntax.sections(footnoteSource).flatMap { section -> [ReaderBlockRangeDocument.Item] in
-            switch section {
-            case let .markdown(source): return Array(parse(source).children).map(ReaderBlockRangeDocument.Item.markup)
-            case let .block(latex): return [.displayMath(latex)]
+        let summaryIDs = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
+        var summaryIndex = 0
+        var items: [ReaderBlockRangeDocument.Item] = []
+        func appendMath(_ source: String) {
+            for section in MathSyntax.sections(source) {
+                switch section {
+                case let .markdown(markdown):
+                    items += Array(parse(markdown).children).map(ReaderBlockRangeDocument.Item.markup)
+                case let .block(latex): items.append(.displayMath(latex))
+                }
             }
         }
+        func appendFootnotes(_ source: String) -> Bool {
+            for section in FootnoteSyntax.sections(source) {
+                switch section {
+                case let .markdown(markdown): appendMath(markdown)
+                case let .definition(definition):
+                    let node = MarkdownExtensionNode.footnoteDefinition(label: definition.label,
+                                                                         content: definition.content)
+                    let parsed = parse(definition.content)
+                    if extensionBuilder(node) != nil || Array(parsed.children).count != 1 ||
+                        !(parsed.child(at: 0) is Paragraph) { return false }
+                    items.append(.footnoteDefinition(definition))
+                }
+            }
+            return true
+        }
+        func appendPlugins(_ source: String) -> Bool {
+            for section in PluginBlockSyntax.sections(source, registry: plugins) {
+                switch section {
+                case let .markdown(markdown):
+                    if !appendFootnotes(markdown) { return false }
+                case .plugin: return false
+                }
+            }
+            return true
+        }
+        func isCustom(_ item: ReaderBlockRangeDocument.Item) -> Bool {
+            switch item {
+            case let .markup(node):
+                return containsCustomBlockBuilder(node) || (node is CodeBlock && codeBuilder != nil)
+            case let .displayMath(latex): return extensionBuilder(.blockMath(latex)) != nil
+            case let .detailsSummary(block):
+                guard let summary = parse(block.summary).child(at: 0) else { return false }
+                return containsCustomBlockBuilder(summary)
+            case let .footnoteDefinition(definition):
+                guard let content = parse(definition.content).child(at: 0) else { return false }
+                return containsCustomBlockBuilder(content)
+            }
+        }
+        for section in details {
+            switch section {
+            case let .markdown(source):
+                guard appendPlugins(source) else { return nil }
+            case let .details(block):
+                let node = MarkdownExtensionNode.details(summary: block.summary,
+                                                         content: block.content, isOpen: block.isOpen)
+                guard extensionBuilder(node) == nil,
+                      summaryIDs.indices.contains(summaryIndex) else { return nil }
+                let id = summaryIDs[summaryIndex]
+                summaryIndex += 1
+                items.append(.detailsSummary(block))
+                let bodyStart = items.count
+                guard appendPlugins(block.content) else { return nil }
+                let body = Array(items[bodyStart...])
+                guard !body.contains(where: isCustom),
+                      body.isEmpty || ReaderSelectionDocument.composeItems(
+                        body, enableHTML: enableHTML, plugins: plugins,
+                        visualBlockAnchors: true) != nil else { return nil }
+                if !(expansion[id] ?? block.isOpen) {
+                    items.removeSubrange(bodyStart..<items.count)
+                }
+            }
+        }
+        guard summaryIndex == summaryIDs.count else { return nil }
         // Single blocks keep their existing renderer unless the caller needs
-        // a native host for programmatic selection.
-        guard !items.isEmpty, (items.count > 1 || selectionController != nil),
-              !items.contains(where: { item in
-                  switch item {
-                  case let .markup(node):
-                      return containsCustomBlockBuilder(node) ||
-                          (node is CodeBlock && codeBuilder != nil)
-                  case let .displayMath(latex): return extensionBuilder(.blockMath(latex)) != nil
-                  }
-              }),
+        // a native host for programmatic selection or disclosure.
+        guard !items.isEmpty, (items.count > 1 || selectionController != nil || !summaryIDs.isEmpty),
+              !items.contains(where: isCustom),
               let selection = ReaderSelectionDocument.composeItems(items, enableHTML: enableHTML,
                                                                      plugins: plugins,
                                                                      visualBlockAnchors: true) else { return nil }
-        let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
-            markdown: markdown, enableHTML: enableHTML, plugins: plugins,
-            builderRegistry: builderRegistry))
         let remoteImageCount = projection.attachments.filter { attachment in
             guard case let .image(spec) = attachment.content,
                   let source = ImageSource.parse(spec.source), case .remote = source else { return false }
@@ -194,11 +259,20 @@ public struct SmoothMarkdownView: View {
                                              selectable: true, onCharacterTap: nil)
             .attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize)).text
         guard styled.string == projection.attributedText.string else { return nil }
+        if validateExpandedDetails, !summaryIDs.isEmpty {
+            var allOpen = expansion
+            for id in summaryIDs { allOpen[id] = true }
+            if allOpen != expansion,
+               wholeDocumentSelection(expansion: allOpen, validateExpandedDetails: false) == nil {
+                return nil
+            }
+        }
         return (selection, projection)
     }
 
     func visualAttachmentView(for content: ReaderTextKitProjection.Attachment.Content,
-                              remoteResolution: ReaderRemoteImageResolution? = nil) -> AnyView? {
+                              remoteResolution: ReaderRemoteImageResolution? = nil,
+                              inlineFormula: Bool = false) -> AnyView? {
         switch content {
         case let .image(image):
             if let source = ImageSource.parse(image.source), case .remote = source {
@@ -214,6 +288,7 @@ public struct SmoothMarkdownView: View {
             guard let table = parse(source).child(at: 0) as? Markdown.Table else { return nil }
             return AnyView(tableView(table, selectable: false))
         case let .formula(latex):
+            if inlineFormula { return AnyView(inlineMath(latex)) }
             return AnyView(blockMath(latex))
         default: return nil
         }

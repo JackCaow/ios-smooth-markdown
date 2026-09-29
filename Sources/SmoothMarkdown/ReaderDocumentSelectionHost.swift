@@ -12,6 +12,10 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
     private var attachmentSizes: [String: CGSize] = [:]
     private var measuredWidth: CGFloat = 0
     private var dragAnchorUTF16: Int?
+    var onDisclosureTap: ((String) -> Void)?
+    var disclosureExpanded: [String: Bool] = [:]
+    private var disclosureButtons: [String: UIButton] = [:]
+    private var disclosureIDs: [String] = []
     var isLayoutValid: Bool { abs(bounds.width - measuredWidth) < 0.5 }
 
     init() {
@@ -37,6 +41,10 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
         imageDrag.cancelsTouchesInView = false
         imageDrag.delegate = self
         addGestureRecognizer(imageDrag)
+        let disclosureTap = UITapGestureRecognizer(target: self, action: #selector(tapDisclosure(_:)))
+        disclosureTap.cancelsTouchesInView = false
+        disclosureTap.delegate = self
+        addGestureRecognizer(disclosureTap)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -45,7 +53,10 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
                            shouldReceive touch: UITouch) -> Bool {
         // Image taps belong to the hosted image view. A drag that starts in
         // prose can still cross its measured attachment line.
-        !projectionImageIDs.contains { id in
+        guard !disclosureButtons.values.contains(where: { button in
+            touch.view?.isDescendant(of: button) == true
+        }) else { return false }
+        return !projectionImageIDs.contains { id in
             guard let host = attachmentViews[id] else { return false }
             return touch.view?.isDescendant(of: host) == true
         }
@@ -92,6 +103,70 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
         return min(max(offset(from: beginningOfDocument, to: position), 0), textStorage.length)
     }
 
+    @objc private func tapDisclosure(_ gesture: UITapGestureRecognizer) {
+        guard gesture.state == .ended, let projection, isLayoutValid else { return }
+        let point = gesture.location(in: self)
+        layoutManager.ensureLayout(for: textContainer)
+        for segment in projection.document.segments where segment.kind == .detailsSummary {
+            guard segment.range.location < textStorage.length else { continue }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: segment.range,
+                                                  actualCharacterRange: nil)
+            var insideSummaryLine = false
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { line, _, _, _, _ in
+                if line.offsetBy(dx: self.textContainerInset.left,
+                                 dy: self.textContainerInset.top).contains(point) {
+                    insideSummaryLine = true
+                }
+            }
+            if insideSummaryLine {
+                let containerPoint = CGPoint(x: point.x - textContainerInset.left,
+                                             y: point.y - textContainerInset.top)
+                let tappedGlyph = layoutManager.glyphIndex(for: containerPoint, in: textContainer)
+                if tappedGlyph < layoutManager.numberOfGlyphs {
+                    let character = layoutManager.characterIndexForGlyph(at: tappedGlyph)
+                    let glyphRect = layoutManager.boundingRect(
+                        forGlyphRange: NSRange(location: tappedGlyph, length: 1), in: textContainer)
+                    if NSLocationInRange(character, segment.range),
+                       glyphRect.contains(containerPoint),
+                       textStorage.attribute(.link, at: character, effectiveRange: nil) != nil {
+                        return
+                    }
+                }
+                onDisclosureTap?(segment.id)
+                return
+            }
+        }
+    }
+
+    @objc private func pressDisclosure(_ sender: UIButton) {
+        guard disclosureIDs.indices.contains(sender.tag) else { return }
+        onDisclosureTap?(disclosureIDs[sender.tag])
+    }
+
+    func updateDisclosureButtons() {
+        guard let projection else { return }
+        let summaries = projection.document.segments.filter { $0.kind == .detailsSummary }
+        disclosureIDs = summaries.map(\.id)
+        let expected = Set(disclosureIDs)
+        for (id, button) in disclosureButtons where !expected.contains(id) { button.removeFromSuperview() }
+        disclosureButtons = disclosureButtons.filter { expected.contains($0.key) }
+        for (index, summary) in summaries.enumerated() {
+            let button = disclosureButtons[summary.id] ?? UIButton(type: .system)
+            if button.superview !== self {
+                button.addTarget(self, action: #selector(pressDisclosure(_:)), for: .touchUpInside)
+                addSubview(button)
+            }
+            button.tag = index
+            button.setImage(UIImage(systemName: disclosureExpanded[summary.id] == true
+                                    ? "chevron.down" : "chevron.right"), for: .normal)
+            button.accessibilityLabel = summary.atoms.map(\.copyText).joined()
+            button.accessibilityValue = disclosureExpanded[summary.id] == true ? "Expanded" : "Collapsed"
+            button.accessibilityIdentifier = "reader-disclosure-\(index)"
+            disclosureButtons[summary.id] = button
+        }
+        setNeedsLayout()
+    }
+
     /// An incomplete or invalid measurement never installs a misleading 1 pt
     /// attachment. Width must be the same width used by the hosting SwiftUI row.
     @discardableResult
@@ -132,6 +207,7 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
         attachmentSizes = measuredAttachments.filter { expected.contains($0.key) }
         measuredWidth = availableWidth
         for view in attachmentViews.values where view.superview !== self { addSubview(view) }
+        updateDisclosureButtons()
         setNeedsLayout()
         return true
     }
@@ -141,6 +217,7 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
         guard let projection else { return }
         let validWidth = isLayoutValid
         for view in attachmentViews.values { view.isHidden = !validWidth }
+        for button in disclosureButtons.values { button.isHidden = !validWidth }
         guard validWidth else { return }
         layoutManager.ensureLayout(for: textContainer)
         for attachment in projection.attachments {
@@ -154,6 +231,14 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
                                 y: textContainerInset.top + rect.minY,
                                 width: size.width, height: size.height)
             if view.frame != target { view.frame = target }
+        }
+        for segment in projection.document.segments where segment.kind == .detailsSummary {
+            guard let button = disclosureButtons[segment.id], segment.range.location < textStorage.length else { continue }
+            let glyph = layoutManager.glyphIndexForCharacter(at: segment.range.location)
+            let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            button.frame = CGRect(x: textContainerInset.left + line.minX,
+                                  y: textContainerInset.top + line.minY,
+                                  width: 24, height: line.height)
         }
     }
 
@@ -176,9 +261,28 @@ struct ReaderWholeDocumentSelectionContainer: View {
     let selectionController: SmoothSelectionController?
 
     @State private var remoteResults: [ReaderRemoteImageKey: ReaderRemoteImageResolution] = [:]
+    @State private var expansion: [String: Bool] = [:]
+
+    private var candidate: (selection: ReaderSelectionDocument, projection: ReaderTextKitProjection) {
+        sourceView.wholeDocumentSelection(expansion: expansion)
+            ?? (selection: selectionDocument, projection: projection)
+    }
+
+    private var disclosureDefaults: [String: Bool] {
+        let ids = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
+        let blocks = DetailsSyntax.sections(sourceView.markdown).compactMap { section -> DetailsSyntax.Block? in
+            if case let .details(block) = section { return block }
+            return nil
+        }
+        return Dictionary(uniqueKeysWithValues: zip(ids, blocks.map(\.isOpen)).map { ($0.0, $0.1) })
+    }
+
+    private var disclosureExpanded: [String: Bool] {
+        disclosureDefaults.merging(expansion) { _, override in override }
+    }
 
     private var remoteKeys: [ReaderRemoteImageKey] {
-        Array(Set(projection.attachments.compactMap { attachment -> ReaderRemoteImageKey? in
+        Array(Set(candidate.projection.attachments.compactMap { attachment -> ReaderRemoteImageKey? in
             guard case let .image(spec) = attachment.content,
                   let source = ImageSource.parse(spec.source),
                   case let .remote(url, svg) = source else { return nil }
@@ -187,10 +291,15 @@ struct ReaderWholeDocumentSelectionContainer: View {
     }
 
     var body: some View {
-        ReaderWholeDocumentSelectionView(selectionDocument: selectionDocument, projection: projection,
+        ReaderWholeDocumentSelectionView(selectionDocument: candidate.selection,
+                                         projection: candidate.projection,
                                          styleSheet: styleSheet, onLinkTap: onLinkTap,
                                          sourceView: sourceView, selectionController: selectionController,
-                                         remoteResults: remoteResults)
+                                         remoteResults: remoteResults,
+                                         disclosureExpanded: disclosureExpanded,
+                                         onDisclosureTap: { id in
+                                             expansion[id] = !(disclosureExpanded[id] ?? false)
+                                         })
             .task(id: remoteKeys) { await loadRemoteImages() }
     }
 
@@ -235,6 +344,8 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     let sourceView: SmoothMarkdownView
     let selectionController: SmoothSelectionController?
     let remoteResults: [ReaderRemoteImageKey: ReaderRemoteImageResolution]
+    let disclosureExpanded: [String: Bool]
+    let onDisclosureTap: (String) -> Void
 
     func makeUIView(context: Context) -> ReaderDocumentSelectionTextView {
         let view = ReaderDocumentSelectionTextView()
@@ -257,6 +368,8 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         selectionController?.attach(view)
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
+        view.onDisclosureTap = onDisclosureTap
+        view.disclosureExpanded = disclosureExpanded
         configure(view, width: max(1, view.bounds.width))
     }
 
@@ -287,8 +400,10 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         var controllers: [String: UIHostingController<AnyView>] = [:]
         var measured: [String: CGSize] = [:]
         var hosted: [String: UIView] = [:]
+        let segmentKinds = Dictionary(uniqueKeysWithValues: projection.document.segments.map { ($0.id, $0.kind) })
         for attachment in projection.attachments {
             let isImage: Bool
+            let isInlineFormula: Bool
             let remoteResolution: ReaderRemoteImageResolution?
             if case let .image(spec) = attachment.content {
                 isImage = true
@@ -299,9 +414,14 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
                 isImage = false
                 remoteResolution = nil
             }
+            if case .formula = attachment.content {
+                isInlineFormula = segmentKinds[attachment.segmentID] != .displayMath
+            } else { isInlineFormula = false }
             guard let content = sourceView.visualAttachmentView(for: attachment.content,
-                                                                 remoteResolution: remoteResolution) else { return }
-            let measuredContent = isImage ? content : AnyView(content.frame(width: width, alignment: .leading))
+                                                                 remoteResolution: remoteResolution,
+                                                                 inlineFormula: isInlineFormula) else { return }
+            let intrinsic = isImage || isInlineFormula
+            let measuredContent = intrinsic ? content : AnyView(content.frame(width: width, alignment: .leading))
             let root = AnyView(measuredContent
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .environment(\.colorScheme, colorScheme)
@@ -317,7 +437,7 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
             guard size.width.isFinite, size.width > 0,
                   size.height.isFinite, size.height > 0 else { return }
             controllers[attachment.id] = controller
-            measured[attachment.id] = CGSize(width: isImage ? min(width, ceil(size.width)) : width,
+            measured[attachment.id] = CGSize(width: intrinsic ? min(width, ceil(size.width)) : width,
                                              height: ceil(size.height))
             hosted[attachment.id] = controller.view
         }
