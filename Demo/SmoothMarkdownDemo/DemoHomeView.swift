@@ -49,7 +49,6 @@ private enum DemoNavigationIcon {
 
 /// Native companion to the Flutter example's sample drawer and feature pages.
 struct DemoHomeView: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var catalog = DemoExampleCatalog.load()
     private let pageCatalog = DemoPageCatalog.load()
     @State private var selected: DemoPage = .example("basic-formatting")
@@ -75,14 +74,9 @@ struct DemoHomeView: View {
         currentExample?.markdown
     }
 
-    private var exampleIcon: String {
-        DemoNavigationIcon.example(currentExample?.id ?? "")
-    }
-
     var body: some View {
         NavigationStack(path: $routePath) {
             VStack(spacing: 0) {
-                header(title: title, icon: exampleIcon)
                 if let error = catalog.error {
                     ContentUnavailableView(DemoLocalizations.text("examples_unavailable", in: language),
                                            systemImage: "doc.questionmark", description: Text(error))
@@ -109,6 +103,7 @@ struct DemoHomeView: View {
                         withAnimation(.easeOut(duration: 0.2)) { showNavigation = true }
                     }
                         .accessibilityIdentifier("open-examples")
+                        .accessibilityValue(title)
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if markdown != nil {
@@ -130,6 +125,7 @@ struct DemoHomeView: View {
                         Label(DemoLocalizations.text("drawer_theme", in: language), systemImage: "paintpalette")
                     }
                     .accessibilityIdentifier("theme-menu")
+                    .accessibilityValue("\(theme.localizedTitle(in: language)) · \(language.nativeName)")
                 }
             }
             .sheet(isPresented: $showSource) {
@@ -199,64 +195,6 @@ struct DemoHomeView: View {
             }
     }
 
-    private func header(title: String, icon: String) -> some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 8) {
-                    headerIdentity(title: title, icon: icon)
-                    themeBadge
-                }
-            } else {
-                HStack(spacing: 12) {
-                    headerIdentity(title: title, icon: icon)
-                    Spacer(minLength: 4)
-                    themeBadge
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .foregroundStyle(theme.isDark ? .white : Color.primary)
-        .background(theme.isDark ? Color(red: 22 / 255, green: 27 / 255, blue: 34 / 255)
-                                 : Color.blue.opacity(0.16))
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(theme.isDark ? Color(red: 48 / 255, green: 54 / 255, blue: 61 / 255)
-                                   : Color.gray.opacity(0.3))
-                .frame(height: 1)
-        }
-    }
-
-    private func headerIdentity(title: String, icon: String) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 21))
-                .frame(width: 28)
-                .accessibilityHidden(true)
-            Text(title)
-                .font(DemoTypography.pageTitle)
-                .accessibilityIdentifier("demo-current-title")
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var themeBadge: some View {
-        HStack(spacing: 6) {
-            Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
-                .font(DemoTypography.metadata)
-                .accessibilityHidden(true)
-            Text(theme.localizedTitle(in: language))
-                .font(DemoTypography.metadata)
-                .accessibilityLabel("\(theme.localizedTitle(in: language)) · \(language.nativeName)")
-                .accessibilityIdentifier("demo-current-theme")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(theme.isDark ? Color(red: 33 / 255, green: 38 / 255, blue: 45 / 255)
-                                 : Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
-    }
-
     @ViewBuilder
     private var pageContent: some View {
         if let markdown {
@@ -303,10 +241,7 @@ struct DemoHomeView: View {
     }
 
     private func featurePage(_ feature: DemoFeature) -> some View {
-        VStack(spacing: 0) {
-            header(title: feature.pageTitle(in: language), icon: DemoNavigationIcon.feature(feature))
-            featureContent(feature)
-        }
+        featureContent(feature)
         .navigationTitle(feature.pageTitle(in: language))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden()

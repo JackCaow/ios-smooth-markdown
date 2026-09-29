@@ -93,11 +93,17 @@ struct QwenSSEDecoder {
     mutating func consume(_ bytes: Data) -> [String] {
         var output: [String] = []
         for byte in bytes {
-            if byte == 0x0A {
-                processLine(&output)
-            } else {
-                pendingLine.append(byte)
-            }
+            output.append(contentsOf: consume(byte))
+        }
+        return output
+    }
+
+    mutating func consume(_ byte: UInt8) -> [String] {
+        var output: [String] = []
+        if byte == 0x0A {
+            processLine(&output)
+        } else {
+            pendingLine.append(byte)
         }
         return output
     }
@@ -157,9 +163,11 @@ struct QwenChatClient {
         guard let http = response as? HTTPURLResponse else { throw QwenChatError.unexpectedResponse }
         guard http.statusCode == 200 else { throw QwenChatError.httpStatus(http.statusCode) }
         var decoder = QwenSSEDecoder()
-        for try await line in bytes.lines {
+        // AsyncBytes.lines omits the empty separator lines used by SSE. Read
+        // bytes directly so the decoder can dispatch each complete event.
+        for try await byte in bytes {
             try Task.checkCancellation()
-            for fragment in decoder.consume(Data((line + "\n").utf8)) {
+            for fragment in decoder.consume(byte) {
                 await onDelta(fragment)
             }
             if decoder.isDone { break }

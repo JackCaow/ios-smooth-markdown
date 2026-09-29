@@ -1,10 +1,10 @@
 {
   "source": "flutter-smooth-markdown/example/lib/ai_chat_demo.dart",
-  "sourceSha256": "19e5ebbe4cfa4f6fabd5815f8ee4c9830c3d531194419aee673acfe1a99156a7",
+  "sourceSha256": "b76d37b3d2912a2958c08928613b102c02d0bb936618ab47968d641cd2d37a85",
   "chunkSizeUTF16": 5,
   "delayMillis": 20,
-  "welcome": "\n# 🤖 AI Chat Demo\n\n欢迎使用 AI 聊天演示！本演示集成了 **Qwen 模型** 并支持以下 AI 特性解析：\n\n## 支持的 AI 格式\n\n1. **Thinking Block** - AI 思考过程\n2. **Artifact Block** - 代码/文档制品\n3. **Tool Call Block** - 工具调用\n\n## 快速测试\n\n点击下方的 **快捷提示词** 按钮来测试各种功能！\n\n---\n\n💡 **提示**: 点击右上角设置图标配置 API Key 来使用真实 Qwen API\n",
-  "welcomeSha256": "f11167e14acb6ae17fdf10672896999540d3952d3f2208a1bd558f967ba5cbc7",
+  "welcome": "\n# 🤖 AI Chat\n\n本页面可连接 **DeepSeek**，也可用模拟响应测试以下 AI 特性解析：\n\n## 支持的 AI 格式\n\n1. **Thinking Block** - AI 思考过程\n2. **Artifact Block** - 代码/文档制品\n3. **Tool Call Block** - 工具调用\n\n点击右上角的 **快捷提示词** 菜单来测试各种功能。\n\n---\n\n💡 **提示**: 未配置 DeepSeek API Key 时使用模拟响应。点击右上角设置图标可配置 Key 和切换模式。\n",
+  "welcomeSha256": "21a24975dd53aa278395c35da6aab15dc32554aaa4046e52e7e2d327b8e9f09c",
   "quickPrompts": [
     {
       "id": "thinking",
@@ -55,5 +55,5 @@
       "responseSha256": "972e2ed2aec697fe4a05004857ceb6001836c95acff525e733f998fecc351ea1"
     }
   ],
-  "genericResponseTemplate": "\n<thinking>\n分析用户的问题: \"{{prompt}}\"\n\n这是一个通用回复，因为没有匹配到预设的快捷提示词。\n</thinking>\n\n# 回复\n\n您好！您的问题是: **{{prompt}}**\n\n这是一个模拟回复。要获得真实的 AI 回复，请：\n\n1. 点击右上角设置图标 ⚙️\n2. 输入您的 Qwen API Key\n3. 开启 \"使用真实 API\" 开关\n\n---\n\n您也可以尝试下方的 **快捷提示词** 来测试各种 AI 格式解析功能！\n"
+  "genericResponseTemplate": "\n<thinking>\n分析用户的问题: \"{{prompt}}\"\n\n这是一个通用回复，因为没有匹配到预设的快捷提示词。\n</thinking>\n\n# 回复\n\n您好！您的问题是: **{{prompt}}**\n\n这是一个模拟回复。要获得真实的 AI 回复，请：\n\n1. 点击右上角设置图标 ⚙️\n2. 输入您的 DeepSeek API Key\n3. 开启 \"使用真实 API\" 开关\n\n---\n\n您也可以尝试右上角的 **快捷提示词** 菜单来测试各种 AI 格式解析功能！\n"
 }
