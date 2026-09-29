@@ -6,6 +6,7 @@ struct FixtureDemoView: View {
     @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--cross-block-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
@@ -89,6 +90,7 @@ struct FixtureDemoView: View {
             if ProcessInfo.processInfo.arguments.contains("--cross-block-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") {
                 controller.mode = .formatted
@@ -105,6 +107,7 @@ private func editorFixtureText() -> String {
     if arguments.contains("--empty-list-editor-fixture") { return emptyListEditorFixture }
     if arguments.contains("--nested-list-editor-fixture") { return nestedListEditorFixture }
     if arguments.contains("--list-editor-fixture") { return listEditorFixture }
+    if arguments.contains("--selection-list-editor-fixture") { return "- First\n- Second\n- Third" }
     if arguments.contains("--host-io-fixture") { return hostIOFixture }
     return demoMarkdown
 }

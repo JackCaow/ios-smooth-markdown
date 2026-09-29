@@ -955,6 +955,20 @@ private struct FormattedTableView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let table: MarkdownSourceTable
+    @State private var selectedCells: MarkdownSemanticTableCellSelection?
+
+    private func isSelected(row: Int, column: Int) -> Bool {
+        guard let selectedCells,
+              let rectangle = controller.semanticTableCellRectangle(selectedCells) else { return false }
+        return rectangle.rows.contains(row) && rectangle.columns.contains(column)
+    }
+
+    private func selectCells(anchorRow: Int, anchorColumn: Int, focusRow: Int, focusColumn: Int) {
+        let selection = MarkdownSemanticTableCellSelection(blockID: blockID,
+                                                            anchorRow: anchorRow, anchorColumn: anchorColumn,
+                                                            focusRow: focusRow, focusColumn: focusColumn)
+        if controller.semanticTableCellRectangle(selection) != nil { selectedCells = selection }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -967,13 +981,31 @@ private struct FormattedTableView: View {
                     Button("Column") { edit { $0.insertingColumnAfter($0.columnCount - 1) } }
                 }
             }
+            if let selectedCells {
+                HStack(spacing: 8) {
+                    Button("Copy cells") {
+                        if let copied = controller.copySemanticTableCellsAsTSV(selectedCells) {
+                            UIPasteboard.general.string = copied
+                        }
+                    }
+                    Button("Clear cells", role: .destructive) {
+                        if controller.clearSemanticTableCells(selectedCells) { self.selectedCells = nil }
+                    }
+                    .disabled(!controller.canClearSemanticTableCells(selectedCells))
+                    Button("Clear selection") { self.selectedCells = nil }
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
             ScrollView(.horizontal) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 6) {
                         ForEach(table.headers.indices, id: \.self) { column in
                             VStack(alignment: .leading, spacing: 4) {
                                 FormattedTableCell(controller: controller, blockID: blockID,
-                                                   row: 0, column: column, isHeader: true)
+                                                   row: 0, column: column, isHeader: true,
+                                                   isRangeSelected: isSelected(row: 0, column: column),
+                                                   onRangeDrag: selectCells)
                                 Menu(alignmentLabel(table.alignments[column])) {
                                     Button("Align default") { edit { $0.settingColumnAlignment(column, to: nil) } }
                                     Button("Align left") { edit { $0.settingColumnAlignment(column, to: .left) } }
@@ -993,7 +1025,9 @@ private struct FormattedTableView: View {
                         HStack(spacing: 6) {
                             ForEach(table.headers.indices, id: \.self) { column in
                                 FormattedTableCell(controller: controller, blockID: blockID,
-                                                   row: row, column: column, isHeader: false)
+                                                   row: row, column: column, isHeader: false,
+                                                   isRangeSelected: isSelected(row: row + 1, column: column),
+                                                   onRangeDrag: selectCells)
                                     .frame(width: 150)
                             }
                             Menu("Row \(row + 1)") {
@@ -1007,6 +1041,7 @@ private struct FormattedTableView: View {
                 }
             }
         }
+        .onChange(of: controller.text) { _, _ in selectedCells = nil }
     }
 
     private func edit(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) {
@@ -1030,13 +1065,14 @@ private struct FormattedTableCell: View {
     let row: Int
     let column: Int
     let isHeader: Bool
+    let isRangeSelected: Bool
+    let onRangeDrag: (Int, Int, Int, Int) -> Void
 
     var body: some View {
-        TextField(isHeader ? "Header" : "Cell", text: textBinding)
-            .textFieldStyle(.roundedBorder)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .accessibilityIdentifier("table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)")
+        FormattedTableInputField(text: textBinding, placeholder: isHeader ? "Header" : "Cell",
+                                 identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
+                                 blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
+                                 isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag)
     }
 
     private var textBinding: Binding<String> {
@@ -1055,15 +1091,93 @@ private struct FormattedTableCell: View {
 }
 
 @available(iOS 17.0, *)
+private struct FormattedTableInputField: UIViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let identifier: String
+    let blockID: String
+    let row: Int
+    let column: Int
+    let isRangeSelected: Bool
+    let onRangeDrag: (Int, Int, Int, Int) -> Void
+
+    func makeUIView(context: Context) -> FormattedRangeTextField {
+        let field = FormattedRangeTextField()
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
+        field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
+        field.borderStyle = .roundedRect
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.placeholder = placeholder
+        field.accessibilityIdentifier = identifier
+        field.text = text
+        configure(field)
+        return field
+    }
+
+    func updateUIView(_ field: FormattedRangeTextField, context: Context) {
+        context.coordinator.parent = self
+        if field.text != text { field.text = text }
+        configure(field)
+    }
+
+    private func configure(_ field: FormattedRangeTextField) {
+        field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
+        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
+        field.onRangeDrag = { anchor, focus in
+            guard case let .table(firstBlock, firstRow, firstColumn) = anchor,
+                  case let .table(lastBlock, lastRow, lastColumn) = focus,
+                  firstBlock == lastBlock else { return }
+            onRangeDrag(firstRow, firstColumn, lastRow, lastColumn)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: FormattedTableInputField
+        init(parent: FormattedTableInputField) { self.parent = parent }
+
+        @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+    }
+}
+
+@available(iOS 17.0, *)
 private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
     @State private var focusRequest: (index: Int, token: UUID)?
+    @State private var selectedItems: MarkdownSemanticListItemSelection?
+
+    private func isSelected(_ index: Int) -> Bool {
+        guard let selectedItems else { return false }
+        let first = min(selectedItems.anchorIndex, selectedItems.focusIndex)
+        let last = max(selectedItems.anchorIndex, selectedItems.focusIndex)
+        return (first...last).contains(index)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            if let selectedItems {
+                HStack(spacing: 8) {
+                    Button("Copy items") {
+                        if let copied = controller.copySemanticListItemRange(selectedItems) {
+                            UIPasteboard.general.string = copied
+                        }
+                    }
+                    Button("Delete items", role: .destructive) {
+                        if controller.deleteSemanticListItemRange(selectedItems) { self.selectedItems = nil }
+                    }
+                    .disabled(!controller.canDeleteSemanticListItemRange(selectedItems))
+                    Button("Clear selection") { self.selectedItems = nil }
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
             ForEach(0..<list.items.count, id: \.self) { index in
                 let item = list.items[index]
                 VStack(alignment: .leading, spacing: 3) {
@@ -1085,7 +1199,16 @@ private struct FormattedListView: View {
                             return current.items[index].content
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
-                        }), focusRequest: focusRequest?.index == index ? focusRequest?.token : nil,
+                        }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            onRangeDrag: { anchor, focus in
+                                let selection = MarkdownSemanticListItemSelection(blockID: blockID,
+                                                                                   anchorIndex: anchor,
+                                                                                   focusIndex: focus)
+                                if controller.copySemanticListItemRange(selection) != nil {
+                                    selectedItems = selection
+                                }
+                            },
+                            focusRequest: focusRequest?.index == index ? focusRequest?.token : nil,
                             onSubmit: { contentOffset in
                                 let split = contentOffset < (item.content as NSString).length
                                 if controller.submitSemanticListItem(id: blockID, at: index, contentOffset: contentOffset), split {
@@ -1127,8 +1250,12 @@ private struct FormattedListView: View {
                     }
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
+                .padding(4)
+                .background(isSelected(index) ? Color.accentColor.opacity(0.15) : .clear,
+                            in: RoundedRectangle(cornerRadius: 6))
             }
         }
+        .onChange(of: controller.text) { _, _ in selectedItems = nil }
     }
 
     private func changeIndent(at index: Int, outdent: Bool) -> Bool {
@@ -1139,9 +1266,65 @@ private struct FormattedListView: View {
 
 }
 
+@available(iOS 17.0, *)
+enum FormattedRangeFieldIdentity: Equatable {
+    case list(blockID: String, index: Int)
+    case table(blockID: String, row: Int, column: Int)
+}
+
+/// Tracks a long press as it crosses editable fields without taking away their
+/// native caret, IME, edit menu or ScrollView gestures.
+@available(iOS 17.0, *)
+class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
+    var rangeIdentity: FormattedRangeFieldIdentity?
+    var onRangeDrag: ((FormattedRangeFieldIdentity, FormattedRangeFieldIdentity) -> Void)?
+    private var dragAnchor: FormattedRangeFieldIdentity?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        installRangeGesture()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        installRangeGesture()
+    }
+
+    private func installRangeGesture() {
+        let drag = UILongPressGestureRecognizer(target: self, action: #selector(handleRangeDrag(_:)))
+        drag.minimumPressDuration = 0.4
+        drag.cancelsTouchesInView = false
+        drag.delegate = self
+        addGestureRecognizer(drag)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    @objc private func handleRangeDrag(_ gesture: UILongPressGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            if markedTextRange == nil { dragAnchor = rangeIdentity }
+        case .changed:
+            guard let anchor = dragAnchor, let window else { return }
+            var hit = window.hitTest(gesture.location(in: window), with: nil)
+            while hit != nil && !(hit is FormattedRangeTextField) { hit = hit?.superview }
+            guard let target = hit as? FormattedRangeTextField,
+                  target.markedTextRange == nil, let focus = target.rangeIdentity,
+                  focus != anchor else { return }
+            onRangeDrag?(anchor, focus)
+        case .ended, .cancelled, .failed:
+            dragAnchor = nil
+        default: break
+        }
+    }
+}
+
 /// UITextField handles Tab before SwiftUI's focus traversal so the active list item stays focused.
 @available(iOS 17.0, *)
-final class FormattedListKeyboardTextField: UITextField {
+final class FormattedListKeyboardTextField: FormattedRangeTextField {
     var onIndent: ((Bool) -> Void)?
     var onReturnAtCaret: ((Int) -> Void)?
 
@@ -1168,6 +1351,10 @@ final class FormattedListKeyboardTextField: UITextField {
 @available(iOS 17.0, *)
 private struct FormattedListItemField: UIViewRepresentable {
     @Binding var text: String
+    let blockID: String
+    let index: Int
+    let isRangeSelected: Bool
+    let onRangeDrag: (Int, Int) -> Void
     let focusRequest: UUID?
     let onSubmit: (Int) -> Void
     let onIndent: (Bool) -> Void
@@ -1185,6 +1372,14 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.text = text
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.rangeIdentity = .list(blockID: blockID, index: index)
+        field.onRangeDrag = { anchor, focus in
+            guard case let .list(firstBlock, firstIndex) = anchor,
+                  case let .list(lastBlock, lastIndex) = focus,
+                  firstBlock == lastBlock else { return }
+            onRangeDrag(firstIndex, lastIndex)
+        }
+        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
         return field
     }
 
@@ -1192,6 +1387,14 @@ private struct FormattedListItemField: UIViewRepresentable {
         context.coordinator.parent = self
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.rangeIdentity = .list(blockID: blockID, index: index)
+        field.onRangeDrag = { anchor, focus in
+            guard case let .list(firstBlock, firstIndex) = anchor,
+                  case let .list(lastBlock, lastIndex) = focus,
+                  firstBlock == lastBlock else { return }
+            onRangeDrag(firstIndex, lastIndex)
+        }
+        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
         if field.text != text { field.text = text }
         if let focusRequest, context.coordinator.handledFocusRequest != focusRequest {
             context.coordinator.handledFocusRequest = focusRequest
