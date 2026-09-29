@@ -3,25 +3,32 @@ import SwiftUI
 /// Native Canvas rendering for the currently supported Mermaid diagrams.
 public struct MermaidDiagramView: View {
     public let diagram: MermaidDiagram
+    /// Overrides the device appearance for diagrams with an explicit fence theme.
+    public let theme: MermaidTheme?
     public let onNodeTap: ((String) -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
 
-    public init(diagram: MermaidDiagram, onNodeTap: ((String) -> Void)? = nil) {
+    public init(diagram: MermaidDiagram, theme: MermaidTheme? = nil,
+                onNodeTap: ((String) -> Void)? = nil) {
         self.diagram = diagram
+        self.theme = theme
         self.onNodeTap = onNodeTap
     }
+
+    private var resolvedTheme: MermaidTheme { theme ?? (colorScheme == .dark ? .dark : .light) }
 
     public var body: some View {
         let layout = MermaidLayout.compute(diagram)
         let scale = max(1, diagramScale)
+        let palette = resolvedTheme.palette
         ScrollView(.horizontal) {
             ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 var context = context
                 context.scaleBy(x: scale, y: scale)
-                let ink: Color = colorScheme == .dark ? .white : Color(red: 0.15, green: 0.18, blue: 0.24)
-                let fill: Color = colorScheme == .dark ? Color(red: 0.18, green: 0.22, blue: 0.31) : Color(red: 0.92, green: 0.95, blue: 1)
+                let ink = palette.textColor
+                let fill = palette.nodeFillColor
                 if diagram.kind == .pie {
                     drawPie(in: context, diagram: diagram, size: layout.size, ink: ink)
                     return
@@ -59,35 +66,37 @@ public struct MermaidDiagramView: View {
                     guard let frame = layout.subgraphs[group.id] else { continue }
                     let box = Path(roundedRect: frame, cornerRadius: 8)
                     context.fill(box, with: .color(fill.opacity(0.35)))
-                    context.stroke(box, with: .color(ink.opacity(0.65)),
+                    context.stroke(box, with: .color(palette.nodeStrokeColor.opacity(0.65)),
                                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
                     context.draw(Text(group.label).font(.system(size: 13, weight: .semibold)).foregroundColor(ink),
                                  at: CGPoint(x: frame.midX, y: frame.minY + 15))
                 }
                 for placed in layout.edges {
                     if let loop = placed.selfLoop {
-                        drawSelfEdge(placed, loop: loop, in: context, ink: ink,
-                                     background: colorScheme == .dark ? .black : .white)
+                        drawSelfEdge(placed, loop: loop, in: context, ink: palette.edgeColor,
+                                     background: palette.backgroundColor)
                     } else {
-                        drawEdge(placed, in: context, ink: ink, background: colorScheme == .dark ? .black : .white)
+                        drawEdge(placed, in: context, ink: palette.edgeColor,
+                                 background: palette.backgroundColor)
                     }
                 }
                 for node in diagram.nodes {
                     guard let frame = layout.nodes[node.id] else { continue }
                     let shape = diagram.kind == .sequence ? MermaidShape.rounded : node.shape
                     let path = nodePath(shape, frame: frame)
-                    context.fill(path, with: .color(shape == .stateStart ? ink : fill))
-                    context.stroke(path, with: .color(ink), lineWidth: 1.5)
+                    context.fill(path, with: .color(shape == .stateStart ? palette.nodeStrokeColor : fill))
+                    context.stroke(path, with: .color(palette.nodeStrokeColor), lineWidth: 1.5)
                     if shape == .subroutine {
                         for x in [frame.minX + 8, frame.maxX - 8] {
                             var line = Path(); line.move(to: CGPoint(x: x, y: frame.minY)); line.addLine(to: CGPoint(x: x, y: frame.maxY))
-                            context.stroke(line, with: .color(ink), lineWidth: 1)
+                            context.stroke(line, with: .color(palette.nodeStrokeColor), lineWidth: 1)
                         }
                     }
                     if !node.compartments.isEmpty {
                         drawCompartments(node, frame: frame, in: context, ink: ink)
                     } else if shape == .stateEnd {
-                        context.fill(Path(ellipseIn: frame.insetBy(dx: 7, dy: 7)), with: .color(ink))
+                        context.fill(Path(ellipseIn: frame.insetBy(dx: 7, dy: 7)),
+                                     with: .color(palette.nodeStrokeColor))
                     } else if shape != .stateStart {
                         context.draw(Text(node.label).font(.system(size: 13, weight: .medium)).foregroundColor(ink),
                                      at: CGPoint(x: frame.midX, y: frame.midY))
@@ -114,9 +123,8 @@ public struct MermaidDiagramView: View {
             .frame(width: max(layout.size.width, 180) * scale,
                    height: max(layout.size.height, 100) * scale)
         }
-        .background(colorScheme == .dark ? Color(red: 0.10, green: 0.12, blue: 0.17) : .white,
-                    in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.3)))
+        .background(palette.backgroundColor, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3)))
         .modifier(MermaidDiagramAccessibility(interactive: onNodeTap != nil,
                                               summary: diagram.voiceOverSummary))
     }
@@ -238,7 +246,7 @@ public struct MermaidDiagramView: View {
         for (index, column) in diagram.kanbanColumns.enumerated() {
             let frame = MermaidLayout.kanbanColumns(diagram)[index]
             context.fill(Path(roundedRect: frame, cornerRadius: 8),
-                         with: .color(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.04)))
+                         with: .color(resolvedTheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.04)))
             context.stroke(Path(roundedRect: frame, cornerRadius: 8), with: .color(ink.opacity(0.25)), lineWidth: 1)
             let heading = column.title + (column.wipLimit.map { "  \(column.tasks.count)/\($0)" } ?? "")
             context.draw(Text(String(heading.prefix(24))).font(.system(size: 13, weight: .semibold))
@@ -248,7 +256,7 @@ public struct MermaidDiagramView: View {
                 let card = CGRect(x: frame.minX + 10, y: frame.minY + 44 + CGFloat(taskIndex) * 86,
                                   width: frame.width - 20, height: 74)
                 context.fill(Path(roundedRect: card, cornerRadius: 6),
-                             with: .color(colorScheme == .dark ? Color.black.opacity(0.35) : .white))
+                             with: .color(resolvedTheme == .dark ? Color.black.opacity(0.35) : .white))
                 context.stroke(Path(roundedRect: card, cornerRadius: 6), with: .color(ink.opacity(0.18)), lineWidth: 1)
                 let stripe: Color = switch task.priority {
                 case .veryHigh: .red
@@ -407,7 +415,8 @@ public struct MermaidDiagramView: View {
     }
 
     private func pieColor(_ index: Int) -> Color {
-        Color(hue: Double((index * 7) % 17) / 17.0, saturation: 0.65, brightness: colorScheme == .dark ? 0.88 : 0.72)
+        Color(hue: Double((index * 7) % 17) / 17.0, saturation: 0.65,
+              brightness: resolvedTheme == .dark ? 0.88 : 0.72)
     }
 
     private func drawEdge(_ placed: MermaidPlacedEdge, in context: GraphicsContext, ink: Color, background: Color) {
@@ -488,12 +497,12 @@ public struct MermaidDiagramView: View {
         switch marker {
         case .inheritance:
             path.move(to: point); path.addLine(to: position(14, 8)); path.addLine(to: position(14, -8)); path.closeSubpath()
-            context.fill(path, with: .color(colorScheme == .dark ? .black : .white))
+            context.fill(path, with: .color(resolvedTheme.palette.backgroundColor))
             context.stroke(path, with: .color(ink), lineWidth: 1.5)
         case .composition, .aggregation:
             path.move(to: point); path.addLine(to: position(8, 6)); path.addLine(to: position(16));
             path.addLine(to: position(8, -6)); path.closeSubpath()
-            context.fill(path, with: .color(marker == .composition ? ink : (colorScheme == .dark ? .black : .white)))
+            context.fill(path, with: .color(marker == .composition ? ink : resolvedTheme.palette.backgroundColor))
             context.stroke(path, with: .color(ink), lineWidth: 1.5)
         case .exactlyOne, .zeroOrOne, .oneOrMore, .zeroOrMore:
             let multiple = marker == .oneOrMore || marker == .zeroOrMore
@@ -510,7 +519,7 @@ public struct MermaidDiagramView: View {
             context.stroke(path, with: .color(ink), lineWidth: 1.5)
             if optional {
                 context.fill(Path(ellipseIn: CGRect(x: position(19).x - 3, y: position(19).y - 3, width: 6, height: 6)),
-                             with: .color(colorScheme == .dark ? .black : .white))
+                             with: .color(resolvedTheme.palette.backgroundColor))
                 context.stroke(Path(ellipseIn: CGRect(x: position(19).x - 3, y: position(19).y - 3, width: 6, height: 6)),
                                with: .color(ink), lineWidth: 1.5)
             }
