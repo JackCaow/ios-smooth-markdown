@@ -70,6 +70,31 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
         }
     }
 
+    /// Changes only a fenced code block's opening info string. The fence, body,
+    /// closing line, line endings, and neighboring document source remain intact.
+    public func replacingCodeLanguage(_ language: String) -> MarkdownDocumentBlock? {
+        guard case let .fencedCode(fence, _, code) = kind,
+              language.range(of: #"^[A-Za-z0-9_+.#-]*$"#, options: .regularExpression) != nil else { return nil }
+        let original = source as NSString
+        let lineBreak = original.range(of: "\n")
+        let openingRange = NSRange(location: 0,
+                                   length: lineBreak.location == NSNotFound ? original.length : lineBreak.location)
+        let rawOpening = original.substring(with: openingRange)
+        let hasCarriageReturn = rawOpening.hasSuffix("\r")
+        let opening = hasCarriageReturn ? String(rawOpening.dropLast()) : rawOpening
+        let indent = String(opening.prefix { $0 == " " || $0 == "\t" })
+        guard opening.dropFirst(indent.count).hasPrefix(fence) else { return nil }
+        let nextOpening = indent + fence + language + (hasCarriageReturn ? "\r" : "")
+        let updatedSource = original.replacingCharacters(in: openingRange, with: nextOpening)
+        guard updatedSource != source else { return nil }
+        let parsed = MarkdownDocumentCodec().parse(updatedSource)
+        guard parsed.blocks.count == 1,
+              case let .fencedCode(parsedFence, parsedInfo, parsedCode) = parsed.blocks[0].kind,
+              parsedFence == fence, parsedInfo == language, parsedCode == code,
+              parsed.blocks[0].source == updatedSource else { return nil }
+        return .init(id: id, kind: parsed.blocks[0].kind, source: updatedSource, leadingTrivia: leadingTrivia)
+    }
+
     private func validated(_ candidate: MarkdownDocumentBlock) -> MarkdownDocumentBlock? {
         let reparsed = MarkdownDocumentCodec().parse(candidate.source)
         guard reparsed.blocks.count == 1 else { return nil }

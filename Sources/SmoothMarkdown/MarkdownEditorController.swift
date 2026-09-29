@@ -705,6 +705,26 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Updates a formatted code block's language as one source-backed undo step.
+    /// Empty language selects plain text; unsupported characters are rejected.
+    @discardableResult
+    public func setCodeBlockLanguage(id: String, to language: String) -> Bool {
+        let document = semanticDocument
+        guard let block = document.blockById(id),
+              let replacement = block.replacingCodeLanguage(language) else { return false }
+        let updated = document.replacingBlock(replacement).toMarkdown()
+        let reparsed = codec.parse(updated)
+        guard reparsed.blocks.count == document.blocks.count,
+              reparsed.trailingTrivia == document.trailingTrivia else { return false }
+        for (current, original) in zip(reparsed.blocks, document.blocks) {
+            guard current.id == original.id, current.leadingTrivia == original.leadingTrivia else { return false }
+            if current.id == id {
+                guard current.source == replacement.source, current.kind == replacement.kind else { return false }
+            } else if current != original { return false }
+        }
+        return replaceSemanticMarkdown(updated)
+    }
+
     /// Multi-line keyboard replacement is usually a paste. Keep ordinary prose
     /// and active IME composition on the text view's normal editing path.
     static func isStructuredBlockPaste(_ replacement: String, hasMarkedText: Bool) -> Bool {

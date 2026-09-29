@@ -858,6 +858,26 @@ private struct PendingListParagraphField: UIViewRepresentable {
 
 @available(iOS 17.0, *)
 private struct FormattedBlockRow: View {
+    private struct CodeLanguageOption: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    /// Matches the language picker in Flutter's formatted code block header.
+    private static let codeLanguages: [CodeLanguageOption] = [
+        .init(id: "", title: "Plain text"), .init(id: "javascript", title: "JavaScript"),
+        .init(id: "typescript", title: "TypeScript"), .init(id: "python", title: "Python"),
+        .init(id: "rust", title: "Rust"), .init(id: "json", title: "JSON"),
+        .init(id: "sql", title: "SQL"), .init(id: "css", title: "CSS"),
+        .init(id: "html", title: "HTML"), .init(id: "bash", title: "Bash"),
+        .init(id: "markdown", title: "Markdown"), .init(id: "yaml", title: "YAML"),
+        .init(id: "go", title: "Go"), .init(id: "java", title: "Java"),
+        .init(id: "cpp", title: "C++"), .init(id: "c", title: "C"),
+        .init(id: "swift", title: "Swift"), .init(id: "ruby", title: "Ruby"),
+        .init(id: "php", title: "PHP"), .init(id: "diff", title: "Diff"),
+        .init(id: "dockerfile", title: "Dockerfile"), .init(id: "mermaid", title: "Mermaid"),
+    ]
+
     @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let block: MarkdownDocumentBlock
@@ -901,7 +921,11 @@ private struct FormattedBlockRow: View {
                 proseContent(font: .preferredFont(forTextStyle: .body), rawIdentifier: "paragraph-\(block.id)",
                              visibleIdentifier: "rendered-paragraph-\(block.id)")
             case let .fencedCode(_, info, _):
-                blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
+                HStack {
+                    blockLabel("Code")
+                    Spacer(minLength: 8)
+                    codeLanguageMenu(info: info)
+                }
                 TextEditor(text: contentBinding)
                     .font(.system(.body, design: .monospaced))
                     .autocorrectionDisabled()
@@ -954,6 +978,35 @@ private struct FormattedBlockRow: View {
             wikilinkSelectedIndex = 0
             slashSelectedIndex = 0
         }
+    }
+
+    private func codeLanguageMenu(info: String) -> some View {
+        let current = info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+        let known = Self.codeLanguages.first { $0.id == current }
+        let title = known?.title ?? current
+        return Menu {
+            if known == nil {
+                Button("Current: \(current)") { }.disabled(true)
+            }
+            ForEach(Self.codeLanguages) { option in
+                Button {
+                    if option.id != current { _ = controller.setCodeBlockLanguage(id: block.id, to: option.id) }
+                } label: {
+                    if option.id == current {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+                .accessibilityIdentifier("code-language-choice-\(option.id.isEmpty ? "plain" : option.id)")
+            }
+        } label: {
+            Text(title)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .accessibilityLabel("Code language: \(title)")
+        .accessibilityIdentifier("code-language-\(block.id)")
     }
 
     private var customBlockView: AnyView? {
