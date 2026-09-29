@@ -1265,6 +1265,7 @@ private struct FormattedTableView: View {
     let table: MarkdownSourceTable
     @State private var selectedCells: MarkdownSemanticTableCellSelection?
     @State private var keepSelectionAfterPaste = false
+    @State private var pasteError = false
 
     private func isSelected(row: Int, column: Int) -> Bool {
         guard let selectedCells,
@@ -1309,7 +1310,10 @@ private struct FormattedTableView: View {
                             keepSelectionAfterPaste = true
                             if !controller.pasteSemanticTableCells(pasted, into: selectedCells) {
                                 keepSelectionAfterPaste = false
+                                pasteError = true
                             }
+                        } else {
+                            pasteError = true
                         }
                     }
                     .accessibilityIdentifier("table-range-paste")
@@ -1376,6 +1380,11 @@ private struct FormattedTableView: View {
                 selectedCells = nil
             }
         }
+        .alert("Table paste not applied", isPresented: $pasteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The clipboard must contain a rectangular grid matching the selected cells. No cells were changed.")
+        }
     }
 
     private func edit(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) {
@@ -1395,6 +1404,7 @@ private struct FormattedTableView: View {
 @available(iOS 17.0, *)
 private struct FormattedTableCell: View {
     @ObservedObject var controller: MarkdownEditorController
+    @State private var pasteError = false
     let blockID: String
     let row: Int
     let column: Int
@@ -1412,7 +1422,19 @@ private struct FormattedTableCell: View {
                                      controller.pasteTableCells(source, inTable: blockID,
                                                                 row: isHeader ? 0 : row + 1,
                                                                 column: column)
+                                 }, onSourcePaste: { source, range, visibleText in
+                                     controller.pasteIntoTableCellSource(source, inTable: blockID,
+                                                                         row: isHeader ? 0 : row + 1,
+                                                                         column: column, visibleText: visibleText,
+                                                                         visibleRange: range)
+                                 }, onPasteRejected: {
+                                     pasteError = true
                                  })
+        .alert("Table paste not applied", isPresented: $pasteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The cell selection could not be mapped safely to its Markdown source. The clipboard is unchanged; switch to Source mode to paste it there.")
+        }
     }
 
     private var textBinding: Binding<String> {
@@ -1443,6 +1465,8 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let isRangeSelected: Bool
     let onRangeDrag: (Int, Int, Int, Int) -> Void
     let onGridPaste: (String) -> Bool
+    let onSourcePaste: (String, NSRange, String) -> Bool
+    let onPasteRejected: () -> Void
 
     func makeUIView(context: Context) -> FormattedRangeTextField {
         let field = FormattedRangeTextField()
@@ -1500,7 +1524,12 @@ private struct FormattedTableInputField: UIViewRepresentable {
                        replacementString string: String) -> Bool {
             guard textField.markedTextRange == nil,
                   string.contains("\t") || string.contains("\n") || string.contains("\r") else { return true }
-            _ = parent.onGridPaste(string)
+            let visibleText = textField.text ?? ""
+            if MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+                string, visibleText: visibleText, selection: range), parent.onGridPaste(string) {
+                return false
+            }
+            if !parent.onSourcePaste(string, range, visibleText) { parent.onPasteRejected() }
             return false
         }
         func textFieldDidBeginEditing(_ textField: UITextField) {

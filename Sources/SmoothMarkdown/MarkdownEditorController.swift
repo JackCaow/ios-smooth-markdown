@@ -387,6 +387,34 @@ public final class MarkdownEditorController: ObservableObject {
         return pasteTableGrid(grid, blockID: blockID, startRow: row, startColumn: column)
     }
 
+    /// Newline-only prose is ambiguous in one focused cell and stays in Source
+    /// mode. A tab is an explicit grid delimiter; a partial in-cell selection
+    /// also stays on the exact source-selection path.
+    static func shouldRouteFocusedTablePasteAsGrid(_ clipboard: String,
+                                                   visibleText: String,
+                                                   selection: NSRange) -> Bool {
+        let wholeCell = selection.location == 0 && selection.length == (visibleText as NSString).length
+        return clipboard.contains("\t") && (selection.length == 0 || wholeCell)
+    }
+
+    /// Preserves the exact pasted bytes when a focused-cell paste is not a
+    /// representable grid. Switch to Source because a newline may split the
+    /// table. If the displayed cell no longer matches its source, decline the
+    /// edit so the UI can show an error instead of silently dropping text.
+    @discardableResult
+    public func pasteIntoTableCellSource(_ clipboard: String, inTable blockID: String,
+                                         row: Int, column: Int, visibleText: String,
+                                         visibleRange: NSRange) -> Bool {
+        let document = semanticDocument
+        guard let cellRange = document.sourceRangeOfTableCell(blockID: blockID, row: row, column: column),
+              Range(visibleRange, in: visibleText) != nil,
+              (text as NSString).substring(with: cellRange) == visibleText else { return false }
+        replaceRange(NSRange(location: cellRange.location + visibleRange.location,
+                             length: visibleRange.length), with: clipboard)
+        mode = .source
+        return true
+    }
+
     private static func tablePasteGrid(_ clipboard: String) -> [[String]]? {
         guard clipboard.utf8.count <= 1_048_576,
               clipboard.contains("\t") || clipboard.contains("\n") || clipboard.contains("\r") else { return nil }

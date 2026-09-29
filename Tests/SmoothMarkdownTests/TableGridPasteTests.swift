@@ -24,7 +24,7 @@ final class TableGridPasteTests: XCTestCase {
         XCTAssertTrue(controller.text.contains("| one\\|pipe | 10 | stay |"))
     }
 
-    func testFocusedCellMultilinePasteFillsExistingRowsOnly() {
+    func testOneColumnGridAPIStaysInsideExistingRows() {
         let source = "| H1 | H2 |\n| --- | --- |\n| a | b |\n| c | d |"
         let controller = MarkdownEditorController(text: source)
         XCTAssertTrue(controller.pasteTableCells("first\tsecond\nthird\tfourth", inTable: "block-0",
@@ -33,6 +33,18 @@ final class TableGridPasteTests: XCTestCase {
         XCTAssertTrue(controller.undo())
         XCTAssertEqual(controller.text, source)
         XCTAssertFalse(controller.canUndo)
+    }
+
+    func testFocusedCellClassifiesOnlyTabularPasteAsGrid() {
+        let caret = NSRange(location: 2, length: 0)
+        XCTAssertTrue(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+            "a\tb\nc\td", visibleText: "old", selection: caret))
+        XCTAssertFalse(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+            "plain\nprose", visibleText: "old", selection: caret))
+        XCTAssertFalse(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+            "a\tb", visibleText: "old", selection: NSRange(location: 1, length: 1)))
+        XCTAssertTrue(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+            "a\tb", visibleText: "old", selection: NSRange(location: 0, length: 3)))
     }
 
     func testHeaderPasteKeepsInlineMarkdownAndEscapesLiteralPipes() {
@@ -45,6 +57,42 @@ final class TableGridPasteTests: XCTestCase {
                        "| **Bold** | A\\|B | Stay |\n| :--- | ---: | :---: |\n| *Em* | `Code` | z |")
         XCTAssertTrue(controller.undo())
         XCTAssertEqual(controller.text, source)
+    }
+
+    func testPlainMultilinePasteFallsBackToSourceAtVisibleUTF16Caret() {
+        let source = "Intro\r\n\r\n| H | Keep |\r\n| --- | --- |\r\n| old😀 | safe |\r\n\r\nTail"
+        let controller = MarkdownEditorController(text: source)
+        controller.mode = .formatted
+        XCTAssertTrue(controller.pasteIntoTableCellSource("X\nY", inTable: "block-1", row: 1,
+                                                           column: 0, visibleText: "old😀",
+                                                           visibleRange: NSRange(location: 3, length: 0)))
+        XCTAssertEqual(controller.text,
+                       "Intro\r\n\r\n| H | Keep |\r\n| --- | --- |\r\n| oldX\nY😀 | safe |\r\n\r\nTail")
+        XCTAssertEqual(controller.mode, .source)
+        XCTAssertEqual((controller.text as NSString).substring(to: controller.selection.location)
+                       .suffix(6), "oldX\nY")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertTrue(controller.redo())
+        XCTAssertTrue(controller.text.contains("oldX\nY😀"))
+    }
+
+    func testInvalidGridCanFallBackToExactSourceAndStaleCellRejects() {
+        let source = "| A |\n| --- |\n| A\\|B |"
+        let escaped = MarkdownEditorController(text: source)
+        XCTAssertFalse(escaped.pasteIntoTableCellSource("x\ty", inTable: "block-0", row: 1,
+                                                         column: 0, visibleText: "A|B",
+                                                         visibleRange: NSRange(location: 1, length: 0)))
+        XCTAssertEqual(escaped.text, source)
+        XCTAssertFalse(escaped.canUndo)
+
+        let plain = MarkdownEditorController(text: "| A |\n| --- |\n| old |")
+        XCTAssertTrue(plain.pasteIntoTableCellSource("x\ty", inTable: "block-0", row: 1,
+                                                      column: 0, visibleText: "old",
+                                                      visibleRange: NSRange(location: 1, length: 1)))
+        XCTAssertEqual(plain.text, "| A |\n| --- |\n| ox\tyd |")
+        XCTAssertEqual(plain.mode, .source)
     }
 
     func testRejectsRaggedOversizedAndOutOfBoundsGridAtomically() {
