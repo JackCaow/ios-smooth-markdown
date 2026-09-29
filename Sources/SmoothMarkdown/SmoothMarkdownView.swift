@@ -731,7 +731,7 @@ public struct SmoothMarkdownView: View {
         var strike = style.strike
         var htmlUnderline = false
         var htmlCode = false
-        var baseline: CGFloat = 0
+        let script = enableHTML ? MarkdownHTMLScript.active(in: tags) : nil
         var htmlForeground: Color?
         var htmlBackground: Color?
         var htmlFontSize: CGFloat?
@@ -744,8 +744,6 @@ public struct SmoothMarkdownView: View {
                 case "s", "del", "strike": strike = true
                 case "u", "ins": htmlUnderline = true
                 case "mark": htmlBackground = styleSheet.highlightColor ?? .yellow.opacity(0.4)
-                case "sub": baseline = -4
-                case "sup": baseline = 4
                 case "code", "kbd":
                     htmlCode = true
                 case "a":
@@ -762,7 +760,8 @@ public struct SmoothMarkdownView: View {
             }
         }
         let inlineStyle = styleSheet.resolvedInlineStyle(bold: bold, italic: italic, strike: strike,
-                                                         link: link != nil, code: code || htmlCode)
+                                                         link: link != nil, code: code || htmlCode,
+                                                         script: script)
         var attributed = AttributedString(value)
         if let background = htmlBackground ?? inlineStyle.backgroundColor { attributed.backgroundColor = background }
         if let link { attributed.link = link }
@@ -777,7 +776,7 @@ public struct SmoothMarkdownView: View {
         if inlineStyle.italic == true { result = result.italic() }
         if inlineStyle.strikethrough == true { result = result.strikethrough() }
         if htmlUnderline || inlineStyle.underline == true { result = result.underline() }
-        if baseline != 0 { result = result.baselineOffset(baseline) }
+        if let script { result = result.baselineOffset(script.baselineOffset(scale: inlineFontScale)) }
         if let foreground = htmlForeground ?? inlineStyle.textColor { result = result.foregroundColor(foreground) }
         return result
     }
