@@ -186,7 +186,7 @@ struct ReaderSelectionDocument {
             case let .footnote(label):
                 output.append(.init(text: "[\(label)]", style: .init(), code: false,
                                     footnoteReference: true))
-            case .image, .math, .plugin: return nil
+            case .image, .math, .plugin, .custom: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count
