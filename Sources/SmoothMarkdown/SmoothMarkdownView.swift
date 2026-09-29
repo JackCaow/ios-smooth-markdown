@@ -108,7 +108,8 @@ public struct SmoothMarkdownView: View {
         if let unified = wholeDocumentSelection {
             ReaderWholeDocumentSelectionView(selectionDocument: unified.selection,
                                              projection: unified.projection,
-                                             styleSheet: styleSheet, onLinkTap: onLinkTap)
+                                             styleSheet: styleSheet, onLinkTap: onLinkTap,
+                                             sourceView: self)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(styleSheet.contentPadding)
         } else {
@@ -130,9 +131,8 @@ public struct SmoothMarkdownView: View {
     }
 
     #if os(iOS)
-    /// A complete native surface is safe when every source section and glyph
-    /// maps to the existing styled prose renderer. Complex visual blocks keep
-    /// their established reader until they have measured attachment hosts.
+    /// One native selection surface can include built-in code, GFM tables, and display math
+    /// when every visual block has a measured host and an exact Copy value.
     var wholeDocumentSelection: (selection: ReaderSelectionDocument,
                                  projection: ReaderTextKitProjection)? {
         guard selectable, enableCrossBlockSelection, onTextLongPress == nil, !voiceOverEnabled else { return nil }
@@ -144,16 +144,33 @@ public struct SmoothMarkdownView: View {
         let footnoteSections = FootnoteSyntax.sections(pluginSource)
         guard footnoteSections.count == 1,
               case let .markdown(footnoteSource) = footnoteSections[0] else { return nil }
-        let mathSections = MathSyntax.sections(footnoteSource)
-        guard mathSections.count == 1, case let .markdown(mathSource) = mathSections[0] else { return nil }
-        let nodes = Array(parse(mathSource).children)
-        guard nodes.count > 1, !nodes.contains(where: containsCustomBlockBuilder),
-              let selection = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML,
-                                                               plugins: plugins) else { return nil }
+        let items = MathSyntax.sections(footnoteSource).flatMap { section -> [ReaderBlockRangeDocument.Item] in
+            switch section {
+            case let .markdown(source): return Array(parse(source).children).map(ReaderBlockRangeDocument.Item.markup)
+            case let .block(latex): return [.displayMath(latex)]
+            }
+        }
+        guard items.count > 1,
+              !items.contains(where: { item in
+                  switch item {
+                  case let .markup(node):
+                      return containsCustomBlockBuilder(node) ||
+                          (node is CodeBlock && codeBuilder != nil)
+                  case let .displayMath(latex): return extensionBuilder(.blockMath(latex)) != nil
+                  }
+              }),
+              let selection = ReaderSelectionDocument.composeItems(items, enableHTML: enableHTML,
+                                                                     plugins: plugins,
+                                                                     visualBlockAnchors: true) else { return nil }
         let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
             markdown: markdown, enableHTML: enableHTML, plugins: plugins,
             builderRegistry: builderRegistry))
-        guard projection.attachments.isEmpty,
+        guard projection.attachments.allSatisfy({ attachment in
+            switch attachment.content {
+            case .code, .table, .formula: true
+            default: false
+            }
+        }),
               projection.attributedText.string == selection.selectionText else { return nil }
         let styled = ReaderSelectionTextView(document: selection, styleSheet: styleSheet,
                                              onLinkTap: onLinkTap, onTextLongPress: nil,
@@ -161,6 +178,22 @@ public struct SmoothMarkdownView: View {
             .attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize)).text
         guard styled.string == projection.attributedText.string else { return nil }
         return (selection, projection)
+    }
+
+    func visualAttachmentView(for content: ReaderTextKitProjection.Attachment.Content) -> AnyView? {
+        switch content {
+        case let .code(code, language):
+            return AnyView(EnhancedCodeBlockView(code: code, language: language,
+                                                 options: codeBlockOptions, onCopy: onCodeCopy,
+                                                 styleSheet: styleSheet, selectable: false,
+                                                 onSelectSurroundingContent: nil))
+        case let .table(source):
+            guard let table = parse(source).child(at: 0) as? Markdown.Table else { return nil }
+            return AnyView(tableView(table, selectable: false))
+        case let .formula(latex):
+            return AnyView(blockMath(latex))
+        default: return nil
+        }
     }
     #endif
 
@@ -695,7 +728,7 @@ public struct SmoothMarkdownView: View {
     }
 
     @ViewBuilder
-    private func tableView(_ table: Markdown.Table) -> some View {
+    private func tableView(_ table: Markdown.Table, selectable overrideSelectable: Bool? = nil) -> some View {
         let headers = Array(table.head.children)
         let rows = [headers] + table.body.children.map { Array($0.children) }
         let columnCount = max(1, rows.map(\.count).max() ?? 0)
@@ -714,7 +747,7 @@ public struct SmoothMarkdownView: View {
                                             .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
                                                   : (styleSheet.tableCellFont ?? .body))
                                             .fontWeight(rowIndex == 0 ? .bold : .regular)
-                                            .markdownTextSelection(selectable)
+                                            .markdownTextSelection(overrideSelectable ?? selectable)
                                     }
                                 } else {
                                     SwiftUI.Text("")

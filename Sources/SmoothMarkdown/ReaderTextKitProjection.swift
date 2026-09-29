@@ -5,8 +5,7 @@ import UIKit
 import AppKit
 #endif
 
-/// A document-wide TextKit storage prototype. SmoothMarkdownView does not use
-/// this yet: rendering still needs measured host views for visual attachments.
+/// A document-wide TextKit storage with semantic attachment ranges.
 struct ReaderTextKitProjection {
     static let segmentIDAttribute = NSAttributedString.Key("SmoothMarkdownReaderSegmentID")
     static let segmentKindAttribute = NSAttributedString.Key("SmoothMarkdownReaderSegmentKind")
@@ -16,6 +15,8 @@ struct ReaderTextKitProjection {
         enum Content: Equatable {
             case image(SafeHTML.ImageSpec)
             case formula(String)
+            case code(String, String?)
+            case table(String)
             /// A custom renderer or visual block without a copy contract.
             case opaque
         }
@@ -48,8 +49,7 @@ struct ReaderTextKitProjection {
                 ], range: NSRange(location: 0, length: run.length))
                 if let content = Self.attachmentContent(for: atom.kind) {
                     // A one-character attachment reserves a selectable position.
-                    // Its size and hosted SwiftUI view are supplied by the future
-                    // layout adapter; this placeholder is never rendered today.
+                    // The visible host must measure and replace it before display.
                     assert(atom.text == ReaderVisibleDocumentProjection.attachment)
                     let attachment = NSTextAttachment()
                     attachment.bounds = CGRect(x: 0, y: 0, width: 1, height: 1)
@@ -70,7 +70,7 @@ struct ReaderTextKitProjection {
         attachmentByID = Dictionary(uniqueKeysWithValues: mapped.map { ($0.id, $0) })
     }
 
-    /// The same semantic copy path will back the future UITextView's Copy action.
+    /// Copy uses the visible document's semantic text for hosted blocks.
     func copiedText(in range: NSRange) -> String? { document.copiedText(in: range) }
 
     func segmentID(atUTF16 offset: Int) -> String? {
@@ -91,6 +91,8 @@ struct ReaderTextKitProjection {
         case .text: nil
         case let .image(spec): .image(spec)
         case let .formula(latex): .formula(latex)
+        case let .code(source, language): .code(source, language)
+        case let .table(source): .table(source)
         case .opaque: .opaque
         }
     }

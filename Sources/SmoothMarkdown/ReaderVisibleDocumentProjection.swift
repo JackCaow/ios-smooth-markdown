@@ -13,7 +13,11 @@ struct ReaderVisibleDocumentProjection {
     }
 
     struct Atom {
-        enum Kind: Equatable { case text, image(SafeHTML.ImageSpec), formula(String), opaque }
+        enum Kind: Equatable {
+            case text, image(SafeHTML.ImageSpec), formula(String)
+            case code(String, String?), table(String)
+            case opaque
+        }
         let kind: Kind
         let text: String
         /// An attachment may copy a semantic value such as LaTeX.
@@ -25,6 +29,14 @@ struct ReaderVisibleDocumentProjection {
         }
         static func formula(_ latex: String) -> Self {
             .init(kind: .formula(latex), text: ReaderVisibleDocumentProjection.attachment, copyText: latex)
+        }
+        static func code(_ source: String, language: String?) -> Self {
+            .init(kind: .code(source, language), text: ReaderVisibleDocumentProjection.attachment,
+                  copyText: source)
+        }
+        static func table(_ source: String, copy: String) -> Self {
+            .init(kind: .table(source), text: ReaderVisibleDocumentProjection.attachment,
+                  copyText: copy)
         }
         static let attachment = Self(kind: .opaque, text: ReaderVisibleDocumentProjection.attachment, copyText: "")
     }
@@ -209,10 +221,10 @@ struct ReaderVisibleDocumentProjection {
                 let standaloneImage: Bool = if atoms.count == 1, case .image = atoms[0].kind { true } else { false }
                 append(standaloneImage ? .image : .text, atoms, identity: identity(for: atoms))
             } else if let code = node as? CodeBlock {
-                append(.code, [.text(code.code)], identity: code.format())
+                append(.code, [.code(code.code, language: code.language)], identity: code.format())
             } else if let table = node as? Markdown.Table {
                 if let copy = ReaderBlockRangeDocument.tableText(table, enableHTML: enableHTML, plugins: plugins) {
-                    append(.table, [.text(copy)], identity: table.format())
+                    append(.table, [.table(table.format(), copy: copy)], identity: table.format())
                 } else { append(.opaque, [.attachment], identity: table.format()) }
             } else if node is ThematicBreak {
                 append(.rule, [.attachment], identity: node.format())
@@ -370,6 +382,8 @@ struct ReaderVisibleDocumentProjection {
                 switch atom.kind {
                 case .text, .opaque: return atom.text + "\u{0}" + atom.copyText
                 case let .formula(latex): return "formula\u{0}" + latex
+                case let .code(source, language): return "code\u{0}" + source + "\u{0}" + (language ?? "")
+                case let .table(source): return "table\u{0}" + source
                 case let .image(spec):
                     return "image\u{0}" + spec.source + "\u{0}" + spec.alt + "\u{0}" +
                         (spec.title ?? "") + "\u{0}" + (spec.width.map { String($0) } ?? "") + "\u{0}" +

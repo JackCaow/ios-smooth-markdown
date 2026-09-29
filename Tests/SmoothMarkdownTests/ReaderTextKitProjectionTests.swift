@@ -4,6 +4,47 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderTextKitProjectionTests: XCTestCase {
+    func testCodeTableAndDisplayMathAreAtomicVisibleAttachmentsWithExactCopy() throws {
+        let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
+            forResource: "ReaderComplexSelection", withExtension: "md")), encoding: .utf8)
+        let projection = ReaderTextKitProjection(document: .init(markdown: source))
+        let items = MathSyntax.sections(source).flatMap { section -> [ReaderBlockRangeDocument.Item] in
+            switch section {
+            case let .markdown(markdown):
+                return Array(MarkdownSyntax.parse(markdown, enableHTML: false).children)
+                    .map(ReaderBlockRangeDocument.Item.markup)
+            case let .block(latex): return [.displayMath(latex)]
+            }
+        }
+        let styled = try XCTUnwrap(ReaderSelectionDocument.composeItems(
+            items, enableHTML: false, plugins: nil, visualBlockAnchors: true))
+        XCTAssertEqual(styled.selectionText, projection.attributedText.string)
+        XCTAssertEqual(projection.attachments.count, 3)
+        XCTAssertEqual(projection.document.segments.map(\.kind),
+                       [.heading, .text, .code, .table, .displayMath, .text])
+        for attachment in projection.attachments {
+            XCTAssertEqual(attachment.range.length, 1)
+            XCTAssertEqual(projection.attachment(atUTF16: attachment.range.location), attachment)
+            XCTAssertEqual(projection.document.text[Range(attachment.range,
+                                                          in: projection.document.text)!],
+                           ReaderVisibleDocumentProjection.attachment[...])
+        }
+        XCTAssertEqual(projection.copiedText(in: NSRange(
+            location: 0, length: projection.attributedText.length)),
+            "Reader selection\nBefore documentation and 😀.\nlet answer = 42\nName\tValue\nA\t2\na+b\nAfter the visual blocks.")
+        XCTAssertEqual(projection.copiedText(in: projection.attachments[0].range),
+                       "let answer = 42\n")
+        XCTAssertEqual(projection.copiedText(in: projection.attachments[1].range),
+                       "Name\tValue\nA\t2")
+        if case let .table(markdown) = projection.attachments[1].content {
+            let reparsed = try XCTUnwrap(MarkdownSyntax.parse(markdown, enableHTML: false)
+                .child(at: 0) as? Markdown.Table)
+            XCTAssertEqual(ReaderBlockRangeDocument.tableText(reparsed, enableHTML: false,
+                                                               plugins: nil), "Name\tValue\nA\t2")
+        } else { XCTFail("Expected a renderable table attachment") }
+        XCTAssertEqual(projection.copiedText(in: projection.attachments[2].range), "a+b")
+    }
+
     func testCompleteProseDocumentMatchesExistingSelectableTextOffsets() {
         let cases = [
             ("# Heading\n\nFirst paragraph.\n\nSecond paragraph.",

@@ -100,7 +100,7 @@ final class ReaderDocumentSelectionHostTests: XCTestCase {
         XCTAssertEqual(view.attributedText.string, projection.attributedText.string)
     }
 
-    func testWholeReaderUsesOneHostOnlyForCompleteTextProjection() {
+    func testWholeReaderIncludesBuiltInCodeAndTableAttachments() {
         let plain = SmoothMarkdownView(markdown: "# Heading\n\nFirst paragraph.\n\nSecond paragraph.",
                                        selectable: true)
         let candidate = try! XCTUnwrap(plain.wholeDocumentSelection)
@@ -108,10 +108,17 @@ final class ReaderDocumentSelectionHostTests: XCTestCase {
         XCTAssertEqual(candidate.projection.document.copiedText(in: NSRange(
             location: 0, length: candidate.projection.attributedText.length)),
             "Heading\nFirst paragraph.\nSecond paragraph.")
-        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n```swift\nprint(1)\n```\n\nB",
-                                        selectable: true).wholeDocumentSelection)
-        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n$$\nx+y\n$$\n\nB",
-                                        selectable: true).wholeDocumentSelection)
+        let complex = SmoothMarkdownView(markdown: "A\n\n```swift\nprint(1)\n```\n\n| Name | Value |\n| --- | --- |\n| A | 2 |\n\n$$\na+b\n$$\n\nB",
+                                         selectable: true)
+        let unified = try! XCTUnwrap(complex.wholeDocumentSelection)
+        XCTAssertEqual(unified.projection.attributedText.string, unified.selection.selectionText)
+        XCTAssertEqual(unified.projection.attachments.count, 3)
+        XCTAssertEqual(unified.projection.copiedText(in: NSRange(
+            location: 0, length: unified.projection.attributedText.length)),
+            "A\nprint(1)\nName\tValue\nA\t2\na+b\nB")
+        for attachment in unified.projection.attachments {
+            XCTAssertNotNil(complex.visualAttachmentView(for: attachment.content))
+        }
         XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n![image](https://example.com/a.png)\n\nB",
                                         selectable: true).wholeDocumentSelection)
         XCTAssertNil(SmoothMarkdownView(markdown: "A `two words`.\n\nB",
