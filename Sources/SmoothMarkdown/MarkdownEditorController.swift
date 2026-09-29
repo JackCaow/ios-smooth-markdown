@@ -774,6 +774,96 @@ public final class MarkdownEditorController: ObservableObject {
         replaceSemanticTextRange(selection, with: "")
     }
 
+    /// Replaces a formatted character range across adjacent top-level prose
+    /// rows with parsed Markdown blocks. Text before the first endpoint keeps
+    /// its paragraph or heading, and text after the last becomes a paragraph.
+    /// The source snapshot, inline-mark boundaries, and the reparsed document
+    /// are checked before recording one undo step.
+    public func canReplaceSemanticTextRangeWithMarkdownBlocks(_ selection: MarkdownSemanticTextSelection,
+                                                               markdown: String) -> Bool {
+        replacementForSemanticTextRangeWithMarkdownBlocks(selection, markdown: markdown) != nil
+    }
+
+    @discardableResult
+    public func replaceSemanticTextRangeWithMarkdownBlocks(_ selection: MarkdownSemanticTextSelection,
+                                                            markdown: String) -> Bool {
+        guard let edit = replacementForSemanticTextRangeWithMarkdownBlocks(selection, markdown: markdown),
+              replaceSemanticMarkdown(edit.markdown) else { return false }
+        setSelection(NSRange(location: edit.caret, length: 0))
+        return true
+    }
+
+    private func replacementForSemanticTextRangeWithMarkdownBlocks(
+        _ selection: MarkdownSemanticTextSelection, markdown: String
+    ) -> (markdown: String, caret: Int)? {
+        guard let resolved = resolveSemanticTextSelection(selection), !markdown.isEmpty else { return nil }
+        let document = semanticDocument
+        let selected = Array(document.blocks[resolved.firstIndex...resolved.lastIndex])
+        guard selected.allSatisfy({ block in
+            switch block.kind {
+            case .paragraph, .heading: true
+            default: false
+            }
+        }) else { return nil }
+        let first = selected[0]
+        let last = selected[selected.count - 1]
+        let firstBody = first.plainText as NSString
+        let lastBody = last.plainText as NSString
+        guard MarkdownInlineMarkEditor.canSplitForBlockPaste(first.plainText,
+                range: NSRange(location: resolved.startOffset, length: 0)),
+              MarkdownInlineMarkEditor.canSplitForBlockPaste(last.plainText,
+                range: NSRange(location: resolved.endOffset, length: 0)),
+              let firstRange = document.sourceRange(of: first.id),
+              let lastRange = document.sourceRange(of: last.id) else { return nil }
+        let inserted = codec.parse(markdown)
+        guard !inserted.blocks.isEmpty, inserted.toMarkdown() == markdown else { return nil }
+
+        let before = firstBody.substring(to: resolved.startOffset)
+        let after = lastBody.substring(from: resolved.endOffset)
+        let newline = text.contains("\r\n") ? "\r\n" : "\n"
+        let ending = last.source.hasSuffix("\r\n") ? "\r\n" : last.source.hasSuffix("\n") ? "\n" : ""
+        let prefixBlock = before.isEmpty ? nil : first.replacingContent(before)
+        guard before.isEmpty || prefixBlock != nil else { return nil }
+        var replacement = prefixBlock.map { Self.joinPastedBlocks($0.source, markdown, lineEnding: newline) }
+            ?? markdown
+        let caretInReplacement = (replacement as NSString).length
+        if !after.isEmpty { replacement = Self.joinPastedBlocks(replacement, after, lineEnding: newline) }
+        if !ending.isEmpty && !replacement.hasSuffix("\n") { replacement += ending }
+
+        let range = NSRange(location: firstRange.location,
+                            length: NSMaxRange(lastRange) - firstRange.location)
+        let updated = (text as NSString).replacingCharacters(in: range, with: replacement)
+        let parsed = codec.parse(updated)
+        let replacementCount = (prefixBlock == nil ? 0 : 1) + inserted.blocks.count + (after.isEmpty ? 0 : 1)
+        guard parsed.toMarkdown() == updated,
+              parsed.blocks.count == document.blocks.count - selected.count + replacementCount,
+              parsed.trailingTrivia == document.trailingTrivia else { return nil }
+        for index in 0..<resolved.firstIndex {
+            guard Self.sameSourceBlock(parsed.blocks[index], document.blocks[index]) else { return nil }
+        }
+        var next = resolved.firstIndex
+        if let prefixBlock {
+            let actual = parsed.blocks[next]
+            guard actual.kind == prefixBlock.kind, actual.source == prefixBlock.source,
+                  actual.leadingTrivia == first.leadingTrivia else { return nil }
+            next += 1
+        }
+        for expected in inserted.blocks {
+            guard Self.sameInsertedBlock(parsed.blocks[next], expected) else { return nil }
+            next += 1
+        }
+        if !after.isEmpty {
+            let actual = parsed.blocks[next]
+            guard case .paragraph = actual.kind, actual.plainText == after else { return nil }
+            next += 1
+        }
+        for oldIndex in (resolved.lastIndex + 1)..<document.blocks.count {
+            guard Self.sameSourceBlock(parsed.blocks[next], document.blocks[oldIndex]) else { return nil }
+            next += 1
+        }
+        return updated == text ? nil : (updated, firstRange.location + caretInReplacement)
+    }
+
     private struct ResolvedVisibleTextSelection {
         let document: MarkdownDocument
         let firstIndex: Int
@@ -1792,9 +1882,10 @@ public final class MarkdownEditorController: ObservableObject {
     private static func joinPastedBlocks(_ first: String, _ second: String, lineEnding: String) -> String {
         var tail = first[...]
         var breaks = 0
-        while tail.last == "\n" {
+        // Swift treats CRLF as one Character, so comparing `last` with LF
+        // misses an existing Windows line ending and adds an extra blank line.
+        while tail.hasSuffix("\r\n") || tail.hasSuffix("\n") {
             tail = tail.dropLast()
-            if tail.last == "\r" { tail = tail.dropLast() }
             breaks += 1
         }
         return first + String(repeating: lineEnding, count: max(0, 2 - breaks)) + second
