@@ -958,7 +958,8 @@ private struct FormattedBlockRow: View {
     }
 
     private func inlineTextView(font: UIFont, identifier: String) -> some View {
-        SemanticInlineTextView(text: controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText,
+        let sourceAtRender = controller.text
+        return SemanticInlineTextView(text: controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText,
                                selectedRange: inlineSelection, font: font, identifier: identifier,
                                blockID: block.id, crossBlockHighlight: crossBlockHighlight,
                                onEdit: { value in
@@ -966,6 +967,13 @@ private struct FormattedBlockRow: View {
                 return controller.removeSemanticBlock(id: block.id)
             }
             return controller.replaceSemanticBlockContent(id: block.id, with: value)
+        }, onStructuredPaste: { range, markdown in
+            let inserted = controller.replaceSemanticTextRangeWithMarkdownBlocks(id: block.id,
+                                                                                 range: range,
+                                                                                 markdown: markdown,
+                                                                                 ifTextIs: sourceAtRender)
+            if inserted { inlineSelection = NSRange(location: 0, length: 0) }
+            return inserted
         }, onSelection: { inlineSelection = $0 }, onCrossBlockDrag: onCrossBlockDrag,
                                suggestionsVisible: !visibleWikilinkSuggestions.isEmpty || !visibleSlashCommands.isEmpty,
                                onSuggestionKey: handleSuggestionKey)
@@ -1656,6 +1664,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
     let blockID: String
     let crossBlockHighlight: NSRange?
     let onEdit: (String) -> Bool
+    let onStructuredPaste: (NSRange, String) -> Bool
     let onSelection: (NSRange) -> Void
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let suggestionsVisible: Bool
@@ -1765,6 +1774,10 @@ private struct SemanticInlineTextView: UIViewRepresentable {
                       replacementText text: String) -> Bool {
             if text == "\n", parent.suggestionsVisible {
                 parent.onSuggestionKey(.accept)
+                return false
+            }
+            if MarkdownEditorController.isStructuredBlockPaste(text, hasMarkedText: textView.markedTextRange != nil),
+               parent.onStructuredPaste(range, text) {
                 return false
             }
             return true
