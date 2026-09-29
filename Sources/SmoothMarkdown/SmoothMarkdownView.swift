@@ -33,7 +33,7 @@ public struct SmoothMarkdownView: View {
     public let onTextLongPress: ((@escaping () -> Void) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
-    /// Overrides parsed block nodes by type or `canBuild`, while other nodes use native rendering.
+    /// Overrides parsed block/inline nodes and parser-plugin results by type or `canBuild`.
     public let builderRegistry: BuilderRegistry?
     /// Reuses parsed documents for repeated source when no parser plugins are installed.
     /// Disable for rapidly changing content such as a live stream.
@@ -126,16 +126,55 @@ public struct SmoothMarkdownView: View {
     }
 
     private func hasCustomBuilder(_ node: Markup) -> Bool {
-        builderRegistry?.findBuilder(node) != nil
+        // InlineHTML nodes are stateful open/close tokens in InlineContent;
+        // consuming one would corrupt styling of subsequent siblings.
+        if node is InlineHTML { return false }
+        return builderRegistry?.findBuilder(node) != nil
     }
 
     func containsCustomBlockBuilder(_ node: Markup) -> Bool {
         guard builderRegistry != nil else { return false }
         if hasCustomBuilder(node) { return true }
-        guard node is BlockQuote || node is OrderedList || node is UnorderedList || node is Markdown.ListItem else {
-            return false
+        if node is Paragraph || node is Heading || node is Markdown.Table.Cell {
+            // Match the same post-plugin text pieces that inlineView will dispatch.
+            // The raw swift-markdown Text node may contain a plugin token that
+            // becomes a separate result before builders see ordinary text.
+            return InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
+                                      hasCustomBuilder: hasCustomBuilder).contains {
+                if case .custom = $0 { return true }
+                return false
+            }
         }
+        // Image alt text and raw inline code are data inside one native element,
+        // not independently dispatched child nodes.
+        if node is Markdown.Image || node is InlineCode || node is InlineHTML { return false }
         return node.children.contains(where: containsCustomBlockBuilder)
+    }
+
+    private func renderContext(alignment: TextAlignment? = nil,
+                               inlineStyle: InlineContent.Style? = nil) -> MarkdownRenderContext {
+        MarkdownRenderContext(
+            styleSheet: styleSheet, selectable: selectable,
+            renderBlock: { child in block(child, alignment: alignment) },
+            renderInline: { child in inlineView(child) },
+            renderMarkdown: { source in
+                AnyView(SmoothMarkdownView(markdown: source, onLinkTap: onLinkTap,
+                                           onImageTap: onImageTap,
+                                           onImageTapWithMetadata: onImageTapWithMetadata,
+                                           imageBuilder: imageBuilder, enableHTML: enableHTML,
+                                           codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
+                                           onCodeCopy: onCodeCopy, onTextLongPress: onTextLongPress,
+                                           styleSheet: styleSheet, plugins: plugins,
+                                           builderRegistry: builderRegistry, enableCache: enableCache,
+                                           selectable: selectable,
+                                           enableCrossBlockSelection: enableCrossBlockSelection,
+                                           scrollable: false))
+            },
+            inlineStyle: inlineStyle.map {
+                MarkdownInlineStyle(bold: $0.bold, italic: $0.italic,
+                                    strike: $0.strike, link: $0.link)
+            }
+        )
     }
 
     @ViewBuilder
@@ -156,7 +195,7 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, item in
                 footnoteSection(item)
             }
-        case let .plugin(plugin, match): plugin.render(match)
+        case let .plugin(plugin, match): pluginView(plugin, match)
         }
     }
 
@@ -353,9 +392,7 @@ public struct SmoothMarkdownView: View {
     private func blockContent(_ node: Markup, alignment: TextAlignment? = nil,
                               onSelectSurroundingContent: (() -> Void)? = nil) -> some View {
         if let builder = builderRegistry?.findBuilder(node) {
-            builder.build(node, context: MarkdownRenderContext(styleSheet: styleSheet,
-                                                               selectable: selectable,
-                                                               renderBlock: { child in block(child, alignment: alignment) }))
+            builder.build(node, context: renderContext(alignment: alignment))
         } else if let heading = node as? Heading {
             let decorated = heading.level <= 2
             let primary = Color.accentColor
@@ -395,12 +432,13 @@ public struct SmoothMarkdownView: View {
             }
             let sole = meaningful.count == 1 ? meaningful.first : nil
             if let image = sole as? Markdown.Image {
-                imageView(image)
+                if hasCustomBuilder(image) { customInlineView(image, style: .init()) }
+                else { imageView(image) }
             } else if enableHTML, let html = sole as? InlineHTML, let image = SafeHTML.imageTag(html.rawHTML) {
                 imageView(image)
             } else {
                 #if os(iOS)
-                if (alignment == nil || alignment == .leading),
+                if !containsCustomBlockBuilder(paragraph), (alignment == nil || alignment == .leading),
                    let document = ReaderSelectionDocument.inlineCodeParagraph(
                        paragraph, enableHTML: enableHTML, plugins: plugins) {
                     ReaderSelectionTextView(document: document, styleSheet: styleSheet,
@@ -562,11 +600,15 @@ public struct SmoothMarkdownView: View {
                         ForEach(0..<columnCount, id: \.self) { columnIndex in
                             Group {
                                 if cells.indices.contains(columnIndex) {
-                                    inlineView(cells[columnIndex])
-                                        .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
-                                              : (styleSheet.tableCellFont ?? .body))
-                                        .fontWeight(rowIndex == 0 ? .bold : .regular)
-                                        .markdownTextSelection(selectable)
+                                    if hasCustomBuilder(cells[columnIndex]) {
+                                        customInlineView(cells[columnIndex], style: .init())
+                                    } else {
+                                        inlineView(cells[columnIndex])
+                                            .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
+                                                  : (styleSheet.tableCellFont ?? .body))
+                                            .fontWeight(rowIndex == 0 ? .bold : .regular)
+                                            .markdownTextSelection(selectable)
+                                    }
                                 } else {
                                     SwiftUI.Text("")
                                 }
@@ -711,6 +753,23 @@ public struct SmoothMarkdownView: View {
         return AnyView(content.accessibilityLabel(label))
     }
 
+    private func customInlineView(_ node: Markup, style: InlineContent.Style) -> AnyView {
+        guard let builder = builderRegistry?.findBuilder(node) else { return inlineView(node) }
+        return builder.build(node, context: renderContext(inlineStyle: style))
+    }
+
+    private func pluginView(_ plugin: any InlineParserPlugin, _ match: InlinePluginMatch) -> AnyView {
+        let node = MarkdownPluginNode(plugin: plugin, match: match)
+        guard let builder = builderRegistry?.findBuilder(node) else { return plugin.render(match) }
+        return builder.build(node, context: renderContext())
+    }
+
+    private func pluginView(_ plugin: any BlockParserPlugin, _ match: BlockPluginMatch) -> AnyView {
+        let node = MarkdownPluginNode(plugin: plugin, match: match)
+        guard let builder = builderRegistry?.findBuilder(node) else { return plugin.render(match) }
+        return builder.build(node, context: renderContext())
+    }
+
     private struct InlineStyle {
         var bold = false
         var italic = false
@@ -729,6 +788,7 @@ public struct SmoothMarkdownView: View {
 
     private enum FlowPiece {
         case text(SwiftUI.Text)
+        case custom(Markup, InlineContent.Style)
         case image(SafeHTML.ImageSpec)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
@@ -736,9 +796,11 @@ public struct SmoothMarkdownView: View {
     }
 
     private func inlineView(_ node: Markup) -> AnyView {
-        let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins)
+        let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
+                                      hasCustomBuilder: builderRegistry == nil ? nil : hasCustomBuilder)
+        let hasCustom = runs.contains { if case .custom = $0 { return true }; return false }
         #if os(iOS)
-        if runs.contains(where: { run in
+        if !hasCustom, runs.contains(where: { run in
             if case let .text(_, _, tags, _) = run { return tags.contains(where: { $0.name == "kbd" }) }
             return false
         }), let document = ReaderSelectionDocument.inline(node, enableHTML: enableHTML, plugins: plugins) {
@@ -753,17 +815,17 @@ public struct SmoothMarkdownView: View {
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }
         let hasPlugin = runs.contains { if case .plugin = $0 { return true }; return false }
-        if !hasImage && !hasFootnote && !hasMath && !hasPlugin {
+        if !hasImage && !hasFootnote && !hasMath && !hasPlugin && !hasCustom {
             return AnyView(inline(runs))
         }
-        if !hasImage && !hasMath && !hasPlugin {
+        if !hasImage && !hasMath && !hasPlugin && !hasCustom {
             var result = SwiftUI.Text("")
             for run in runs {
                 switch run {
                 case let .text(value, sourceStyle, tags, code):
                     result = result + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
                 case let .footnote(label): result = result + footnoteReference(label)
-                case .image, .math, .plugin: break
+                case .image, .math, .plugin, .custom: break
                 }
             }
             return AnyView(result)
@@ -779,6 +841,8 @@ public struct SmoothMarkdownView: View {
                 pieces.append(.math(latex))
             case let .plugin(plugin, match):
                 pieces.append(.plugin(plugin, match))
+            case let .custom(node, style):
+                pieces.append(.custom(node, style))
             case let .text(value, sourceStyle, tags, code):
                 let style = inlineStyle(sourceStyle)
                 var word = ""
@@ -801,6 +865,7 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
                 switch piece {
                 case let .text(text): text.fixedSize()
+                case let .custom(node, style): customInlineView(node, style: style).fixedSize()
                 case let .image(image):
                     imageView(image, inline: true)
                         .layoutValue(key: InlineImageKey.self, value: true)
@@ -811,7 +876,7 @@ public struct SmoothMarkdownView: View {
                         .fixedSize()
                         .accessibilityLabel(latex)
                 case let .plugin(plugin, match):
-                    plugin.render(match).fixedSize()
+                    pluginView(plugin, match).fixedSize()
                 case .lineBreak:
                     Color.clear.frame(width: 0, height: 0)
                         .layoutValue(key: InlineBreakKey.self, value: true)
