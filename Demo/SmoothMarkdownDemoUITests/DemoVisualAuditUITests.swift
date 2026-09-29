@@ -211,6 +211,62 @@ final class DemoVisualAuditUITests: XCTestCase {
         capture("mermaid-42-source-sheet", in: app)
     }
 
+    func test07DynamicStates() {
+        let app = launchDemo()
+
+        choose("feature-streaming", in: app)
+        let streamStatus = app.staticTexts["stream-demo-status"]
+        let start = app.buttons["stream-demo-start"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5))
+        XCTAssertEqual(streamStatus.label, "Ready")
+        capture("state-01-stream-ready", in: app)
+        start.tap()
+        let streaming = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label BEGINSWITH %@", "Streaming "),
+            object: streamStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [streaming], timeout: 5), .completed)
+        capture("state-02-stream-progress", in: app)
+        let complete = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Complete 48/48 chunks"),
+            object: streamStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [complete], timeout: 15), .completed)
+        capture("state-03-stream-complete", in: app)
+        app.buttons["demo-feature-back"].tap()
+
+        choose("feature-html", in: app)
+        let htmlToggle = app.switches["html-demo-toggle"]
+        let htmlStatus = app.staticTexts["html-demo-status"]
+        XCTAssertTrue(htmlToggle.waitForExistence(timeout: 5))
+        XCTAssertEqual(htmlStatus.label, "Ready · HTML on")
+        capture("state-04-html-enabled", in: app)
+        htmlToggle.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        XCTAssertEqual(htmlStatus.label, "Ready · HTML off")
+        capture("state-05-html-disabled", in: app)
+        app.buttons["demo-feature-back"].tap()
+
+        choose("feature-chatList", in: app)
+        let field = app.descendants(matching: .any).matching(identifier: "chat-message-input").firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("Show me a code example")
+        let send = app.buttons["chat-send"]
+        XCTAssertTrue(send.isEnabled)
+        send.tap()
+        XCTAssertTrue(app.descendants(matching: .any)
+            .matching(identifier: "chat-user-bubble").firstMatch.waitForExistence(timeout: 5))
+        let assistantStatus = app.staticTexts["chat-assistant-status"]
+        let typing = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Typing..."),
+            object: assistantStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [typing], timeout: 5), .completed)
+        capture("state-06-chat-reply-streaming", in: app)
+        let online = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "label == %@", "Online"),
+            object: assistantStatus)
+        XCTAssertEqual(XCTWaiter.wait(for: [online], timeout: 20), .completed)
+        capture("state-07-chat-reply-complete", in: app)
+    }
+
     private func launchDemo() -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
