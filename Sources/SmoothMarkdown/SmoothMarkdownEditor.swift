@@ -343,6 +343,8 @@ private struct FormattedBlocksView: View {
     @State private var textRangeEnd: MarkdownSemanticTextPosition?
     @State private var copiedRange = false
     @State private var showingEditingTips = false
+    @State private var textRangeLinkDestination = "https://"
+    @State private var showingTextRangeLinkEditor = false
 
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
@@ -446,6 +448,26 @@ private struct FormattedBlocksView: View {
                     }
                     HStack(spacing: 8) {
                         if let textRange {
+                            Menu("Format text range") {
+                                if capabilities.supports(.bold) {
+                                    Button("Bold") { _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .bold) }
+                                }
+                                if capabilities.supports(.italic) {
+                                    Button("Italic") { _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .italic) }
+                                }
+                                if capabilities.supports(.strikethrough) {
+                                    Button("Strikethrough") {
+                                        _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .strikethrough)
+                                    }
+                                }
+                                if capabilities.supports(.inlineCode) {
+                                    Button("Inline code") { _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .code) }
+                                }
+                                if capabilities.supports(.link) {
+                                    Button("Link") { showingTextRangeLinkEditor = true }
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-format")
                             Button("Copy text range") {
                                 if let copied = controller.copySemanticTextRange(textRange) {
                                     UIPasteboard.general.string = copied
@@ -530,6 +552,19 @@ private struct FormattedBlocksView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
+        }
+        .alert("Link URL", isPresented: $showingTextRangeLinkEditor) {
+            TextField("https://example.com", text: $textRangeLinkDestination)
+                .textInputAutocapitalization(.never)
+            Button("Apply") {
+                if let textRange {
+                    _ = controller.applySemanticInlineMarkToTextRange(
+                        textRange, mark: .link(destination: textRangeLinkDestination))
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Only http, https, mailto, and tel links are accepted.")
         }
         .onChange(of: controller.text) { _, _ in clearRange() }
     }
@@ -983,6 +1018,13 @@ private struct FormattedTableView: View {
             }
             if let selectedCells {
                 HStack(spacing: 8) {
+                    Menu("Format cells") {
+                        Button("Bold") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .bold) }
+                        Button("Italic") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .italic) }
+                        Button("Strikethrough") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .strikethrough) }
+                        Button("Inline code") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .code) }
+                    }
+                    .accessibilityIdentifier("table-range-format")
                     Button("Copy cells") {
                         if let copied = controller.copySemanticTableCellsAsTSV(selectedCells) {
                             UIPasteboard.general.string = copied
@@ -1151,6 +1193,8 @@ private struct FormattedListView: View {
     let list: MarkdownSourceList
     @State private var focusRequest: (index: Int, token: UUID)?
     @State private var selectedItems: MarkdownSemanticListItemSelection?
+    @State private var rangeLinkDestination = "https://"
+    @State private var showingRangeLinkEditor = false
 
     private func isSelected(_ index: Int) -> Bool {
         guard let selectedItems else { return false }
@@ -1164,6 +1208,14 @@ private struct FormattedListView: View {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             if let selectedItems {
                 HStack(spacing: 8) {
+                    Menu("Format items") {
+                        Button("Bold") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .bold) }
+                        Button("Italic") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .italic) }
+                        Button("Strikethrough") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .strikethrough) }
+                        Button("Inline code") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .code) }
+                        Button("Link") { showingRangeLinkEditor = true }
+                    }
+                    .accessibilityIdentifier("list-range-format")
                     Button("Copy items") {
                         if let copied = controller.copySemanticListItemRange(selectedItems) {
                             UIPasteboard.general.string = copied
@@ -1254,6 +1306,19 @@ private struct FormattedListView: View {
                 .background(isSelected(index) ? Color.accentColor.opacity(0.15) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
             }
+        }
+        .alert("Link URL", isPresented: $showingRangeLinkEditor) {
+            TextField("https://example.com", text: $rangeLinkDestination)
+                .textInputAutocapitalization(.never)
+            Button("Apply") {
+                if let selectedItems {
+                    _ = controller.applySemanticInlineMarkToListItemRange(
+                        selectedItems, mark: .link(destination: rangeLinkDestination))
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Only http, https, mailto, and tel links are accepted.")
         }
         .onChange(of: controller.text) { _, _ in selectedItems = nil }
     }

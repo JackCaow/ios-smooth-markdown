@@ -284,6 +284,32 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Marks the primary text line of each selected sibling item. The list's
+    /// markers, continuation lines, and neighboring blocks retain their source.
+    @discardableResult
+    public func applySemanticInlineMarkToListItemRange(_ selection: MarkdownSemanticListItemSelection,
+                                                       mark: MarkdownInlineMark) -> Bool {
+        guard let (_, range) = resolvedListItems(selection) else { return false }
+        let document = semanticDocument
+        guard let updated = document.updatingList(selection.blockID, { list in
+            var next = list
+            var changed = false
+            for index in range {
+                let content = next.items[index].content
+                let length = (content as NSString).length
+                if length == 0 { continue }
+                guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else { return nil }
+                guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
+                                                                selection: NSRange(location: 0, length: length)),
+                      let replaced = next.replacingItemContent(at: index, with: edit.markdown) else { return nil }
+                next = replaced
+                changed = true
+            }
+            return changed ? next : nil
+        })?.toMarkdown() else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     private func resolvedTableCells(_ selection: MarkdownSemanticTableCellSelection)
         -> (MarkdownSourceTable, ClosedRange<Int>, ClosedRange<Int>)? {
         guard let block = semanticDocument.blockById(selection.blockID),
@@ -336,6 +362,43 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Applies Flutter's basic table range marks to each non-empty cell. A
+    /// source-preserving table edit must succeed for the entire rectangle.
+    @discardableResult
+    public func applySemanticInlineMarkToTableCells(_ selection: MarkdownSemanticTableCellSelection,
+                                                     mark: MarkdownInlineMark) -> Bool {
+        if case .link = mark { return false }
+        guard let (_, rows, columns) = resolvedTableCells(selection) else { return false }
+        let document = semanticDocument
+        var valid = true
+        var changed = false
+        let updated = document.updatingTable(selection.blockID, preservingSource: true) { table in
+            var next = table
+            for row in rows {
+                for column in columns {
+                    let content = row == 0 ? next.headers[column] : next.rows[row - 1][column]
+                    let length = (content as NSString).length
+                    if length == 0 { continue }
+                    guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else {
+                        valid = false
+                        return table
+                    }
+                    guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
+                                                                    selection: NSRange(location: 0, length: length)) else {
+                        valid = false
+                        return table
+                    }
+                    if row == 0 { next.headers[column] = edit.markdown }
+                    else { next.rows[row - 1][column] = edit.markdown }
+                    changed = true
+                }
+            }
+            return next
+        }?.toMarkdown()
+        guard valid, changed, let updated else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     private func isHeading(_ block: MarkdownDocumentBlock) -> Bool {
         if case .heading = block.kind { return true }
         return false
@@ -362,6 +425,41 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func deleteSemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
         replaceSemanticTextRange(selection, with: "")
+    }
+
+    /// Applies one mark to the selected character fragment in each adjacent
+    /// paragraph or heading. Each row retains its marker, trivia, and ending.
+    @discardableResult
+    public func applySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                    mark: MarkdownInlineMark) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return false }
+        let document = semanticDocument
+        var nextBlocks = document.blocks
+        var changed = false
+        for index in resolved.firstIndex...resolved.lastIndex {
+            let block = nextBlocks[index]
+            let body = block.plainText
+            // Raw source markers inside a row cannot be mapped to visible text
+            // offsets safely by the current native range editor.
+            guard MarkdownInlineMarkEditor.isSimpleRangeSource(body) else { return false }
+            let start = index == resolved.firstIndex ? resolved.startOffset : 0
+            let end = index == resolved.lastIndex ? resolved.endOffset : (body as NSString).length
+            if start == end { continue }
+            guard let edit = MarkdownInlineMarkEditor.apply(mark, to: body,
+                                                            selection: NSRange(location: start, length: end - start)),
+                  let replacement = block.replacingContent(edit.markdown) else { return false }
+            nextBlocks[index] = replacement
+            changed = true
+        }
+        guard changed else { return false }
+        let updated = MarkdownDocument(blocks: nextBlocks, trailingTrivia: document.trailingTrivia).toMarkdown()
+        let reparsed = codec.parse(updated)
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == nextBlocks.count,
+              zip(reparsed.blocks, nextBlocks).allSatisfy({ parsed, proposed in
+                  parsed.id == proposed.id && parsed.kind == proposed.kind &&
+                      parsed.source == proposed.source && parsed.leadingTrivia == proposed.leadingTrivia
+              }) else { return false }
+        return replaceSemanticMarkdown(updated)
     }
 
     private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection)

@@ -61,4 +61,80 @@ final class SemanticRangeEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, original)
         XCTAssertFalse(controller.canUndo)
     }
+
+    func testListRangeFormatsPrimaryLinesAndPreservesMarkersContinuationsAndOneUndo() {
+        let original = "Intro\r\n\r\n- one\r\n  continued\r\n- two 😀\r\n- three\r\n\r\nTail"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticListItemSelection(blockID: "block-1", anchorIndex: 1, focusIndex: 0)
+        XCTAssertTrue(controller.applySemanticInlineMarkToListItemRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text,
+                       "Intro\r\n\r\n- **one**\r\n  continued\r\n- **two 😀**\r\n- three\r\n\r\nTail")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testListRangeLinkRejectsUnsafeURLWithoutPartialMutation() {
+        let original = "- one\n- two\n- three"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticListItemSelection(blockID: "block-0", anchorIndex: 0, focusIndex: 1)
+        XCTAssertFalse(controller.applySemanticInlineMarkToListItemRange(
+            selected, mark: .link(destination: "javascript:alert(1)")))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertTrue(controller.applySemanticInlineMarkToListItemRange(
+            selected, mark: .link(destination: "https://example.com")))
+        XCTAssertEqual(controller.text, "- [one](https://example.com)\n- [two](https://example.com)\n- three")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+    }
+
+    func testTableRangeFormatPreservesCellSpacingPipesCRLFAndOneUndo() {
+        let original = "Intro\r\n\r\n| Name  |   Value |\r\n| :---- | ---: |\r\n"
+            + "| A\\|B | 1 |\r\n| C | 2 |\r\n\r\nTail"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticTableCellSelection(blockID: "block-1", anchorRow: 2,
+                                                           anchorColumn: 1, focusRow: 1, focusColumn: 0)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTableCells(selected, mark: .strikethrough))
+        XCTAssertEqual(controller.text, "Intro\r\n\r\n| Name  |   Value |\r\n| :---- | ---: |\r\n"
+                       + "| ~~A\\|B~~ | ~~1~~ |\r\n| ~~C~~ | ~~2~~ |\r\n\r\nTail")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertFalse(controller.applySemanticInlineMarkToTableCells(
+            selected, mark: .link(destination: "https://example.com")))
+        XCTAssertEqual(controller.text, original)
+    }
+
+    func testTableRangeSkipsEmptyCellsAndRejectsInvalidSelection() {
+        let original = "| A | B |\n| --- | --- |\n|  | x |\n| y |  |"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticTableCellSelection(blockID: "block-0", anchorRow: 1,
+                                                           anchorColumn: 0, focusRow: 2, focusColumn: 1)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTableCells(selected, mark: .italic))
+        XCTAssertEqual(controller.text, "| A | B |\n| --- | --- |\n|  | *x* |\n| *y* |  |")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        let invalid = MarkdownSemanticTableCellSelection(blockID: "block-0", anchorRow: 0,
+                                                          anchorColumn: 0, focusRow: 8, focusColumn: 1)
+        XCTAssertFalse(controller.applySemanticInlineMarkToTableCells(invalid, mark: .bold))
+        XCTAssertEqual(controller.text, original)
+    }
+
+    func testListAndTableRangeRefuseExistingInlineSyntaxWithoutPartialEdit() {
+        let listSource = "- plain\n- **existing**\n- tail"
+        let list = MarkdownEditorController(text: listSource)
+        let items = MarkdownSemanticListItemSelection(blockID: "block-0", anchorIndex: 0, focusIndex: 1)
+        XCTAssertFalse(list.applySemanticInlineMarkToListItemRange(items, mark: .italic))
+        XCTAssertEqual(list.text, listSource)
+        XCTAssertFalse(list.canUndo)
+
+        let tableSource = "| plain | **existing** |\n| --- | --- |\n| one | two |"
+        let table = MarkdownEditorController(text: tableSource)
+        let cells = MarkdownSemanticTableCellSelection(blockID: "block-0", anchorRow: 0,
+                                                       anchorColumn: 0, focusRow: 0, focusColumn: 1)
+        XCTAssertFalse(table.applySemanticInlineMarkToTableCells(cells, mark: .bold))
+        XCTAssertEqual(table.text, tableSource)
+        XCTAssertFalse(table.canUndo)
+    }
 }
