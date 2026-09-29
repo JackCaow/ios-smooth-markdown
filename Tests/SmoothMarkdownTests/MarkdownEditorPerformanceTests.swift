@@ -13,7 +13,7 @@ final class MarkdownEditorPerformanceTests: XCTestCase {
 
         XCTAssertEqual(snapshot.sourceLength, (controller.text as NSString).length)
         XCTAssertEqual(snapshot.blockCount, 2)
-        XCTAssertEqual(snapshot.formattedSegmentCount, 2)
+        XCTAssertNil(snapshot.formattedSegmentCount)
         XCTAssertEqual(snapshot.mode, .formatted)
         XCTAssertTrue(snapshot.isComposing)
         XCTAssertEqual(snapshot.searchMatchCount, 2)

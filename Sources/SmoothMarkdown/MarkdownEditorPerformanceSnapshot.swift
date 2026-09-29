@@ -6,7 +6,7 @@ import Foundation
 public struct MarkdownEditorPerformanceSnapshot {
     public let sourceLength: Int
     public let blockCount: Int
-    public let formattedSegmentCount: Int
+    public let formattedSegmentCount: Int?
     public let formattedSegmentCacheHit: Bool?
     public let retainedFormattedSegmentKeyCount: Int?
     public let mode: MarkdownEditorMode
@@ -21,7 +21,7 @@ public struct MarkdownEditorPerformanceSnapshot {
                         isComposing: Bool, timestamp: Date = Date(), blockCount: Int? = nil) -> Self {
         let blocks = blockCount ?? controller.semanticDocument.blocks.count
         return .init(sourceLength: (controller.text as NSString).length,
-                     blockCount: blocks, formattedSegmentCount: blocks,
+                     blockCount: blocks, formattedSegmentCount: nil,
                      formattedSegmentCacheHit: nil, retainedFormattedSegmentKeyCount: nil,
                      mode: controller.mode, isComposing: isComposing,
                      searchMatchCount: searchQuery.isEmpty ? 0 : controller.findMatches(searchQuery).count,
