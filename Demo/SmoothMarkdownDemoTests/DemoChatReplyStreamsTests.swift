@@ -4,6 +4,19 @@ import XCTest
 
 @MainActor
 final class DemoChatReplyStreamsTests: XCTestCase {
+    func testMockAIChatScheduleKeepsExactUTF16AndCatchesUpAfterLayoutDelay() {
+        let response = "abcd😀ef✨gh"
+        let chunks = MockAIChatSchedule.chunks(response, sizeUTF16: 5)
+        XCTAssertEqual(chunks.first, "abcd😀")
+        XCTAssertEqual(chunks.joined(), response)
+        XCTAssertEqual(MockAIChatSchedule.dueChunkCount(elapsedMillis: 0, delayMillis: 20,
+                                                        totalChunks: chunks.count), 1)
+        XCTAssertEqual(MockAIChatSchedule.dueChunkCount(elapsedMillis: 20, delayMillis: 20,
+                                                        totalChunks: chunks.count), 2)
+        XCTAssertEqual(MockAIChatSchedule.dueChunkCount(elapsedMillis: 200, delayMillis: 20,
+                                                        totalChunks: chunks.count), chunks.count)
+    }
+
     func testCompletionPublishesFullReplyAndRecycledBubbleCanReadSameStream() {
         let store = DemoChatReplyStreams()
         let id = UUID()
