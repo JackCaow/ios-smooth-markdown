@@ -501,6 +501,11 @@ private struct FormattedBlocksView: View {
         return controller.semanticListItemHighlightRanges(textRange) ?? [:]
     }
 
+    private var tableCellHighlights: [String: [Int: [Int: NSRange]]] {
+        guard let textRange else { return [:] }
+        return controller.semanticTableCellHighlightRanges(textRange) ?? [:]
+    }
+
     private var visibleHighlights: [String: NSRange] {
         guard let selected = visibleTextRange, selected.source == controller.text else { return [:] }
         let blocks = controller.semanticDocument.blocks
@@ -569,7 +574,7 @@ private struct FormattedBlocksView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                             Text("Tap Start range on a block, then End range on another block.")
-                            Text("Long press and drag between text or code blocks to select text. Start and End at selection also work with VoiceOver.")
+                            Text("Select text in prose, code, or a table cell, then use Start and End at selection. Long press and drag between text blocks also works.")
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -613,7 +618,7 @@ private struct FormattedBlocksView: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        Text("Long press and drag between text and code blocks to select text.")
+                        Text("Select text in prose, code, or a table cell. Use Start and End at selection across blocks.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -752,6 +757,7 @@ private struct FormattedBlocksView: View {
                                               customBlockEditorBuilder: customBlockEditorBuilder,
                                               crossBlockHighlight: textHighlights[block.id],
                                               listItemHighlights: listItemHighlights[block.id],
+                                              tableCellHighlights: tableCellHighlights[block.id],
                                               visibleCrossBlockHighlight: visibleHighlights[block.id],
                                               onCrossBlockDrag: { selection in
                         guard controller.copySemanticTextRange(selection) != nil else { return }
@@ -943,6 +949,7 @@ private struct FormattedBlockRow: View {
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
     let listItemHighlights: [Int: NSRange]?
+    let tableCellHighlights: [Int: [Int: NSRange]]?
     let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let onVisibleSelection: (NSRange) -> Void
@@ -964,7 +971,8 @@ private struct FormattedBlockRow: View {
         case .paragraph, .heading: return false
         case .list: return listItemHighlights == nil
         case .fencedCode: return false
-        case .table, .horizontalRule, .plugin, .raw: return true
+        case .table: return tableCellHighlights == nil
+        case .horizontalRule, .plugin, .raw: return true
         }
     }
 
@@ -1016,7 +1024,9 @@ private struct FormattedBlockRow: View {
                     onSuggestionKey: { _ in }, isCode: true)
                     .frame(minHeight: 120)
             case let .table(table):
-                FormattedTableView(controller: controller, blockID: block.id, table: table)
+                FormattedTableView(controller: controller, blockID: block.id, table: table,
+                                   textHighlights: tableCellHighlights,
+                                   onCaptureTextPosition: onCaptureTextPosition)
             case let .list(list):
                 FormattedListView(controller: controller, blockID: block.id, list: list,
                                   textHighlights: listItemHighlights,
@@ -1403,7 +1413,10 @@ private struct FormattedTableView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let table: MarkdownSourceTable
+    let textHighlights: [Int: [Int: NSRange]]?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var selectedCells: MarkdownSemanticTableCellSelection?
+    @State private var focusedCell: (row: Int, column: Int, selection: NSRange)?
     @State private var keepSelectionAfterPaste = false
     @State private var pasteError = false
 
@@ -1430,6 +1443,22 @@ private struct FormattedTableView: View {
                     Button("Row") { edit { $0.insertingRowAfter($0.rows.count - 1) } }
                     Button("Column") { edit { $0.insertingColumnAfter($0.columnCount - 1) } }
                 }
+            }
+            if let focusedCell {
+                HStack(spacing: 8) {
+                    Button("Start at cell selection") {
+                        onCaptureTextPosition(.init(blockID: blockID, offset: focusedCell.selection.location,
+                                                    tableRow: focusedCell.row, tableColumn: focusedCell.column), true)
+                    }
+                    .accessibilityIdentifier("table-text-range-start-\(blockID)")
+                    Button("End at cell selection") {
+                        onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(focusedCell.selection),
+                                                    tableRow: focusedCell.row, tableColumn: focusedCell.column), false)
+                    }
+                    .accessibilityIdentifier("table-text-range-end-\(blockID)")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
             }
             if let selectedCells {
                 HStack(spacing: 8) {
@@ -1474,7 +1503,11 @@ private struct FormattedTableView: View {
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: 0, column: column, isHeader: true,
                                                    isRangeSelected: isSelected(row: 0, column: column),
-                                                   onRangeDrag: selectCells)
+                                                   textHighlight: textHighlights?[0]?[column],
+                                                   onRangeDrag: selectCells,
+                                                   onSelection: { row, column, range in
+                                                       focusedCell = (row, column, range)
+                                                   })
                                 Menu(alignmentLabel(table.alignments[column])) {
                                     Button("Align default") { edit { $0.settingColumnAlignment(column, to: nil) } }
                                     Button("Align left") { edit { $0.settingColumnAlignment(column, to: .left) } }
@@ -1496,7 +1529,11 @@ private struct FormattedTableView: View {
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: row, column: column, isHeader: false,
                                                    isRangeSelected: isSelected(row: row + 1, column: column),
-                                                   onRangeDrag: selectCells)
+                                                   textHighlight: textHighlights?[row + 1]?[column],
+                                                   onRangeDrag: selectCells,
+                                                   onSelection: { row, column, range in
+                                                       focusedCell = (row, column, range)
+                                                   })
                                     .frame(width: 150)
                             }
                             Menu("Row \(row + 1)") {
@@ -1550,14 +1587,18 @@ private struct FormattedTableCell: View {
     let column: Int
     let isHeader: Bool
     let isRangeSelected: Bool
+    let textHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
+    let onSelection: (Int, Int, NSRange) -> Void
 
     var body: some View {
         FormattedTableInputField(text: textBinding, placeholder: isHeader ? "Header" : "Cell",
                                  identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
                                  isHeader: isHeader,
-                                 isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag,
+                                 isRangeSelected: isRangeSelected, textHighlight: textHighlight,
+                                 onRangeDrag: onRangeDrag,
+                                 onSelection: onSelection,
                                  onGridPaste: { source in
                                      controller.pasteTableCells(source, inTable: blockID,
                                                                 row: isHeader ? 0 : row + 1,
@@ -1603,7 +1644,9 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let column: Int
     let isHeader: Bool
     let isRangeSelected: Bool
+    let textHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
+    let onSelection: (Int, Int, NSRange) -> Void
     let onGridPaste: (String) -> Bool
     let onSourcePaste: (String, NSRange, String) -> Bool
     let onPasteRejected: () -> Void
@@ -1632,6 +1675,8 @@ private struct FormattedTableInputField: UIViewRepresentable {
 
     private func configure(_ field: FormattedRangeTextField) {
         field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
+        field.crossCellHighlight = textHighlight
+        field.crossCellHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         let background = editorTheme.tableCellBackground(isSelected: isRangeSelected, isHeader: isHeader)
         field.backgroundColor = background.map(UIColor.init) ??
             (isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear)
@@ -1660,6 +1705,13 @@ private struct FormattedTableInputField: UIViewRepresentable {
         init(parent: FormattedTableInputField) { self.parent = parent }
 
         @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+        private func reportSelection(_ field: UITextField) {
+            guard let selected = field.selectedTextRange else { return }
+            let start = field.offset(from: field.beginningOfDocument, to: selected.start)
+            let end = field.offset(from: field.beginningOfDocument, to: selected.end)
+            parent.onSelection(parent.row, parent.column, NSRange(location: start, length: end - start))
+        }
+        func textFieldDidChangeSelection(_ textField: UITextField) { reportSelection(textField) }
         func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
                        replacementString string: String) -> Bool {
             guard textField.markedTextRange == nil,
@@ -1673,6 +1725,7 @@ private struct FormattedTableInputField: UIViewRepresentable {
             return false
         }
         func textFieldDidBeginEditing(_ textField: UITextField) {
+            reportSelection(textField)
             if let field = textField as? FormattedRangeTextField { parent.configure(field) }
         }
         func textFieldDidEndEditing(_ textField: UITextField) {
@@ -1955,7 +2008,27 @@ enum FormattedRangeFieldIdentity: Equatable {
 class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
     var rangeIdentity: FormattedRangeFieldIdentity?
     var onRangeDrag: ((FormattedRangeFieldIdentity, FormattedRangeFieldIdentity) -> Void)?
+    var crossCellHighlight: NSRange? { didSet { setNeedsLayout() } }
+    var crossCellHighlightColor: UIColor? { didSet { setNeedsLayout() } }
     private var dragAnchor: FormattedRangeFieldIdentity?
+    private let cellRangeLayer = CAShapeLayer()
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if cellRangeLayer.superlayer == nil { layer.insertSublayer(cellRangeLayer, at: 0) }
+        cellRangeLayer.frame = bounds
+        cellRangeLayer.fillColor = (crossCellHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        let path = UIBezierPath()
+        if let highlight = crossCellHighlight, highlight.length > 0,
+           let first = position(from: beginningOfDocument, offset: highlight.location),
+           let last = position(from: first, offset: highlight.length),
+           let range = textRange(from: first, to: last) {
+            for rect in selectionRects(for: range) where !rect.rect.isEmpty {
+                path.append(UIBezierPath(roundedRect: rect.rect, cornerRadius: 2))
+            }
+        }
+        cellRangeLayer.path = path.cgPath
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)

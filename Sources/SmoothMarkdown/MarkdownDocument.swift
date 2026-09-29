@@ -134,8 +134,8 @@ public struct MarkdownDocument: Equatable {
     }
 
     /// UTF-16 source span of one table cell's content, excluding surrounding
-    /// cell padding. Used only when a visible cell can be mapped back exactly
-    /// to source for a paste that cannot be represented as a table grid.
+    /// padding and delimiters. Formatted edits use this only when the displayed
+    /// cell can be mapped back exactly to source.
     public func sourceRangeOfTableCell(blockID: String, row: Int, column: Int) -> NSRange? {
         guard let block = blockById(blockID), case let .table(table) = block.kind,
               row >= 0, row <= table.rows.count, table.headers.indices.contains(column),
