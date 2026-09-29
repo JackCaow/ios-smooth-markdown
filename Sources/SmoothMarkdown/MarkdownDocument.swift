@@ -108,6 +108,45 @@ public struct MarkdownDocument: Equatable {
         return nil
     }
 
+    /// UTF-16 source span of one table cell's content, excluding surrounding
+    /// cell padding. Used only when a visible cell can be mapped back exactly
+    /// to source for a paste that cannot be represented as a table grid.
+    public func sourceRangeOfTableCell(blockID: String, row: Int, column: Int) -> NSRange? {
+        guard let block = blockById(blockID), case let .table(table) = block.kind,
+              row >= 0, row <= table.rows.count, table.headers.indices.contains(column),
+              let blockRange = sourceRange(of: blockID) else { return nil }
+        let lineIndex = row == 0 ? 0 : row + 1
+        let lines = block.source.components(separatedBy: "\n")
+        guard lines.indices.contains(lineIndex) else { return nil }
+        let rawLine = lines[lineIndex].hasSuffix("\r") ? String(lines[lineIndex].dropLast()) : lines[lineIndex]
+        let line = rawLine as NSString
+        var separators: [Int] = []
+        var slashes = 0
+        for (offset, unit) in rawLine.utf16.enumerated() {
+            if unit == 124, slashes.isMultiple(of: 2) { separators.append(offset) }
+            slashes = unit == 92 ? slashes + 1 : 0
+        }
+        let boundaries = [-1] + separators + [line.length]
+        var cells = zip(boundaries, boundaries.dropFirst()).map { left, right in
+            NSRange(location: left + 1, length: right - left - 1)
+        }
+        let trimmedLine = rawLine.trimmingCharacters(in: .whitespaces)
+        if trimmedLine.hasPrefix("|"), let first = cells.first,
+           line.substring(with: first).trimmingCharacters(in: .whitespaces).isEmpty { cells.removeFirst() }
+        if trimmedLine.hasSuffix("|"), let last = cells.last,
+           line.substring(with: last).trimmingCharacters(in: .whitespaces).isEmpty { cells.removeLast() }
+        guard cells.indices.contains(column) else { return nil }
+        let padded = line.substring(with: cells[column])
+        let expected = row == 0 ? table.headers[column] : table.rows[row - 1][column]
+        guard padded.trimmingCharacters(in: .whitespaces) == expected else { return nil }
+        let left = padded.prefix { $0 == " " || $0 == "\t" }.utf16.count
+        let right = min(String(padded.reversed().prefix { $0 == " " || $0 == "\t" }).utf16.count,
+                        cells[column].length - left)
+        let lineOffset = lines[..<lineIndex].reduce(0) { $0 + ($1 as NSString).length + 1 }
+        return NSRange(location: blockRange.location + lineOffset + cells[column].location + left,
+                       length: cells[column].length - left - right)
+    }
+
     public func replacingBlock(_ replacement: MarkdownDocumentBlock) -> MarkdownDocument {
         guard let index = blocks.firstIndex(where: { $0.id == replacement.id }) else { return self }
         var next = blocks
