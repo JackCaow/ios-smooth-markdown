@@ -19,6 +19,8 @@ public struct SmoothMarkdownEditor: View {
     @State private var performanceReporter = MarkdownEditorPerformanceReporter()
     @FocusState private var searchFieldFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.markdownEditorTheme) private var ambientEditorTheme
+    private let editorTheme: MarkdownEditorTheme?
     private let onSave: ((String) -> Void)?
     private let onChanged: ((String) -> Void)?
     private let onModeChanged: ((MarkdownEditorMode) -> Void)?
@@ -44,6 +46,7 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
+                editorTheme: MarkdownEditorTheme? = nil,
                 onChanged: ((String) -> Void)? = nil,
                 onModeChanged: ((MarkdownEditorMode) -> Void)? = nil,
                 onSelectionChanged: ((NSRange) -> Void)? = nil,
@@ -72,6 +75,7 @@ public struct SmoothMarkdownEditor: View {
                 customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
         self.controller = controller
         self.onSave = onSave
+        self.editorTheme = editorTheme
         self.onChanged = onChanged
         self.onModeChanged = onModeChanged
         self.onSelectionChanged = onSelectionChanged
@@ -146,6 +150,7 @@ public struct SmoothMarkdownEditor: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 4)
+                .background(searchOpen ? (effectiveTheme.searchBarColor ?? .clear) : .clear)
             }
 
             if focusMode || searchOpen {
@@ -157,7 +162,7 @@ public struct SmoothMarkdownEditor: View {
                     .accessibilityHidden(true)
             }
 
-            Divider()
+            Divider().overlay(effectiveTheme.dividerColor ?? .clear)
             ZStack(alignment: .topTrailing) {
                 Group {
                     switch controller.mode {
@@ -169,18 +174,20 @@ public struct SmoothMarkdownEditor: View {
                                             capabilities: capabilities,
                                             enableSlashCommands: enableSlashCommands,
                                             customSlashCommands: customSlashCommands,
+                                            contentPadding: effectiveTheme.contentPadding,
                                             customBlockMatcher: customBlockMatcher,
                                             customBlockBuilder: customBlockBuilder,
                                             customBlockEditorBuilder: customBlockEditorBuilder)
+                            .environment(\.markdownEditorTheme, effectiveTheme)
                     case .preview:
-                        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+                        previewView
                     case .split:
                         GeometryReader { geometry in
                             VStack(spacing: 0) {
                                 sourceTextView
                                     .frame(height: geometry.size.height / 2)
-                                Divider()
-                                SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+                                Divider().overlay(effectiveTheme.dividerColor ?? .clear)
+                                previewView
                                     .frame(height: geometry.size.height / 2)
                             }
                         }
@@ -214,10 +221,19 @@ public struct SmoothMarkdownEditor: View {
             sourceFocusTracker.setFocused(false, callback: onFocusChanged)
             performanceReporter.cancel()
         }
+        .background(effectiveTheme.editorBackgroundColor ?? .clear)
+        .modifier(EditorOptionalCornerRadius(radius: effectiveTheme.editorBorderRadius))
+        .overlay {
+            if let color = effectiveTheme.editorBorderColor {
+                RoundedRectangle(cornerRadius: max(0, effectiveTheme.editorBorderRadius ?? 0))
+                    .stroke(color)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     private var sourceTextView: some View {
-        SourceTextView(controller: controller,
+        SourceTextView(controller: controller, theme: effectiveTheme,
                        onFocusChanged: { focused in
                            sourceFocusTracker.setFocused(focused, callback: onFocusChanged)
                        },
@@ -226,6 +242,16 @@ public struct SmoothMarkdownEditor: View {
                            sourceIsComposing = composing
                            schedulePerformanceSnapshot()
                        })
+    }
+
+    private var effectiveTheme: MarkdownEditorTheme {
+        ambientEditorTheme.merging(editorTheme)
+    }
+
+    private var previewView: some View {
+        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+            .padding(effectiveTheme.previewPadding ?? EdgeInsets())
+            .background(effectiveTheme.previewBackgroundColor ?? .clear)
     }
 
     private func schedulePerformanceSnapshot() {
@@ -356,7 +382,9 @@ public struct SmoothMarkdownEditor: View {
             .padding(.horizontal)
             .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
         }
-        .frame(minHeight: 44))
+        .frame(minHeight: 44)
+        .foregroundStyle(effectiveTheme.toolbarIconColor ?? .primary)
+        .background(effectiveTheme.toolbarColor ?? .clear))
         return toolbarBuilder?(defaultToolbar) ?? defaultToolbar
     }
 
@@ -366,6 +394,20 @@ public struct SmoothMarkdownEditor: View {
         Task { @MainActor in
             _ = await work()
             hostIOBusy = false
+        }
+    }
+}
+
+@available(iOS 17.0, *)
+private struct EditorOptionalCornerRadius: ViewModifier {
+    let radius: CGFloat?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let radius {
+            content.clipShape(RoundedRectangle(cornerRadius: max(0, radius)))
+        } else {
+            content
         }
     }
 }
@@ -416,12 +458,14 @@ private struct EditorSlashCommand {
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
+    let contentPadding: EdgeInsets?
     let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
@@ -695,7 +739,8 @@ private struct FormattedBlocksView: View {
                     })
                         }
                         .padding(4)
-                        .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
+                        .background(isInSelectedRange(block.id) ?
+                                    (editorTheme.selectionColor ?? Color.accentColor.opacity(0.12)) : .clear,
                                     in: RoundedRectangle(cornerRadius: 9))
                     case .pendingParagraph:
                         PendingListParagraphField(controller: controller)
@@ -703,7 +748,7 @@ private struct FormattedBlocksView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(contentPadding ?? EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
         }
         .alert("Link URL", isPresented: $showingTextRangeLinkEditor) {
             TextField("https://example.com", text: $textRangeLinkDestination)
@@ -813,6 +858,7 @@ private struct PendingListParagraphField: UIViewRepresentable {
 
 @available(iOS 17.0, *)
 private struct FormattedBlockRow: View {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let block: MarkdownDocumentBlock
     let enableWikilinks: Bool
@@ -886,8 +932,16 @@ private struct FormattedBlockRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+        .padding(editorTheme.blockPadding ?? EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+        .background(Color(uiColor: .secondarySystemBackground),
+                    in: RoundedRectangle(cornerRadius: max(0, editorTheme.blockBorderRadius ?? 8)))
+        .overlay {
+            if let color = editorTheme.blockBorderColor {
+                RoundedRectangle(cornerRadius: max(0, editorTheme.blockBorderRadius ?? 8))
+                    .stroke(color)
+                    .allowsHitTesting(false)
+            }
+        }
         .alert("Link URL", isPresented: $showLinkEditor) {
             TextField("https://example.com", text: $linkDestination)
                 .textInputAutocapitalization(.never)
@@ -972,6 +1026,10 @@ private struct FormattedBlockRow: View {
                         ForEach(Array(visibleSlashCommands.enumerated()), id: \.offset) { index, item in
                             Button(item.title) { selectSlashCommand(item) }
                                 .fontWeight(index == min(slashSelectedIndex, visibleSlashCommands.count - 1) ? .semibold : .regular)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(index == min(slashSelectedIndex, visibleSlashCommands.count - 1) ?
+                                            (editorTheme.suggestionSelectedBackgroundColor ?? .clear) : .clear,
+                                            in: RoundedRectangle(cornerRadius: 4))
                                 .accessibilityIdentifier("slash-suggestion-\(index)")
                         }
                     }
@@ -981,7 +1039,8 @@ private struct FormattedBlockRow: View {
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
-            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .background(editorTheme.suggestionPanelColor ?? Color(uiColor: .tertiarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -1034,13 +1093,18 @@ private struct FormattedBlockRow: View {
                         }
                         .accessibilityIdentifier("wikilink-suggestion-\(index)")
                         .fontWeight(index == min(wikilinkSelectedIndex, matches.count - 1) ? .semibold : .regular)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(index == min(wikilinkSelectedIndex, matches.count - 1) ?
+                                    (editorTheme.suggestionSelectedBackgroundColor ?? .clear) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 4))
                     }
                 }
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
-            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 8))
+            .background(editorTheme.suggestionPanelColor ?? Color(uiColor: .tertiarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: 8))
         }
     }
 
@@ -1183,12 +1247,19 @@ private struct FormattedBlockRow: View {
     }
 
     private func blockLabel(_ title: String) -> some View {
-        Text(title.uppercased()).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+        Text(title.uppercased())
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(editorTheme.blockHeaderTextColor ?? .secondary)
+            .padding(.horizontal, editorTheme.blockHeaderColor == nil ? 0 : 6)
+            .padding(.vertical, editorTheme.blockHeaderColor == nil ? 0 : 3)
+            .background(editorTheme.blockHeaderColor ?? .clear,
+                        in: RoundedRectangle(cornerRadius: 4))
     }
 }
 
 @available(iOS 17.0, *)
 private struct FormattedTableView: View {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let table: MarkdownSourceTable
@@ -1283,6 +1354,7 @@ private struct FormattedTableView: View {
                         }
                     }
                 }
+                .padding(editorTheme.tablePadding ?? EdgeInsets())
             }
         }
         .onChange(of: controller.text) { _, _ in selectedCells = nil }
@@ -1316,6 +1388,7 @@ private struct FormattedTableCell: View {
         FormattedTableInputField(text: textBinding, placeholder: isHeader ? "Header" : "Cell",
                                  identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
+                                 isHeader: isHeader,
                                  isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag)
     }
 
@@ -1336,12 +1409,14 @@ private struct FormattedTableCell: View {
 
 @available(iOS 17.0, *)
 private struct FormattedTableInputField: UIViewRepresentable {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @Binding var text: String
     let placeholder: String
     let identifier: String
     let blockID: String
     let row: Int
     let column: Int
+    let isHeader: Bool
     let isRangeSelected: Bool
     let onRangeDrag: (Int, Int, Int, Int) -> Void
 
@@ -1369,7 +1444,19 @@ private struct FormattedTableInputField: UIViewRepresentable {
 
     private func configure(_ field: FormattedRangeTextField) {
         field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
-        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
+        let background = editorTheme.tableCellBackground(isSelected: isRangeSelected, isHeader: isHeader)
+        field.backgroundColor = background.map(UIColor.init) ??
+            (isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear)
+        if let color = editorTheme.tableCellBorder(isActive: field.isFirstResponder) {
+            field.borderStyle = .none
+            field.layer.borderColor = UIColor(color).cgColor
+            field.layer.borderWidth = field.isFirstResponder ? 1.5 : 1
+            field.layer.cornerRadius = 5
+        } else {
+            field.borderStyle = .roundedRect
+            field.layer.borderWidth = 0
+            field.layer.cornerRadius = 0
+        }
         field.onRangeDrag = { anchor, focus in
             guard case let .table(firstBlock, firstRow, firstColumn) = anchor,
                   case let .table(lastBlock, lastRow, lastColumn) = focus,
@@ -1385,11 +1472,18 @@ private struct FormattedTableInputField: UIViewRepresentable {
         init(parent: FormattedTableInputField) { self.parent = parent }
 
         @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            if let field = textField as? FormattedRangeTextField { parent.configure(field) }
+        }
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            if let field = textField as? FormattedRangeTextField { parent.configure(field) }
+        }
     }
 }
 
 @available(iOS 17.0, *)
 private struct FormattedListView: View {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
@@ -1505,7 +1599,8 @@ private struct FormattedListView: View {
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
                 .padding(4)
-                .background(isSelected(index) ? Color.accentColor.opacity(0.15) : .clear,
+                .background(isSelected(index) ?
+                            (editorTheme.selectionColor ?? Color.accentColor.opacity(0.15)) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
             }
         }
@@ -1617,6 +1712,7 @@ final class FormattedListKeyboardTextField: FormattedRangeTextField {
 
 @available(iOS 17.0, *)
 private struct FormattedListItemField: UIViewRepresentable {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     @Binding var text: String
     let blockID: String
     let index: Int
@@ -1646,7 +1742,8 @@ private struct FormattedListItemField: UIViewRepresentable {
                   firstBlock == lastBlock else { return }
             onRangeDrag(firstIndex, lastIndex)
         }
-        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
+        field.backgroundColor = isRangeSelected ?
+            (editorTheme.selectionColor.map(UIColor.init) ?? UIColor.systemBlue.withAlphaComponent(0.2)) : .clear
         return field
     }
 
@@ -1661,7 +1758,8 @@ private struct FormattedListItemField: UIViewRepresentable {
                   firstBlock == lastBlock else { return }
             onRangeDrag(firstIndex, lastIndex)
         }
-        field.backgroundColor = isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear
+        field.backgroundColor = isRangeSelected ?
+            (editorTheme.selectionColor.map(UIColor.init) ?? UIColor.systemBlue.withAlphaComponent(0.2)) : .clear
         if field.text != text { field.text = text }
         if let focusRequest, context.coordinator.handledFocusRequest != focusRequest {
             context.coordinator.handledFocusRequest = focusRequest
@@ -1717,13 +1815,14 @@ private final class SemanticRangeTextView: WikilinkInputTextView {
     var semanticBlockID = ""
     var isRenderedSelectionSurface = false
     var crossBlockHighlight: NSRange? { didSet { setNeedsLayout() } }
+    var crossBlockHighlightColor: UIColor? { didSet { setNeedsLayout() } }
     private let rangeLayer = CAShapeLayer()
 
     override func layoutSubviews() {
         super.layoutSubviews()
         if rangeLayer.superlayer == nil { layer.insertSublayer(rangeLayer, at: 0) }
         rangeLayer.frame = bounds
-        rangeLayer.fillColor = tintColor.withAlphaComponent(0.22).cgColor
+        rangeLayer.fillColor = (crossBlockHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
         let path = UIBezierPath()
         if let highlight = crossBlockHighlight, highlight.length > 0,
            let first = position(from: beginningOfDocument, offset: highlight.location),
@@ -1744,6 +1843,7 @@ private final class SemanticRangeTextView: WikilinkInputTextView {
 
 @available(iOS 17.0, *)
 private struct SemanticInlineTextView: UIViewRepresentable {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     let text: String
     let selectedRange: NSRange
     let font: UIFont
@@ -1762,6 +1862,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.delegate = context.coordinator
         view.semanticBlockID = blockID
         view.crossBlockHighlight = crossBlockHighlight
+        view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         let drag = UILongPressGestureRecognizer(target: context.coordinator,
                                                 action: #selector(Coordinator.handleRangeDrag(_:)))
         drag.minimumPressDuration = 0.4
@@ -1790,6 +1891,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         if let view = view as? SemanticRangeTextView {
             view.semanticBlockID = blockID
             view.crossBlockHighlight = crossBlockHighlight
+            view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         }
         if let view = view as? WikilinkInputTextView {
             view.suggestionsVisible = suggestionsVisible
@@ -1879,6 +1981,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
 /// Selectable rendered prose; the adjacent disclosure keeps raw Markdown editing available.
 @available(iOS 17.0, *)
 private struct VisibleInlineTextView: UIViewRepresentable {
+    @Environment(\.markdownEditorTheme) private var editorTheme
     let markdown: String
     let font: UIFont
     let identifier: String
@@ -1893,6 +1996,7 @@ private struct VisibleInlineTextView: UIViewRepresentable {
         view.semanticBlockID = blockID
         view.isRenderedSelectionSurface = true
         view.crossBlockHighlight = crossBlockHighlight
+        view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = false
@@ -1919,6 +2023,7 @@ private struct VisibleInlineTextView: UIViewRepresentable {
         if let view = view as? SemanticRangeTextView {
             view.semanticBlockID = blockID
             view.crossBlockHighlight = crossBlockHighlight
+            view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
         }
         if context.coordinator.lastMarkdown != markdown || context.coordinator.lastFontSize != font.pointSize {
             context.coordinator.isUpdating = true
@@ -2006,6 +2111,7 @@ private struct VisibleInlineTextView: UIViewRepresentable {
 @available(iOS 17.0, *)
 private struct SourceTextView: UIViewRepresentable {
     @ObservedObject var controller: MarkdownEditorController
+    let theme: MarkdownEditorTheme
     let onFocusChanged: ((Bool) -> Void)?
     let onCompositionChanged: ((Bool) -> Void)?
 
@@ -2013,10 +2119,10 @@ private struct SourceTextView: UIViewRepresentable {
         let view = UITextView()
         view.delegate = context.coordinator
         view.accessibilityIdentifier = "markdown-source"
-        view.font = UIFontMetrics(forTextStyle: .body)
-            .scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
         view.adjustsFontForContentSizeCategory = true
-        view.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+        context.coordinator.defaultTextColor = view.textColor
+        context.coordinator.defaultBackgroundColor = view.backgroundColor
+        applyTheme(to: view, coordinator: context.coordinator)
         view.autocapitalizationType = .none
         view.autocorrectionType = .no
         view.text = controller.text
@@ -2026,6 +2132,7 @@ private struct SourceTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
+        applyTheme(to: view, coordinator: context.coordinator)
         if view.text != controller.text { view.text = controller.text }
         if view.selectedRange != controller.selection {
             view.selectedRange = controller.selection
@@ -2035,6 +2142,36 @@ private struct SourceTextView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    private func applyTheme(to view: UITextView, coordinator: Coordinator) {
+        let size = max(1, theme.sourceFontSize ?? 15)
+        let baseFont = theme.sourceFontName.flatMap { UIFont(name: $0, size: size) }
+            ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: baseFont)
+        if view.font != font { view.font = font }
+        if let textColor = theme.sourceTextColor.map(UIColor.init) {
+            if view.textColor != textColor { view.textColor = textColor }
+            coordinator.didOverrideTextColor = true
+        } else if coordinator.didOverrideTextColor {
+            view.textColor = coordinator.defaultTextColor
+            coordinator.didOverrideTextColor = false
+        }
+        if let backgroundColor = theme.sourceBackgroundColor.map(UIColor.init) {
+            if view.backgroundColor != backgroundColor { view.backgroundColor = backgroundColor }
+            coordinator.didOverrideBackgroundColor = true
+        } else if coordinator.didOverrideBackgroundColor {
+            view.backgroundColor = coordinator.defaultBackgroundColor
+            coordinator.didOverrideBackgroundColor = false
+        }
+        if let padding = theme.sourcePadding {
+            let inset = UIEdgeInsets(top: padding.top, left: padding.leading,
+                                     bottom: padding.bottom, right: padding.trailing)
+            if view.textContainerInset != inset { view.textContainerInset = inset }
+        } else {
+            let inset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+            if view.textContainerInset != inset { view.textContainerInset = inset }
+        }
+    }
+
     static func dismantleUIView(_ view: UITextView, coordinator: Coordinator) {
         if view.isFirstResponder { view.resignFirstResponder() }
         coordinator.parent.onFocusChanged?(false)
@@ -2043,6 +2180,10 @@ private struct SourceTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SourceTextView
+        var defaultTextColor: UIColor?
+        var defaultBackgroundColor: UIColor?
+        var didOverrideTextColor = false
+        var didOverrideBackgroundColor = false
         init(parent: SourceTextView) { self.parent = parent }
 
         func textViewDidBeginEditing(_ textView: UITextView) { parent.onFocusChanged?(true) }
