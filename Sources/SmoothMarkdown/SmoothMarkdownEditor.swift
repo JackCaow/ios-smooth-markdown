@@ -735,6 +735,8 @@ private struct FormattedBlocksView: View {
                                 }
                                 if capabilities.supports(.link) {
                                     Button("Link") { showingTextRangeLinkEditor = true }
+                                        .disabled(!controller.canApplySemanticInlineMarkToTextRange(
+                                            textRange, mark: .link(destination: textRangeLinkDestination)))
                                 }
                             }
                             .accessibilityIdentifier("text-range-format")
