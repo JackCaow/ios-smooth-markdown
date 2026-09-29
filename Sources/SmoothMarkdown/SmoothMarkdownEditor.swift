@@ -13,6 +13,7 @@ public struct SmoothMarkdownEditor: View {
     @State private var searchHasNavigated = false
     @State private var focusMode = false
     @FocusState private var searchFieldFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let onSave: ((String) -> Void)?
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
@@ -68,31 +69,11 @@ public struct SmoothMarkdownEditor: View {
     public var body: some View {
         VStack(spacing: 0) {
             if !focusMode {
-                HStack {
-                    Picker("Mode", selection: $controller.mode) {
-                        ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
-                            Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    focusToggle
-                    Menu("File") {
-                        if hasImagePicker {
-                            Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
-                        }
-                        if hasMarkdownImporter {
-                            Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
-                        }
-                        Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
-                        Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
-                    }
-                    .disabled(hostIOBusy)
-                    if let onSave {
-                        Button("Save") {
-                            onSave(controller.text)
-                            controller.markSaved()
-                        }
-                        .disabled(!controller.isDirty)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) { editorHeaderControls }
+                    } else {
+                        HStack { editorHeaderControls }
                     }
                 }
                 .padding(.horizontal)
@@ -112,7 +93,7 @@ public struct SmoothMarkdownEditor: View {
                     .buttonStyle(.borderless)
                     .padding(.horizontal)
                 }
-                .frame(height: 44)
+                .frame(minHeight: 44)
             }
 
             if searchOpen || !focusMode {
@@ -198,6 +179,35 @@ public struct SmoothMarkdownEditor: View {
         }
         .onChange(of: searchQuery) { _, _ in searchIndex = 0; searchHasNavigated = false }
         .onChange(of: controller.text) { _, _ in searchIndex = 0; searchHasNavigated = false }
+    }
+
+    @ViewBuilder
+    private var editorHeaderControls: some View {
+        Picker("Mode", selection: $controller.mode) {
+            ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
+                Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        focusToggle
+        Menu("File") {
+            if hasImagePicker {
+                Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
+            }
+            if hasMarkdownImporter {
+                Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
+            }
+            Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
+            Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
+        }
+        .disabled(hostIOBusy)
+        if let onSave {
+            Button("Save") {
+                onSave(controller.text)
+                controller.markSaved()
+            }
+            .disabled(!controller.isDirty)
+        }
     }
 
     private var searchMatches: [NSRange] { controller.findMatches(searchQuery) }
@@ -521,6 +531,7 @@ private struct PendingListParagraphField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
         field.placeholder = "Paragraph"
         field.accessibilityIdentifier = "list-exit-paragraph"
         field.text = controller.pendingListParagraph?.draft
@@ -594,7 +605,8 @@ private struct FormattedBlockRow: View {
                 blockLabel("Heading \(level)")
                 inlineActions
                 textRangeActions
-                inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
+                inlineTextView(font: UIFontMetrics(forTextStyle: headingTextStyle(level))
+                    .scaledFont(for: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold)),
                                identifier: "heading-\(block.id)")
                 wikilinkSuggestionPanel
                 slashSuggestionPanel
@@ -807,6 +819,15 @@ private struct FormattedBlockRow: View {
                                suggestionsVisible: !visibleWikilinkSuggestions.isEmpty || !visibleSlashCommands.isEmpty,
                                onSuggestionKey: handleSuggestionKey)
         .frame(minHeight: 44)
+    }
+
+    private func headingTextStyle(_ level: Int) -> UIFont.TextStyle {
+        switch level {
+        case 1: .largeTitle
+        case 2: .title1
+        case 3: .title2
+        default: .title3
+        }
     }
 
     private func selectWikilink(_ title: String) {
@@ -1122,6 +1143,7 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
         field.returnKeyType = .default
@@ -1203,6 +1225,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
         view.textContainer.lineFragmentPadding = 0
         view.font = font
+        view.adjustsFontForContentSizeCategory = true
         view.text = text
         view.autocorrectionType = .default
         view.accessibilityIdentifier = identifier
@@ -1273,7 +1296,9 @@ private struct SourceTextView: UIViewRepresentable {
         let view = UITextView()
         view.delegate = context.coordinator
         view.accessibilityIdentifier = "markdown-source"
-        view.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
+        view.font = UIFontMetrics(forTextStyle: .body)
+            .scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
+        view.adjustsFontForContentSizeCategory = true
         view.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         view.autocapitalizationType = .none
         view.autocorrectionType = .no
