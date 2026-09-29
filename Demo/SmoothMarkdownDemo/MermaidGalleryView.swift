@@ -119,8 +119,11 @@ struct MermaidGalleryView: View {
                 Text(example.title).font(.title3.bold()).accessibilityIdentifier("mermaid-title")
                 Text(example.description).foregroundStyle(.secondary)
                 if let diagram = MermaidParser.parse(example.code) {
-                    MermaidDiagramView(diagram: diagram, onNodeTap: showNodeFeedback)
+                    InteractiveMermaidDiagramView(diagram: diagram, onNodeTap: showNodeFeedback)
+                        .frame(height: 600)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 } else {
                     ContentUnavailableView("Diagram not supported yet", systemImage: "curlybraces",
                                            description: Text("The original Mermaid source is available below."))

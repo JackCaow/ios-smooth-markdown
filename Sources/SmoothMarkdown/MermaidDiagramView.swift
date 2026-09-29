@@ -6,14 +6,17 @@ public struct MermaidDiagramView: View {
     /// Overrides the device appearance for diagrams with an explicit fence theme.
     public let theme: MermaidTheme?
     public let onNodeTap: ((String) -> Void)?
+    /// Keep the inline reader's horizontal scrolling; interactive hosts manage both axes themselves.
+    public let scrollable: Bool
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
 
     public init(diagram: MermaidDiagram, theme: MermaidTheme? = nil,
-                onNodeTap: ((String) -> Void)? = nil) {
+                onNodeTap: ((String) -> Void)? = nil, scrollable: Bool = true) {
         self.diagram = diagram
         self.theme = theme
         self.onNodeTap = onNodeTap
+        self.scrollable = scrollable
     }
 
     private var resolvedTheme: MermaidTheme { theme ?? (colorScheme == .dark ? .dark : .light) }
@@ -22,8 +25,7 @@ public struct MermaidDiagramView: View {
         let layout = MermaidLayout.compute(diagram)
         let scale = max(1, diagramScale)
         let palette = resolvedTheme.palette
-        ScrollView(.horizontal) {
-            ZStack(alignment: .topLeading) {
+        let content = ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 var context = context
                 context.scaleBy(x: scale, y: scale)
@@ -120,8 +122,14 @@ public struct MermaidDiagramView: View {
                     }
                 }
             }
-            .frame(width: max(layout.size.width, 180) * scale,
-                   height: max(layout.size.height, 100) * scale)
+        .frame(width: max(layout.size.width, 180) * scale,
+               height: max(layout.size.height, 100) * scale)
+        Group {
+            if scrollable {
+                ScrollView(.horizontal) { content }
+            } else {
+                content
+            }
         }
         .background(palette.backgroundColor, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3)))
