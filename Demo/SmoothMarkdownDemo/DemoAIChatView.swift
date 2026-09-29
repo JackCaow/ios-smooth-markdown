@@ -147,7 +147,9 @@ struct DemoAIChatView: View {
     private var modeStatus: String {
         if isStreaming { return "正在输入..." }
         guard liveAPIAvailable else { return "模拟模式" }
-        if selectedProvider == .deepSeek { return selectedDeepSeekModel }
+        if selectedProvider == .deepSeek {
+            return enableThinking ? "\(selectedDeepSeekModel) (思考)" : selectedDeepSeekModel
+        }
         return enableThinking && selectedModel.hasPrefix("qwen3") ? "\(selectedModel) (思考)" : selectedModel
     }
     private var backgroundColor: Color {
@@ -377,7 +379,9 @@ struct DemoAIChatView: View {
                             }
                         }
                         .accessibilityIdentifier("ai-chat-deepseek-model")
-                        Text("推理内容可随流式响应展示。")
+                        Toggle("启用思考模式", isOn: $enableThinking)
+                            .accessibilityIdentifier("ai-chat-deepseek-thinking")
+                        Text("开启时显示 AI 的推理过程。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -447,7 +451,8 @@ struct DemoAIChatView: View {
                 ? .qwen(QwenChatRequest(apiKey: apiKey, model: selectedModel,
                                         enableThinking: enableThinking))
                 : .deepSeek(DeepSeekChatRequest(apiKey: deepSeekAPIKey,
-                                                model: selectedDeepSeekModel)))
+                                                model: selectedDeepSeekModel,
+                                                enableThinking: enableThinking)))
             : nil
         input = ""
         inputFocused = false
