@@ -50,5 +50,32 @@ final class MarkdownTypographyTests: XCTestCase {
         XCTAssertEqual(messageFont?.pointSize, UIFont.preferredFont(forTextStyle: .subheadline).pointSize)
         XCTAssertEqual(titleFont?.pointSize, UIFont.preferredFont(forTextStyle: .title2).pointSize)
     }
+
+    func testSelectableReaderReservesDecorationSpaceOnlyForFirstTwoHeadings() {
+        let source = "# First\n\n## Second\n\n### Third\n\nBody"
+        let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
+                                                       enableHTML: false, plugins: nil)!
+        let style = MarkdownStyleSheet.light()
+        let built = ReaderSelectionTextView(document: document, styleSheet: style,
+                                            onLinkTap: nil, onTextLongPress: nil, selectable: true)
+            .attributedContent(traits: MarkdownTypography.traits(for: .large))
+        XCTAssertEqual(built.headingRegions.count, 2)
+        XCTAssertEqual(built.headingRegions.map {
+            (built.text.string as NSString).substring(with: $0)
+        }, ["First", "Second"])
+        for title in ["First", "Second"] {
+            let range = (built.text.string as NSString).range(of: title)
+            let paragraph = built.text.attribute(.paragraphStyle, at: range.location,
+                                                 effectiveRange: nil) as? NSParagraphStyle
+            XCTAssertEqual(paragraph?.firstLineHeadIndent, 16)
+            XCTAssertEqual(paragraph?.paragraphSpacingBefore, 8)
+            XCTAssertEqual(paragraph?.paragraphSpacing, style.blockSpacing + 10)
+        }
+        let third = (built.text.string as NSString).range(of: "Third")
+        let thirdParagraph = built.text.attribute(.paragraphStyle, at: third.location,
+                                                  effectiveRange: nil) as? NSParagraphStyle
+        XCTAssertEqual(thirdParagraph?.firstLineHeadIndent, 0)
+        XCTAssertEqual(thirdParagraph?.paragraphSpacingBefore, 0)
+    }
 }
 #endif

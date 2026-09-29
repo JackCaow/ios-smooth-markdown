@@ -15,6 +15,7 @@ public struct SmoothMarkdownView: View {
     public static func clearCache() { MarkdownParseCache.shared.clear() }
 
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
@@ -299,15 +300,37 @@ public struct SmoothMarkdownView: View {
     private func blockContent(_ node: Markup, alignment: TextAlignment? = nil,
                               onSelectSurroundingContent: (() -> Void)? = nil) -> some View {
         if let heading = node as? Heading {
-            inlineView(heading)
-                .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
-                      ? styleSheet.headingFonts![heading.level - 1]
-                      : headingFont(heading.level))
-                .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
-                .multilineTextAlignment(alignment ?? .leading)
-                .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
-                .markdownTextSelection(selectable)
-                .accessibilityAddTraits(.isHeader)
+            let decorated = heading.level <= 2
+            let primary = Color.accentColor
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .center, spacing: decorated ? 12 : 0) {
+                    if decorated {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(LinearGradient(colors: [primary, primary.opacity(0.3)],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .frame(width: 4, height: headingBarHeight(heading.level))
+                            .accessibilityHidden(true)
+                    }
+                    inlineView(heading)
+                        .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
+                              ? styleSheet.headingFonts![heading.level - 1]
+                              : headingFont(heading.level))
+                        .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
+                        .multilineTextAlignment(alignment ?? .leading)
+                        .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
+                        .markdownTextSelection(selectable)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .padding(.vertical, 8)
+                if decorated {
+                    Rectangle()
+                        .fill(LinearGradient(colors: [primary.opacity(0.3), primary.opacity(0)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(height: 2)
+                        .accessibilityHidden(true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
         } else if let paragraph = node as? Paragraph {
             let meaningful = Array(paragraph.children).filter { child in
                 guard let text = child as? Markdown.Text else { return true }
@@ -355,6 +378,15 @@ public struct SmoothMarkdownView: View {
 
     private func headingFont(_ level: Int) -> Font {
         MarkdownTypography.heading(level)
+    }
+
+    private func headingBarHeight(_ level: Int) -> CGFloat {
+        #if os(iOS)
+        UIFont.preferredFont(forTextStyle: MarkdownTypography.textStyle(forHeading: level),
+                             compatibleWith: MarkdownTypography.traits(for: dynamicTypeSize)).pointSize
+        #else
+        level == 1 ? 28 : 22
+        #endif
     }
 
     @ViewBuilder

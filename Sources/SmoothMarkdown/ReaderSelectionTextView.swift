@@ -67,6 +67,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         let decoration = styleSheet.resolvedBlockquoteDecoration
         view.quoteRegions = built.quoteRegions
         view.ruleRegions = built.ruleRegions
+        view.headingRegions = built.headingRegions
         view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.ruleThickness = styleSheet.horizontalRuleThickness
         view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
@@ -180,9 +181,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     }
 
     func attributedContent(traits: UITraitCollection) ->
-        (text: NSAttributedString, quoteRegions: [QuoteTextView.Region], ruleRegions: [NSRange]) {
+        (text: NSAttributedString, quoteRegions: [QuoteTextView.Region], ruleRegions: [NSRange],
+         headingRegions: [NSRange]) {
         let output = NSMutableAttributedString(string: "")
         var ruleRegions: [NSRange] = []
+        var headingRegions: [NSRange] = []
         var quoteBounds: [Int: (start: Int, end: Int, depth: Int)] = [:]
         var quoteOrder: [Int] = []
         var firstQuoteLine: [Int: Int] = [:]
@@ -206,6 +209,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let paragraph = NSMutableParagraphStyle()
             paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
                 + CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.leading
+            if let headingLevel, headingLevel <= 2 {
+                paragraph.firstLineHeadIndent += 16
+            }
             paragraph.headIndent = paragraph.firstLineHeadIndent
             if line.quoteDepth > 0 {
                 paragraph.tailIndent = -CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.trailing
@@ -217,6 +223,10 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     : styleSheet.quoteSpacing
             } else {
                 paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
+            }
+            if let headingLevel, headingLevel <= 2 {
+                paragraph.paragraphSpacingBefore += 8
+                paragraph.paragraphSpacing += 10
             }
             paragraph.lineSpacing = UIFontMetrics(forTextStyle: .body).scaledValue(for: 2, compatibleWith: traits)
             for run in line.runs {
@@ -268,6 +278,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             if line.kind == .rule {
                 ruleRegions.append(NSRange(location: start, length: output.length - start))
             }
+            if let headingLevel, headingLevel <= 2, output.length > start {
+                headingRegions.append(NSRange(location: start, length: output.length - start))
+            }
             for (depth, id) in line.quoteIDs.enumerated() {
                 if quoteBounds[id] == nil {
                     quoteOrder.append(id)
@@ -283,7 +296,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             return .init(range: NSRange(location: bounds.start, length: max(1, bounds.end - bounds.start)),
                          depth: bounds.depth)
         }
-        return (output, quoteRegions, ruleRegions)
+        return (output, quoteRegions, ruleRegions, headingRegions)
     }
 }
 
@@ -296,6 +309,7 @@ final class QuoteTextView: UITextView {
 
     var quoteRegions: [Region] = [] { didSet { setNeedsDisplay() } }
     var ruleRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
+    var headingRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
     var ruleColor: UIColor = .secondaryLabel { didSet { setNeedsDisplay() } }
     var ruleThickness: CGFloat = 1 { didSet { setNeedsDisplay() } }
     var quoteBarColor: UIColor = .tintColor { didSet { setNeedsDisplay() } }
@@ -360,11 +374,47 @@ final class QuoteTextView: UITextView {
             }
         }
         super.draw(rect)
+        drawHeadingDecorations()
         guard quoteBorderWidth > 0 else { return }
         quoteBarColor.setFill()
         for (frame, _) in quoteFrames {
             UIRectFill(CGRect(x: frame.minX, y: frame.minY,
                               width: min(quoteBorderWidth, frame.width), height: frame.height))
+        }
+    }
+
+    private func drawHeadingDecorations() {
+        guard let context = UIGraphicsGetCurrentContext(),
+              let barGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                           colors: [tintColor.cgColor, tintColor.withAlphaComponent(0.3).cgColor] as CFArray,
+                                           locations: [0, 1]),
+              let underlineGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                                 colors: [tintColor.withAlphaComponent(0.3).cgColor,
+                                                          tintColor.withAlphaComponent(0).cgColor] as CFArray,
+                                                 locations: [0, 1]) else { return }
+        for range in headingRegions where range.location < textStorage.length {
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let glyphFrame = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+            guard glyphFrame.width > 0, glyphFrame.height > 0 else { continue }
+            let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
+            let barHeight = font?.pointSize ?? 24
+            let x = textContainerInset.left + glyphFrame.minX - 16
+            let y = textContainerInset.top + glyphFrame.midY - barHeight / 2
+            context.saveGState()
+            context.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: y, width: 4, height: barHeight),
+                                         cornerRadius: 2).cgPath)
+            context.clip()
+            context.drawLinearGradient(barGradient, start: CGPoint(x: x, y: y),
+                                       end: CGPoint(x: x, y: y + barHeight), options: [])
+            context.restoreGState()
+
+            let underlineY = textContainerInset.top + glyphFrame.maxY + 8
+            let underlineWidth = max(0, bounds.width - x - textContainerInset.right)
+            context.saveGState()
+            context.clip(to: CGRect(x: x, y: underlineY, width: underlineWidth, height: 2))
+            context.drawLinearGradient(underlineGradient, start: CGPoint(x: x, y: underlineY),
+                                       end: CGPoint(x: x + underlineWidth, y: underlineY), options: [])
+            context.restoreGState()
         }
     }
 }
