@@ -22,7 +22,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo
         SWIFT_VERSION: '5.9'
-        CODE_SIGNING_ALLOWED: NO
     info:
       path: SmoothMarkdownDemo/Info.plist
       properties:
@@ -38,7 +37,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.uitests
         SWIFT_VERSION: '5.9'
-        CODE_SIGNING_ALLOWED: NO
     dependencies:
       - target: SmoothMarkdownDemo
   SmoothMarkdownDemoTests:
@@ -50,7 +48,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.tests
         SWIFT_VERSION: '5.9'
-        CODE_SIGNING_ALLOWED: NO
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SmoothMarkdownDemo.app/SmoothMarkdownDemo"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:

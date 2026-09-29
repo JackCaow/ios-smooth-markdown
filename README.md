@@ -41,7 +41,7 @@ The experimental `MarkdownDocumentCodec` keeps original Markdown bytes and white
 
 `SmoothMarkdownEditor` accepts optional async `onPickImage`, `onImportMarkdown`, `onExportMarkdown`, and `onExportPdf(markdown, html)` callbacks. It also supports `wikilinkSuggestions`, `onTapWikilink`, and `enableWikilinks` for formatted `[[` completion and preview taps. Its File menu shows image picking and import when supplied, and always offers Markdown export (clipboard fallback without a callback). A nil picker/import result or thrown cancellation leaves the document unchanged; errors are reported through `onHostIOEvent`, and image lifecycle also has `onImagePickEvent`. Successful insertion uses the selection captured when the action began, creates one undo step, and rejects a stale result if the source changed while the host callback was pending. Host apps own file pickers, asset upload, and sharing. The PDF callback passes source Markdown and rendered HTML to the host; the host creates and shares the PDF.
 
-Run `swift test` for the package. Run `cd Demo && xcodegen generate`, then open `SmoothMarkdownDemo.xcodeproj` for the demo.
+Run `swift test` for the package. Run `cd Demo && xcodegen generate`, then open `SmoothMarkdownDemo.xcodeproj` for the demo. To run on an iPhone, select a development team for the Demo target in Xcode; a signed build also needs a provisioning profile for `com.jackcaow.smoothmarkdown.demo`. CI disables code signing explicitly for Simulator builds.
 
 ### Demo navigation
 
