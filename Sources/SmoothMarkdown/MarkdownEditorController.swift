@@ -94,6 +94,9 @@ public final class MarkdownEditorController: ObservableObject {
     @Published public private(set) var savedText: String
     @Published public var mode: MarkdownEditorMode = .source
     @Published private(set) var pendingListParagraph: PendingListParagraph?
+    /// Emits every committed source edit, including rapid programmatic edits and undo/redo.
+    /// An open transaction emits only its final source. Source IME composition is deferred.
+    let committedTextChanges = PassthroughSubject<String, Never>()
 
     private struct Snapshot {
         let text: String
@@ -106,6 +109,7 @@ public final class MarkdownEditorController: ObservableObject {
     private var redoStack: [Snapshot] = []
     private var transactionDepth = 0
     private var transactionBefore: Snapshot?
+    private var compositionStartingText: String?
 
     public init(text: String = "", historyLimit: Int = 100, plugins: ParserPluginRegistry? = nil) {
         self.text = text
@@ -905,12 +909,20 @@ public final class MarkdownEditorController: ObservableObject {
     public func markSaved(_ saved: String? = nil) { savedText = saved ?? text }
     public func clearHistory() { undoStack.removeAll(); redoStack.removeAll() }
 
-    public func updateFromInput(text nextText: String, selection nextSelection: NSRange) {
+    public func updateFromInput(text nextText: String, selection nextSelection: NSRange,
+                                isComposing: Bool = false) {
+        if isComposing, compositionStartingText == nil { compositionStartingText = text }
         let changed = nextText != text
         if changed { recordUndo(snapshot()) }
         text = nextText
         selection = clamped(nextSelection, in: nextText)
         if changed { pendingListParagraph = nil }
+        if !isComposing {
+            if let original = compositionStartingText {
+                compositionStartingText = nil
+                if original != text { emitCommittedText() }
+            } else if changed { emitCommittedText() }
+        }
     }
 
     public func setSelection(_ range: NSRange) { selection = clamped(range, in: text) }
@@ -918,20 +930,26 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func undo() -> Bool {
         guard let previous = undoStack.popLast() else { return false }
+        let oldText = text
         redoStack.append(snapshot())
         text = previous.text
         selection = previous.selection
         pendingListParagraph = previous.pendingListParagraph
+        compositionStartingText = nil
+        if text != oldText { emitCommittedText() }
         return true
     }
 
     @discardableResult
     public func redo() -> Bool {
         guard let next = redoStack.popLast() else { return false }
+        let oldText = text
         pushUndo(snapshot())
         text = next.text
         selection = next.selection
         pendingListParagraph = next.pendingListParagraph
+        compositionStartingText = nil
+        if text != oldText { emitCommittedText() }
         return true
     }
 
@@ -941,11 +959,13 @@ public final class MarkdownEditorController: ObservableObject {
         defer {
             transactionDepth -= 1
             if transactionDepth == 0 {
+                let changed = transactionBefore.map { $0.text != text } ?? false
                 if let before = transactionBefore, before.text != text {
                     pushUndo(before)
                     redoStack.removeAll()
                 }
                 transactionBefore = nil
+                if changed { committedTextChanges.send(text) }
             }
         }
         return try body()
@@ -1238,10 +1258,16 @@ public final class MarkdownEditorController: ObservableObject {
     }
 
     private func updateValue(_ next: String, selection nextSelection: NSRange) {
-        if next != text { recordUndo(snapshot()) }
+        let changed = next != text
+        if changed { recordUndo(snapshot()) }
         text = next
         selection = nextSelection
         pendingListParagraph = nil
+        if changed { emitCommittedText() }
+    }
+
+    private func emitCommittedText() {
+        if transactionDepth == 0 { committedTextChanges.send(text) }
     }
 
     private func snapshot() -> Snapshot {
