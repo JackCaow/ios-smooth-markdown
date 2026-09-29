@@ -54,6 +54,20 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         }
     }
 
+    func testThematicBreakStaysInCrossBlockSelectionAndCopiesAsBlankLine() {
+        let source = "First paragraph.\n\n---\n\nLast paragraph."
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .selectable(nodes) = groups[0],
+              let document = ReaderSelectionDocument.compose(nodes, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected one range across the rule")
+        }
+        XCTAssertEqual(document.lines.map(\.kind), [.paragraph, .rule, .paragraph])
+        XCTAssertEqual(document.copiedText, "First paragraph.\n\nLast paragraph.")
+        XCTAssertEqual(document.lines[1].runs.map(\.text).joined(), ReaderSelectionDocument.ruleAnchor)
+    }
+
     func testUnsafeLinkNeverBecomesActiveInSelectionDocument() {
         let source = "First [unsafe](javascript:alert(1)).\n\nSecond paragraph."
         let nodes = Array(MarkdownSyntax.parse(source).children)
