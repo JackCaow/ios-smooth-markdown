@@ -679,6 +679,26 @@ private struct FormattedBlocksView: View {
                             if capabilities.supports(.link) {
                                 Button("Link") { showingVisibleLinkEditor = true }
                             }
+                            Divider()
+                            Button("Copy Markdown") {
+                                if let copied = controller.copyVisibleTextRange(selected) {
+                                    UIPasteboard.general.string = copied
+                                    copiedRange = true
+                                }
+                            }
+                            .accessibilityIdentifier("visible-range-copy")
+                            Button("Delete selected text", role: .destructive) {
+                                if controller.deleteVisibleTextRange(selected) { clearRange() }
+                            }
+                            .disabled(!controller.canReplaceVisibleTextRange(selected))
+                            .accessibilityIdentifier("visible-range-delete")
+                            Button("Replace from clipboard") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceVisibleTextRange(selected, with: value) {
+                                    clearRange()
+                                }
+                            }
+                            .accessibilityIdentifier("visible-range-replace")
                         }
                         .accessibilityIdentifier("visible-range-format")
                         Text("Rendered characters selected")

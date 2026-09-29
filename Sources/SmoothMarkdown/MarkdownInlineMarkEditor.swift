@@ -17,6 +17,20 @@ struct MarkdownInlineMarkEdit: Equatable {
 }
 
 enum MarkdownInlineMarkEditor {
+    struct VisibleBoundary {
+        let sourceOffset: Int
+        let closeTokens: String
+        let openTokens: String
+    }
+
+    struct VisibleStyle: Equatable {
+        let bold: Int
+        let italic: Int
+        let strike: Int
+        let code: Int
+        let links: [URL]
+    }
+
     private enum MappedKind: Equatable {
         case bold, italic, strikethrough, code, link(URL)
     }
@@ -81,6 +95,42 @@ enum MarkdownInlineMarkEditor {
     static func visibleText(of markdown: String) -> String? {
         guard let mapped = inlineMap(markdown, allowCode: true) else { return nil }
         return String(decoding: mapped.units, as: UTF16.self)
+    }
+
+    static func visibleStyles(of markdown: String) -> [VisibleStyle]? {
+        inlineMap(markdown, allowCode: true)?.coverage().map {
+            .init(bold: $0.bold, italic: $0.italic, strike: $0.strike,
+                  code: $0.code, links: $0.links)
+        }
+    }
+
+    static func visibleBoundary(in markdown: String, at offset: Int) -> VisibleBoundary? {
+        guard let map = inlineMap(markdown, allowCode: true),
+              scalarBoundary(offset, in: map.units),
+              let boundary = map.boundary(at: offset) else { return nil }
+        return .init(sourceOffset: boundary.offset, closeTokens: boundary.closeTokens,
+                     openTokens: boundary.openTokens)
+    }
+
+    /// Extracts a self-contained Markdown fragment from rendered coordinates.
+    /// An inline mark cut by either endpoint is balanced in the fragment.
+    static func copyVisibleRange(in markdown: String, range: NSRange) -> String? {
+        guard let map = inlineMap(markdown, allowCode: true),
+              range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= map.units.count,
+              scalarBoundary(range.location, in: map.units),
+              scalarBoundary(NSMaxRange(range), in: map.units),
+              let start = map.boundary(at: range.location),
+              let end = map.boundary(at: NSMaxRange(range)),
+              start.offset <= end.offset else { return nil }
+        if range.length == 0 { return "" }
+        let source = markdown as NSString
+        let selected = String(decoding: map.units[range.location..<NSMaxRange(range)], as: UTF16.self)
+        let fragment = start.openTokens + source.substring(with: NSRange(location: start.offset,
+                                                                          length: end.offset - start.offset))
+            + end.closeTokens
+        guard visibleText(of: fragment) == selected else { return nil }
+        return fragment
     }
 
     /// A block paste may split raw Markdown only outside an existing inline
