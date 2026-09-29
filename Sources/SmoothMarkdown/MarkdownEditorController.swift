@@ -32,6 +32,30 @@ public struct MarkdownSemanticTextSelection: Equatable {
     }
 }
 
+/// A UTF-16 offset in rendered paragraph or ATX-heading text, excluding Markdown markers.
+public struct MarkdownVisibleTextPosition: Equatable {
+    public let blockID: String
+    public let offset: Int
+
+    public init(blockID: String, offset: Int) {
+        self.blockID = blockID
+        self.offset = offset
+    }
+}
+
+/// A source-revision-bound selection in rendered text across adjacent prose blocks.
+public struct MarkdownVisibleTextSelection: Equatable {
+    public let source: String
+    public let anchor: MarkdownVisibleTextPosition
+    public let focus: MarkdownVisibleTextPosition
+
+    public init(source: String, anchor: MarkdownVisibleTextPosition, focus: MarkdownVisibleTextPosition) {
+        self.source = source
+        self.anchor = anchor
+        self.focus = focus
+    }
+}
+
 /// A contiguous run of sibling items inside one source-backed list block.
 public struct MarkdownSemanticListItemSelection: Equatable {
     public let blockID: String
@@ -440,6 +464,54 @@ public final class MarkdownEditorController: ObservableObject {
             guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: body,
                                                                          selection: NSRange(location: start, length: end - start)),
                   let replacement = block.replacingContent(edit.markdown) else { return false }
+            nextBlocks[index] = replacement
+            changed = true
+        }
+        guard changed else { return false }
+        let updated = MarkdownDocument(blocks: nextBlocks, trailingTrivia: document.trailingTrivia).toMarkdown()
+        let reparsed = codec.parse(updated)
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == nextBlocks.count,
+              zip(reparsed.blocks, nextBlocks).allSatisfy({ parsed, proposed in
+                  parsed.id == proposed.id && parsed.kind == proposed.kind &&
+                      parsed.source == proposed.source && parsed.leadingTrivia == proposed.leadingTrivia
+              }) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    /// Applies one mark to rendered UTF-16 text in adjacent paragraphs/headings.
+    /// Existing Markdown marks and source outside the selection remain intact;
+    /// an unsafe candidate leaves the document and undo history untouched.
+    @discardableResult
+    public func applySemanticInlineMarkToVisibleTextRange(_ selection: MarkdownVisibleTextSelection,
+                                                           mark: MarkdownInlineMark) -> Bool {
+        guard selection.source == text else { return false }
+        let document = semanticDocument
+        guard let anchorIndex = document.blocks.firstIndex(where: { $0.id == selection.anchor.blockID }),
+              let focusIndex = document.blocks.firstIndex(where: { $0.id == selection.focus.blockID }) else { return false }
+        let firstIndex = min(anchorIndex, focusIndex)
+        let lastIndex = max(anchorIndex, focusIndex)
+        let forward = anchorIndex < focusIndex ||
+            (anchorIndex == focusIndex && selection.anchor.offset <= selection.focus.offset)
+        let startOffset = forward ? selection.anchor.offset : selection.focus.offset
+        let endOffset = forward ? selection.focus.offset : selection.anchor.offset
+        guard firstIndex != lastIndex || startOffset < endOffset else { return false }
+
+        var nextBlocks = document.blocks
+        var changed = false
+        for index in firstIndex...lastIndex {
+            let block = nextBlocks[index]
+            switch block.kind {
+            case .paragraph, .heading: break
+            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return false
+            }
+            guard let visibleLength = MarkdownInlineMarkEditor.visibleUTF16Length(of: block.plainText) else { return false }
+            let start = index == firstIndex ? startOffset : 0
+            let end = index == lastIndex ? endOffset : visibleLength
+            guard start >= 0, end >= start, end <= visibleLength else { return false }
+            if start == end { continue }
+            guard let markdown = MarkdownInlineMarkEditor.applyVerifiedVisibleRange(
+                mark, to: block.plainText, selection: NSRange(location: start, length: end - start)),
+                  let replacement = block.replacingContent(markdown) else { return false }
             nextBlocks[index] = replacement
             changed = true
         }
