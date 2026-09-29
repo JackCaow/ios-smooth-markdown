@@ -226,7 +226,8 @@ struct DemoHomeView: View {
                                    }
                                },
                                enableHTML: false,
-                               styleSheet: theme.styleSheet, plugins: plugins)
+                               styleSheet: theme.styleSheet, plugins: plugins,
+                               selectable: true)
                 .id(selected)
                 .accessibilityIdentifier("demo-reader")
                 .overlay(alignment: .bottom) {

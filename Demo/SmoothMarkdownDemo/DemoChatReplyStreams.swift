@@ -57,6 +57,7 @@ struct DemoStreamingMarkdownBubble: View {
             } else {
                 SmoothMarkdownView(markdown: stream.visibleText,
                                    styleSheet: styleSheet, plugins: plugins,
+                                   enableCache: false,
                                    scrollable: false)
                     .fixedSize(horizontal: false, vertical: true)
             }

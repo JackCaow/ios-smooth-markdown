@@ -187,6 +187,7 @@ struct DemoChatListView: View {
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
+                                       selectable: true,
                                        scrollable: false)
                         .fixedSize(horizontal: false, vertical: true)
                 }

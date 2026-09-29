@@ -208,6 +208,7 @@ private struct DemoConversationDetailView: View {
                                        showMessageActions = true
                                    },
                                    styleSheet: messageStyle(isMe: message.isMe),
+                                   selectable: true,
                                    scrollable: false)
                     .accessibilityIdentifier("conversation-message-\(index)")
                 HStack(spacing: 8) {

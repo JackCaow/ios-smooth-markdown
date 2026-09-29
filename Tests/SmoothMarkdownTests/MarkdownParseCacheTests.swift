@@ -31,4 +31,30 @@ final class MarkdownParseCacheTests: XCTestCase {
         XCTAssertEqual(SmoothMarkdownView.cacheStatistics.size, 0)
         XCTAssertEqual(SmoothMarkdownView.cacheStatistics.hits, 0)
     }
+
+    func testUncachedParseDoesNotReadOrPopulateSharedCache() {
+        SmoothMarkdownView.clearCache()
+        _ = MarkdownSyntax.parse("# Uncached reader fixture", useCache: false)
+        _ = MarkdownSyntax.parse("# Uncached reader fixture", useCache: false)
+        XCTAssertEqual(SmoothMarkdownView.cacheStatistics.size, 0)
+        XCTAssertEqual(SmoothMarkdownView.cacheStatistics.hits, 0)
+        XCTAssertEqual(SmoothMarkdownView.cacheStatistics.misses, 0)
+        _ = MarkdownSyntax.parse("# Uncached reader fixture")
+        XCTAssertEqual(SmoothMarkdownView.cacheStatistics.size, 1)
+        XCTAssertEqual(SmoothMarkdownView.cacheStatistics.misses, 1)
+    }
+
+    func testReaderSelectionAndCacheDefaultsMatchFlutter() {
+        let reader = SmoothMarkdownView(markdown: "# Default reader")
+        XCTAssertTrue(reader.enableCache)
+        XCTAssertFalse(reader.selectable)
+        XCTAssertTrue(reader.usesParseCache)
+        let explicit = SmoothMarkdownView(markdown: "# Selectable reader",
+                                          enableCache: false, selectable: true)
+        XCTAssertFalse(explicit.enableCache)
+        XCTAssertTrue(explicit.selectable)
+        XCTAssertFalse(explicit.usesParseCache)
+        let withPlugins = SmoothMarkdownView(markdown: "# Plugin reader", plugins: ParserPluginRegistry())
+        XCTAssertFalse(withPlugins.usesParseCache)
+    }
 }

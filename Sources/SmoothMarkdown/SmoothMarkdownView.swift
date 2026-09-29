@@ -28,6 +28,11 @@ public struct SmoothMarkdownView: View {
     public let onTextLongPress: ((@escaping () -> Void) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
+    /// Reuses parsed documents for repeated source when no parser plugins are installed.
+    /// Disable for rapidly changing content such as a live stream.
+    public let enableCache: Bool
+    /// Enables native text selection in the reader. Defaults to false, like Flutter.
+    public let selectable: Bool
     public let enableCrossBlockSelection: Bool
     /// Set to false when a host scroll view owns vertical scrolling, such as a chat list.
     public let scrollable: Bool
@@ -45,6 +50,8 @@ public struct SmoothMarkdownView: View {
         onTextLongPress: ((@escaping () -> Void) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
+        enableCache: Bool = true,
+        selectable: Bool = false,
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true
     ) {
@@ -60,6 +67,8 @@ public struct SmoothMarkdownView: View {
         self.onTextLongPress = onTextLongPress
         self.styleSheet = styleSheet
         self.plugins = plugins
+        self.enableCache = enableCache
+        self.selectable = selectable
         self.enableCrossBlockSelection = enableCrossBlockSelection
         self.scrollable = scrollable
     }
@@ -92,6 +101,13 @@ public struct SmoothMarkdownView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(styleSheet.contentPadding)
+    }
+
+    var usesParseCache: Bool { enableCache && plugins == nil }
+
+    private func parse(_ source: String) -> Document {
+        // Plugin registries may change behavior without changing the source key.
+        MarkdownSyntax.parse(source, useCache: usesParseCache)
     }
 
     private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {
@@ -136,34 +152,37 @@ public struct SmoothMarkdownView: View {
         switch section {
         case let .markdown(source):
             #if os(iOS)
-            ForEach(Array(ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+            ForEach(Array(ReaderSelectionGroup.group(Array(parse(source).children),
                                                       enableHTML: enableHTML, plugins: plugins,
-                                                      enabled: enableCrossBlockSelection && !voiceOverEnabled).enumerated()), id: \.offset) { _, group in
+                                                      enabled: enableCrossBlockSelection && !voiceOverEnabled &&
+                                                          (selectable || onTextLongPress != nil)).enumerated()), id: \.offset) { _, group in
                 switch group {
                 case let .selectable(nodes):
                     if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
                         ReaderSelectionTextView(document: document, styleSheet: styleSheet,
-                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
+                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                                selectable: selectable)
                     }
                 case let .individual(node):
                     if let onTextLongPress,
                        let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
                         ReaderSelectionTextView(document: document, styleSheet: styleSheet,
-                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
+                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                                selectable: selectable)
                     } else {
                         block(node)
                     }
                 }
             }
             #else
-            ForEach(Array(MarkdownSyntax.parse(source).children.enumerated()), id: \.offset) { _, node in block(node) }
+            ForEach(Array(parse(source).children.enumerated()), id: \.offset) { _, node in block(node) }
             #endif
         case let .block(latex): blockMath(latex)
         }
     }
 
     private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
-        let summary = MarkdownSyntax.parse(details.summary)
+        let summary = parse(details.summary)
         let summaryNode = summary.child(at: 0)
         let summaryLabel = summaryNode.map(plainText).flatMap { $0.isEmpty ? nil : $0 } ?? "Details"
         return DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
@@ -178,7 +197,7 @@ public struct SmoothMarkdownView: View {
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
         HStack(alignment: .top, spacing: 0) {
             SwiftUI.Text("[\(definition.label)]: ").bold().foregroundColor(styleSheet.footnoteColor ?? .blue)
-            if let content = MarkdownSyntax.parse(definition.content).child(at: 0) {
+            if let content = parse(definition.content).child(at: 0) {
                 inlineView(content).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -196,7 +215,7 @@ public struct SmoothMarkdownView: View {
                 .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
                 .multilineTextAlignment(alignment ?? .leading)
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
-                .textSelection(.enabled)
+                .textSelection(selectable ? .enabled : .disabled)
                 .accessibilityAddTraits(.isHeader)
         } else if let paragraph = node as? Paragraph {
             let meaningful = Array(paragraph.children).filter { child in
@@ -210,14 +229,16 @@ public struct SmoothMarkdownView: View {
                 imageView(image)
             } else {
                 inlineView(paragraph).font(styleSheet.paragraphFont ?? .body).multilineTextAlignment(alignment ?? .leading)
-                    .frame(maxWidth: .infinity, alignment: frameAlignment(alignment)).textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
+                    .textSelection(selectable ? .enabled : .disabled)
             }
         } else if let code = node as? CodeBlock {
             if let codeBuilder {
                 codeBuilder(code.code, code.language)
             } else {
                 EnhancedCodeBlockView(code: code.code, language: code.language,
-                                      options: codeBlockOptions, onCopy: onCodeCopy, styleSheet: styleSheet)
+                                      options: codeBlockOptions, onCopy: onCodeCopy,
+                                      styleSheet: styleSheet, selectable: selectable)
             }
         } else if let quote = node as? BlockQuote {
             blockquote {
@@ -236,7 +257,7 @@ public struct SmoothMarkdownView: View {
         } else if let html = node as? HTMLBlock {
             htmlBlock(html, alignment: alignment)
         } else {
-            SwiftUI.Text(plainText(node)).textSelection(.enabled)
+            SwiftUI.Text(plainText(node)).textSelection(selectable ? .enabled : .disabled)
         }
     }
 
@@ -250,7 +271,7 @@ public struct SmoothMarkdownView: View {
         if enableHTML, let image = SafeHTML.imageTag(html.rawHTML) {
             imageView(image)
         } else if enableHTML, let alt = SafeHTML.imageAlt(html.rawHTML) {
-            SwiftUI.Text(alt).textSelection(.enabled)
+            SwiftUI.Text(alt).textSelection(selectable ? .enabled : .disabled)
         } else if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
             switch parsed {
             case .rule:
@@ -264,25 +285,25 @@ public struct SmoothMarkdownView: View {
                 }
                 if name == "blockquote" {
                     blockquote {
-                        ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
+                        ForEach(Array(parse(content).children.enumerated()), id: \.offset) { _, child in
                             block(child, alignment: childAlignment)
                         }
                     }
                 } else {
                     VStack(alignment: .leading, spacing: styleSheet.quoteSpacing) {
-                        ForEach(Array(MarkdownSyntax.parse(content).children.enumerated()), id: \.offset) { _, child in
+                        ForEach(Array(parse(content).children.enumerated()), id: \.offset) { _, child in
                             block(child, alignment: childAlignment)
                         }
                     }
                 }
                 if !trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    ForEach(Array(MarkdownSyntax.parse(trailing).children.enumerated()), id: \.offset) { _, child in
+                    ForEach(Array(parse(trailing).children.enumerated()), id: \.offset) { _, child in
                         block(child, alignment: alignment)
                     }
                 }
             }
         } else {
-            SwiftUI.Text(html.rawHTML).textSelection(.enabled)
+            SwiftUI.Text(html.rawHTML).textSelection(selectable ? .enabled : .disabled)
         }
     }
 
@@ -345,7 +366,7 @@ public struct SmoothMarkdownView: View {
                                         .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
                                               : (styleSheet.tableCellFont ?? .body))
                                         .fontWeight(rowIndex == 0 ? .bold : .regular)
-                                        .textSelection(.enabled)
+                                        .textSelection(selectable ? .enabled : .disabled)
                                 } else {
                                     SwiftUI.Text("")
                                 }

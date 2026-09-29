@@ -9,6 +9,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
     let onTextLongPress: ((@escaping () -> Void) -> Void)?
+    let selectable: Bool
 
     func makeUIView(context: Context) -> QuoteTextView {
         let view = QuoteTextView()
@@ -16,12 +17,18 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         view.isEditable = false
         // Conversation bubbles own the first long press. Enabling UITextView's
         // selection at this point lets its private recognizers win first.
-        view.isSelectable = onTextLongPress == nil
+        view.isSelectable = selectable && onTextLongPress == nil
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.dataDetectorTypes = []
         view.delegate = context.coordinator
+        // UITextView requires isSelectable for its built-in link interaction.
+        // Keep links tappable when the reader itself is not selectable.
+        let linkTap = UITapGestureRecognizer(target: context.coordinator,
+                                             action: #selector(Coordinator.didTapLink(_:)))
+        linkTap.delegate = context.coordinator
+        view.addGestureRecognizer(linkTap)
         let longPress = UILongPressGestureRecognizer(target: context.coordinator,
                                                     action: #selector(Coordinator.didLongPress(_:)))
         longPress.minimumPressDuration = 0.35
@@ -39,9 +46,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             view.addInteraction(editMenu)
             context.coordinator.editMenu = editMenu
         }
-        view.accessibilityCustomActions = [UIAccessibilityCustomAction(
-            name: "Select all reader text", target: view, selector: #selector(QuoteTextView.selectAllReaderText)
-        )]
+        view.accessibilityCustomActions = selectionAccessibilityActions(for: view)
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
@@ -50,10 +55,12 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.onTextLongPress = onTextLongPress
         context.coordinator.longPress?.isEnabled = onTextLongPress != nil
+        if onTextLongPress == nil { view.isSelectable = selectable }
+        view.accessibilityCustomActions = selectionAccessibilityActions(for: view)
         let built = attributedContent()
         if !view.attributedText.isEqual(to: built.text) {
             view.attributedText = built.text
-            view.isSelectable = onTextLongPress == nil
+            view.isSelectable = selectable && onTextLongPress == nil
             view.invalidateIntrinsicContentSize()
         }
         let decoration = styleSheet.resolvedBlockquoteDecoration
@@ -74,7 +81,14 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         Coordinator(onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
     }
 
-    final class Coordinator: NSObject, UITextViewDelegate, UIEditMenuInteractionDelegate {
+    private func selectionAccessibilityActions(for view: QuoteTextView) -> [UIAccessibilityCustomAction] {
+        guard selectable || onTextLongPress != nil else { return [] }
+        return [UIAccessibilityCustomAction(
+            name: "Select all reader text", target: view, selector: #selector(QuoteTextView.selectAllReaderText)
+        )]
+    }
+
+    final class Coordinator: NSObject, UITextViewDelegate, UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
         var onLinkTap: ((URL) -> Void)?
         var onTextLongPress: ((@escaping () -> Void) -> Void)?
         weak var textView: QuoteTextView?
@@ -83,6 +97,34 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         init(onLinkTap: ((URL) -> Void)?, onTextLongPress: ((@escaping () -> Void) -> Void)?) {
             self.onLinkTap = onLinkTap
             self.onTextLongPress = onTextLongPress
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard let textView, !textView.isSelectable else { return false }
+            return link(at: touch.location(in: textView), in: textView) != nil
+        }
+
+        @objc func didTapLink(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, let textView,
+                  let url = link(at: recognizer.location(in: textView), in: textView) else { return }
+            if let onLinkTap { onLinkTap(url) }
+            else { UIApplication.shared.open(url) }
+        }
+
+        private func link(at point: CGPoint, in textView: UITextView) -> URL? {
+            guard textView.textStorage.length > 0 else { return nil }
+            let containerPoint = CGPoint(x: point.x - textView.textContainerInset.left + textView.contentOffset.x,
+                                         y: point.y - textView.textContainerInset.top + textView.contentOffset.y)
+            let manager = textView.layoutManager
+            let glyph = manager.glyphIndex(for: containerPoint, in: textView.textContainer)
+            guard glyph < manager.numberOfGlyphs,
+                  manager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1),
+                                       in: textView.textContainer).contains(containerPoint) else { return nil }
+            let character = manager.characterIndexForGlyph(at: glyph)
+            guard character < textView.textStorage.length,
+                  let url = textView.textStorage.attribute(.link, at: character, effectiveRange: nil) as? URL,
+                  MarkdownSyntax.isSafeLink(url) else { return nil }
+            return url
         }
 
         @objc func didLongPress(_ recognizer: UILongPressGestureRecognizer) {

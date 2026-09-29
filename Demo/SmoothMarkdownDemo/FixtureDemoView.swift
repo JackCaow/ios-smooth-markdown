@@ -81,7 +81,8 @@ struct FixtureDemoView: View {
             } else {
                 SmoothMarkdownView(markdown: showSelection ? selectionMarkdown :
                                    (showStructured ? structuredMarkdown : controller.text), enableHTML: enableHTML,
-                                   styleSheet: themes[themeIndex].1, plugins: plugins)
+                                   styleSheet: themes[themeIndex].1, plugins: plugins,
+                                   selectable: true)
             }
         }
         .onAppear {

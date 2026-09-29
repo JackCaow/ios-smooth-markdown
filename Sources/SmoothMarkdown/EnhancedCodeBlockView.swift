@@ -11,6 +11,7 @@ struct EnhancedCodeBlockView: View {
     let options: CodeBlockOptions
     let onCopy: ((String, String?) -> Void)?
     let styleSheet: MarkdownStyleSheet
+    let selectable: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
@@ -54,7 +55,7 @@ struct EnhancedCodeBlockView: View {
                     .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
                     .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
                     .fixedSize(horizontal: true, vertical: false)
-                    .textSelection(.enabled)
+                    .textSelection(selectable ? .enabled : .disabled)
                     .padding(styleSheet.resolvedCodeBlockPadding)
             }
         }

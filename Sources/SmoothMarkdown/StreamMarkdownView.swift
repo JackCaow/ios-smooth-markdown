@@ -61,7 +61,8 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                            onImageTapWithMetadata: onImageTapWithMetadata,
                            imageBuilder: imageBuilder,
                            enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
-                           onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins)
+                           onCodeCopy: onCodeCopy, styleSheet: styleSheet, plugins: plugins,
+                           enableCache: false)
             .task(id: StreamTaskIdentity(streamID: streamID, throttleMillis: throttleMillis)) {
                 accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
                 do {
