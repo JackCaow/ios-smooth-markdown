@@ -222,20 +222,21 @@ struct DemoHomeView: View {
                             .accessibilityIdentifier("demo-link-message")
                     }
                 }
-                .overlay(alignment: .bottomTrailing) {
-                    Button {
-                        showSource = true
-                    } label: {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 21, weight: .medium))
-                            .foregroundStyle(.white)
-                            .frame(width: 56, height: 56)
-                            .background(Color.blue, in: Circle())
-                            .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    HStack {
+                        Spacer()
+                        Button {
+                            showSource = true
+                        } label: {
+                            Label(DemoLocalizations.text("source", in: language),
+                                  systemImage: "chevron.left.forwardslash.chevron.right")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("view-markdown-source")
                     }
-                    .accessibilityLabel(DemoLocalizations.text("source", in: language))
-                    .accessibilityIdentifier("view-markdown-source")
-                    .padding(20)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial)
                 }
         }
     }
