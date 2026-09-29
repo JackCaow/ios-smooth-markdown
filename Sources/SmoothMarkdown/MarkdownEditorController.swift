@@ -625,6 +625,8 @@ public final class MarkdownEditorController: ObservableObject {
 
     /// Replaces rendered UTF-16 text in one or several adjacent prose rows as
     /// one undo step. The first row keeps its paragraph or heading style.
+    /// The replacement must render as the supplied single-line plain text;
+    /// multiline and structured Markdown paste belongs in Source mode.
     @discardableResult
     public func replaceVisibleTextRange(_ selection: MarkdownVisibleTextSelection,
                                         with replacement: String) -> Bool {
