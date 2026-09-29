@@ -486,11 +486,18 @@ final class QuoteTextView: UITextView {
                                                             effectiveRange: nil) as? UIFont else { return }
                 let baseline = lineRect.minY + self.layoutManager.location(forGlyphAt: segment.location).y
                 let height = glyphRect.height
-                let fontHeight = font.ascender - font.descender
-                let y = baseline - font.ascender - (height - fontHeight) / 2
-                UIRectFill(CGRect(x: self.textContainerInset.left + glyphRect.minX,
+                // Center the visible monospace letterforms inside the fill. Font line metrics
+                // include leading and descender space, which places the ink visibly low.
+                let inkHeight = (font.xHeight + font.capHeight) / 2
+                let y = baseline - inkHeight / 2 - height / 2
+                // TextKit's glyph bounds leave more space after this monospace run than before it.
+                // Balance those side bearings and retain a small inset on either side.
+                let horizontalPadding = font.pointSize * 0.10
+                let bearingOffset = font.pointSize * 0.08
+                UIRectFill(CGRect(x: self.textContainerInset.left + glyphRect.minX
+                                      - horizontalPadding - bearingOffset,
                                   y: self.textContainerInset.top + y,
-                                  width: glyphRect.width, height: height))
+                                  width: glyphRect.width + 2 * horizontalPadding, height: height))
             }
         }
     }
