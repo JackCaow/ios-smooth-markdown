@@ -1264,6 +1264,7 @@ private struct FormattedTableView: View {
     let blockID: String
     let table: MarkdownSourceTable
     @State private var selectedCells: MarkdownSemanticTableCellSelection?
+    @State private var keepSelectionAfterPaste = false
 
     private func isSelected(row: Int, column: Int) -> Bool {
         guard let selectedCells,
@@ -1303,6 +1304,15 @@ private struct FormattedTableView: View {
                             UIPasteboard.general.string = copied
                         }
                     }
+                    Button("Paste cells") {
+                        if let pasted = UIPasteboard.general.string {
+                            keepSelectionAfterPaste = true
+                            if !controller.pasteSemanticTableCells(pasted, into: selectedCells) {
+                                keepSelectionAfterPaste = false
+                            }
+                        }
+                    }
+                    .accessibilityIdentifier("table-range-paste")
                     Button("Clear cells", role: .destructive) {
                         if controller.clearSemanticTableCells(selectedCells) { self.selectedCells = nil }
                     }
@@ -1357,7 +1367,15 @@ private struct FormattedTableView: View {
                 .padding(editorTheme.tablePadding ?? EdgeInsets())
             }
         }
-        .onChange(of: controller.text) { _, _ in selectedCells = nil }
+        .onChange(of: controller.text) { _, _ in
+            if keepSelectionAfterPaste, let selectedCells,
+               controller.semanticTableCellRectangle(selectedCells) != nil {
+                keepSelectionAfterPaste = false
+            } else {
+                keepSelectionAfterPaste = false
+                selectedCells = nil
+            }
+        }
     }
 
     private func edit(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) {
@@ -1389,7 +1407,12 @@ private struct FormattedTableCell: View {
                                  identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
                                  isHeader: isHeader,
-                                 isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag)
+                                 isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag,
+                                 onGridPaste: { source in
+                                     controller.pasteTableCells(source, inTable: blockID,
+                                                                row: isHeader ? 0 : row + 1,
+                                                                column: column)
+                                 })
     }
 
     private var textBinding: Binding<String> {
@@ -1419,6 +1442,7 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let isHeader: Bool
     let isRangeSelected: Bool
     let onRangeDrag: (Int, Int, Int, Int) -> Void
+    let onGridPaste: (String) -> Bool
 
     func makeUIView(context: Context) -> FormattedRangeTextField {
         let field = FormattedRangeTextField()
@@ -1472,6 +1496,13 @@ private struct FormattedTableInputField: UIViewRepresentable {
         init(parent: FormattedTableInputField) { self.parent = parent }
 
         @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            guard textField.markedTextRange == nil,
+                  string.contains("\t") || string.contains("\n") || string.contains("\r") else { return true }
+            _ = parent.onGridPaste(string)
+            return false
+        }
         func textFieldDidBeginEditing(_ textField: UITextField) {
             if let field = textField as? FormattedRangeTextField { parent.configure(field) }
         }

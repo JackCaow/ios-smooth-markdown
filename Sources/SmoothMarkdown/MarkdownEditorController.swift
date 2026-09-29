@@ -365,6 +365,66 @@ public final class MarkdownEditorController: ObservableObject {
         }.joined(separator: "\n")
     }
 
+    /// Pastes a rectangular TSV selection into an existing table without
+    /// changing its shape or rewriting untouched source lines. Row zero is the
+    /// header. A mismatch rejects the entire paste.
+    @discardableResult
+    public func pasteSemanticTableCells(_ clipboard: String,
+                                        into selection: MarkdownSemanticTableCellSelection) -> Bool {
+        guard let (_, rows, columns) = resolvedTableCells(selection),
+              let grid = Self.tablePasteGrid(clipboard),
+              grid.count == rows.count, grid[0].count == columns.count else { return false }
+        return pasteTableGrid(grid, blockID: selection.blockID,
+                              startRow: rows.lowerBound, startColumn: columns.lowerBound)
+    }
+
+    /// Handles a multiline or tabular paste that starts in one focused cell.
+    /// Ordinary single-line text remains on the native UITextField path.
+    @discardableResult
+    public func pasteTableCells(_ clipboard: String, inTable blockID: String,
+                                row: Int, column: Int) -> Bool {
+        guard let grid = Self.tablePasteGrid(clipboard) else { return false }
+        return pasteTableGrid(grid, blockID: blockID, startRow: row, startColumn: column)
+    }
+
+    private static func tablePasteGrid(_ clipboard: String) -> [[String]]? {
+        guard clipboard.utf8.count <= 1_048_576,
+              clipboard.contains("\t") || clipboard.contains("\n") || clipboard.contains("\r") else { return nil }
+        let normalized = clipboard.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var lines = normalized.components(separatedBy: "\n")
+        if lines.last == "" { lines.removeLast() }
+        guard !lines.isEmpty, lines.count <= 1_000 else { return nil }
+        let grid = lines.map { $0.components(separatedBy: "\t") }
+        guard let width = grid.first?.count, width > 0,
+              lines.count > 1 || width > 1,
+              grid.allSatisfy({ $0.count == width }),
+              lines.count <= 1_000 / width else { return nil }
+        return grid
+    }
+
+    private func pasteTableGrid(_ grid: [[String]], blockID: String,
+                                startRow: Int, startColumn: Int) -> Bool {
+        guard let block = semanticDocument.blockById(blockID),
+              case let .table(table) = block.kind,
+              startRow >= 0, startColumn >= 0,
+              grid.count <= table.rows.count + 1 - startRow,
+              grid[0].count <= table.columnCount - startColumn else { return false }
+        let document = semanticDocument
+        guard let updated = document.updatingTable(blockID, preservingSource: true, { table in
+            var next = table
+            for (rowOffset, cells) in grid.enumerated() {
+                for (columnOffset, value) in cells.enumerated() {
+                    next = next.replacingCell(rowIndex: startRow + rowOffset - 1,
+                                              columnIndex: startColumn + columnOffset,
+                                              text: value, header: startRow + rowOffset == 0)
+                }
+            }
+            return next
+        })?.toMarkdown() else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     private func clearedTableCellsMarkdown(_ selection: MarkdownSemanticTableCellSelection) -> String? {
         guard let (_, rows, columns) = resolvedTableCells(selection) else { return nil }
         return semanticDocument.updatingTable(selection.blockID, preservingSource: true) { table in
