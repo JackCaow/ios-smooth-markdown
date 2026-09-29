@@ -112,6 +112,8 @@ public struct MarkdownStyleSheet {
     public var subscriptStyle: MarkdownInlineTextStyle?
     /// Text style for HTML `<sup>` content; defaults to 75% of body size.
     public var superscriptStyle: MarkdownInlineTextStyle?
+    /// Text inside HTML `<kbd>`; defaults to 13pt monospaced like Flutter.
+    public var kbdStyle: MarkdownInlineTextStyle?
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     /// Overrides the legacy quote colors and left border width when provided.
@@ -197,6 +199,7 @@ public struct MarkdownStyleSheet {
         inlineCodeStyle: MarkdownInlineTextStyle? = nil,
         subscriptStyle: MarkdownInlineTextStyle? = nil,
         superscriptStyle: MarkdownInlineTextStyle? = nil,
+        kbdStyle: MarkdownInlineTextStyle? = nil,
         tableBorder: MarkdownTableBorder? = nil
     ) {
         self.backgroundColor = backgroundColor
@@ -217,6 +220,7 @@ public struct MarkdownStyleSheet {
         self.inlineCodeStyle = inlineCodeStyle
         self.subscriptStyle = subscriptStyle
         self.superscriptStyle = superscriptStyle
+        self.kbdStyle = kbdStyle
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
         self.blockquoteDecoration = blockquoteDecoration

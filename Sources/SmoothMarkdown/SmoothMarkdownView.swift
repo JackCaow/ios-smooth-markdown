@@ -285,7 +285,7 @@ public struct SmoothMarkdownView: View {
            (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil || onCharacterTap != nil) {
             // Only use native offsets when the UIKit text and clipboard text
             // have identical projections. Visual anchors can differ.
-            let preciseTap = document.selectionText == document.copiedText ? onCharacterTap : nil
+            let preciseTap = document.canMapNativeOffsets ? onCharacterTap : nil
             return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                    onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
                                                    selectable: selectable, onCharacterTap: preciseTap))
@@ -708,6 +708,18 @@ public struct SmoothMarkdownView: View {
 
     private func inlineView(_ node: Markup) -> AnyView {
         let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins)
+        #if os(iOS)
+        if runs.contains(where: { run in
+            if case let .text(_, _, tags, _) = run { return tags.contains(where: { $0.name == "kbd" }) }
+            return false
+        }), let document = ReaderSelectionDocument.inline(node, enableHTML: enableHTML, plugins: plugins) {
+            // TextKit keeps the label, surrounding prose, wrapping, and selection
+            // in one native text range while drawing the keycap around its glyphs.
+            return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                                   onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                                   selectable: selectable, onCharacterTap: nil))
+        }
+        #endif
         let hasImage = runs.contains { if case .image = $0 { return true }; return false }
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }

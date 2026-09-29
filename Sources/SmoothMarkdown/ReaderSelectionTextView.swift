@@ -4,6 +4,8 @@ import UIKit
 
 private let codeSpaceAttribute = NSAttributedString.Key("SmoothMarkdownCodeSpace")
 private let inlineCodeBackgroundAttribute = NSAttributedString.Key("SmoothMarkdownInlineCodeBackground")
+private let keycapAttribute = NSAttributedString.Key("SmoothMarkdownKeycap")
+private let keycapPaddingAttribute = NSAttributedString.Key("SmoothMarkdownKeycapPadding")
 
 /// A single read-only UITextView gives adjacent Markdown blocks one native selection range.
 @available(iOS 17.0, *)
@@ -93,6 +95,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         view.ruleRegions = built.ruleRegions
         view.headingRegions = built.headingRegions
         view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.ruleThickness = styleSheet.horizontalRuleThickness
         view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
         view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
@@ -279,15 +282,17 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let heightFactor: CGFloat = headingLevel.map { $0 <= 2 ? 1.3 : 1.4 } ?? 1.5
             paragraph.minimumLineHeight = baseFont.pointSize * heightFactor
             paragraph.lineBreakStrategy = headingLevel == nil ? [] : .pushOut
-            for run in line.runs {
+            for (runIndex, run) in line.runs.enumerated() {
                 let inlineStyle = styleSheet.resolvedInlineStyle(
                     bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
                     link: run.style.link != nil, code: run.code)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
+                let keycapStyle = styleSheet.kbdStyle
                 let scaledFont = MarkdownTypography.font(textStyle: textStyle,
-                                                         weight: fontWeight, customSize: inlineStyle.fontSize,
+                                                         weight: fontWeight,
+                                                         customSize: run.keycap ? (keycapStyle?.fontSize ?? 13) : inlineStyle.fontSize,
                                                          traits: traits)
-                let font = inlineStyle.monospaced == true
+                let font = run.keycap || inlineStyle.monospaced == true
                     ? UIFont.monospacedSystemFont(ofSize: scaledFont.pointSize, weight: fontWeight)
                     : scaledFont
                 var attributes: [NSAttributedString.Key: Any] = [
@@ -321,12 +326,17 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 if let link = run.style.link {
                     attributes[.link] = link
                 }
+                if run.keycap {
+                    if let color = keycapStyle?.textColor { attributes[.foregroundColor] = UIColor(color) }
+                    // An integer keeps adjacent <kbd> elements as separate boxes.
+                    attributes[keycapAttribute] = output.length + runIndex
+                }
                 // Keep short inline code together when wrapping. NBSP has the
                 // same UTF-16 length as a space, so native selection offsets stay
                 // valid; the marker restores exact source text on Copy.
                 let codeText = NSMutableString(string: run.text)
                 var replacedSpaces: [Int] = []
-                if run.code {
+                if run.code || run.keycap {
                     for offset in 0..<codeText.length where codeText.character(at: offset) == 32 {
                         codeText.replaceCharacters(in: NSRange(location: offset, length: 1), with: "\u{00A0}")
                         replacedSpaces.append(offset)
@@ -337,7 +347,20 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     attributedRun.addAttribute(codeSpaceAttribute, value: true,
                                                range: NSRange(location: offset, length: 1))
                 }
-                output.append(attributedRun)
+                if run.keycap {
+                    let paddingFont = UIFont.systemFont(ofSize: 1)
+                    let padding: [NSAttributedString.Key: Any] = [
+                        .font: paddingFont, .foregroundColor: UIColor.clear,
+                        .paragraphStyle: paragraph, .kern: 4.5,
+                        keycapAttribute: output.length + runIndex,
+                        keycapPaddingAttribute: true,
+                    ]
+                    output.append(NSAttributedString(string: ReaderSelectionDocument.keycapPadding,
+                                                     attributes: padding))
+                    output.append(attributedRun)
+                    output.append(NSAttributedString(string: ReaderSelectionDocument.keycapPadding,
+                                                     attributes: padding))
+                } else { output.append(attributedRun) }
             }
             if line.kind == .rule {
                 ruleRegions.append(NSRange(location: start, length: output.length - start))
@@ -375,6 +398,7 @@ final class QuoteTextView: UITextView {
     var ruleRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
     var headingRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
     var ruleColor: UIColor = .secondaryLabel { didSet { setNeedsDisplay() } }
+    var keycapBorderColor: UIColor = .separator { didSet { setNeedsDisplay() } }
     var ruleThickness: CGFloat = 1 { didSet { setNeedsDisplay() } }
     var quoteBarColor: UIColor = .tintColor { didSet { setNeedsDisplay() } }
     var quoteBackgroundColor: UIColor? { didSet { setNeedsDisplay() } }
@@ -410,6 +434,7 @@ final class QuoteTextView: UITextView {
             .sorted { $0.location > $1.location }
         let selected = NSMutableString(string: (text.string as NSString).substring(with: range))
         var restoredCodeSpace = false
+        var paddingOffsets: [Int] = []
         for offset in 0..<range.length where selected.character(at: offset) == 160 {
             if text.attribute(codeSpaceAttribute, at: range.location + offset,
                               effectiveRange: nil) != nil {
@@ -417,9 +442,16 @@ final class QuoteTextView: UITextView {
                 restoredCodeSpace = true
             }
         }
-        guard restoredCodeSpace || !selectedRules.isEmpty else { return nil }
-        for rule in selectedRules {
-            selected.deleteCharacters(in: NSRange(location: rule.location - range.location, length: rule.length))
+        for offset in 0..<range.length where selected.character(at: offset) == 0x2007 {
+            if text.attribute(keycapPaddingAttribute, at: range.location + offset,
+                              effectiveRange: nil) != nil { paddingOffsets.append(offset) }
+        }
+        guard restoredCodeSpace || !selectedRules.isEmpty || !paddingOffsets.isEmpty else { return nil }
+        let deletions = selectedRules.map { NSRange(location: $0.location - range.location, length: $0.length) }
+            + paddingOffsets.map { NSRange(location: $0, length: 1) }
+        for deletion in deletions.sorted(by: { $0.location > $1.location }) {
+            // A thematic-break anchor and a keycap inset can never share a run.
+            selected.deleteCharacters(in: deletion)
         }
         return selected as String
     }
@@ -448,6 +480,7 @@ final class QuoteTextView: UITextView {
             }
         }
         drawInlineCodeBackgrounds()
+        drawKeycaps()
         if ruleThickness > 0 {
             ruleColor.setFill()
             for range in ruleRegions where range.location < textStorage.length {
@@ -498,6 +531,35 @@ final class QuoteTextView: UITextView {
                                       - horizontalPadding - bearingOffset,
                                   y: self.textContainerInset.top + y,
                                   width: glyphRect.width + 2 * horizontalPadding, height: height))
+            }
+        }
+    }
+
+    private func drawKeycaps() {
+        guard textStorage.length > 0 else { return }
+        textStorage.enumerateAttribute(keycapAttribute,
+                                       in: NSRange(location: 0, length: textStorage.length)) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { lineRect, _, _, lineGlyphs, _ in
+                let segment = NSIntersectionRange(glyphs, lineGlyphs)
+                guard segment.length > 0 else { return }
+                let glyphRect = self.layoutManager.boundingRect(forGlyphRange: segment, in: self.textContainer)
+                let character = min(range.location + 1, self.textStorage.length - 1)
+                guard let font = self.textStorage.attribute(.font, at: character,
+                                                            effectiveRange: nil) as? UIFont else { return }
+                let baseline = lineRect.minY + self.layoutManager.location(forGlyphAt: segment.location).y
+                let frame = CGRect(x: self.textContainerInset.left + glyphRect.minX,
+                                   y: self.textContainerInset.top + baseline - font.ascender - 1,
+                                   width: glyphRect.width,
+                                   height: font.ascender - font.descender + 2)
+                let path = UIBezierPath(roundedRect: frame, cornerRadius: 4)
+                self.keycapBorderColor.withAlphaComponent(0.12).setFill()
+                path.fill()
+                self.keycapBorderColor.setStroke()
+                path.lineWidth = 1
+                path.stroke()
             }
         }
     }
