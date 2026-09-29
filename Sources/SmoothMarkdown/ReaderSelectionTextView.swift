@@ -246,12 +246,16 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                 builder: ReaderTextSelectionMenuBuilder) -> UIMenu? {
             guard range.location >= 0, range.length > 0,
                   NSMaxRange(range) <= textView.textStorage.length else { return nil }
-            let selected = (textView as? ReaderDocumentSelectionTextView)?
-                .projection?.copiedText(in: range)
-                ?? QuoteTextView.transformedCopyText(in: textView.textStorage,
-                                                             ruleRegions: (textView as? QuoteTextView)?.ruleRegions ?? [],
-                                                             range: range)
-                ?? (textView.textStorage.string as NSString).substring(with: range)
+            let selected: String
+            if let projection = (textView as? ReaderDocumentSelectionTextView)?.projection {
+                guard let copied = projection.copiedText(in: range) else { return nil }
+                selected = copied
+            } else {
+                selected = QuoteTextView.transformedCopyText(in: textView.textStorage,
+                    ruleRegions: (textView as? QuoteTextView)?.ruleRegions ?? [], range: range)
+                    ?? (textView.textStorage.string as NSString).substring(with: range)
+            }
+            guard !selected.isEmpty else { return nil }
             return builder(selected, suggestedActions)
         }
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,

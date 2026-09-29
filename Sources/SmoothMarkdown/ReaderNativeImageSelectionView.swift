@@ -132,6 +132,7 @@ struct ReaderNativeImageSelectionContainer: View {
 @available(iOS 17.0, *)
 struct ReaderNativeImageSelectionView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderBlockRangeDocument
     let styleSheet: MarkdownStyleSheet
     let enableHTML: Bool
@@ -192,6 +193,7 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
 
     func updateUIView(_ view: ReaderNativeImageTextView, context: Context) {
         context.coordinator.onLinkTap = onLinkTap
+        context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
         configure(view, availableWidth: view.bounds.width > 0 ? view.bounds.width : nil)
         view.setImageOverlays(contents: imageContents)
     }
@@ -220,7 +222,19 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var onLinkTap: ((URL) -> Void)?
+        var textSelectionMenuBuilder: ReaderTextSelectionMenuBuilder?
         init(onLinkTap: ((URL) -> Void)?) { self.onLinkTap = onLinkTap }
+
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
+                      suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard let builder = textSelectionMenuBuilder,
+                  let imageTextView = textView as? ReaderNativeImageTextView,
+                  let selected = ReaderNativeImageTextView.selectedCopyText(
+                    in: imageTextView.attributedText, range: range,
+                    imageAnchorsUTF16: imageTextView.imageAnchorsUTF16),
+                  !selected.isEmpty else { return nil }
+            return builder(selected, suggestedActions)
+        }
 
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
