@@ -959,12 +959,13 @@ public final class MarkdownEditorController: ObservableObject {
         defer {
             transactionDepth -= 1
             if transactionDepth == 0 {
+                let changed = transactionBefore.map { $0.text != text } ?? false
                 if let before = transactionBefore, before.text != text {
                     pushUndo(before)
                     redoStack.removeAll()
-                    committedTextChanges.send(text)
                 }
                 transactionBefore = nil
+                if changed { committedTextChanges.send(text) }
             }
         }
         return try body()
