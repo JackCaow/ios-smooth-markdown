@@ -182,7 +182,8 @@ public struct SmoothMarkdownView: View {
             case let .bridge(items):
                 if let document = ReaderBlockRangeDocument(items, enableHTML: enableHTML, plugins: plugins) {
                     ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
-                                         spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
+                                         spacing: styleSheet.blockSpacing, startSelecting: false,
+                                         onSelectionFinished: nil) { segment, beginSelection, onCharacterTap in
                         if case let .displayMath(latex) = segment.kind { return AnyView(blockMath(latex)) }
                         return renderReaderBlockSegment(segment, beginSelection: beginSelection,
                                                         onCharacterTap: onCharacterTap)
@@ -230,10 +231,28 @@ public struct SmoothMarkdownView: View {
             }
         case let .blockBridge(nodes):
             if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
-                ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
-                                     spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
-                    renderReaderBlockSegment(segment, beginSelection: beginSelection,
-                                             onCharacterTap: onCharacterTap)
+                if selectable && onTextLongPress == nil && imageBuilder == nil,
+                   let imageSizes = ReaderNativeImageSelectionView.imageSizes(for: bridge,
+                                                                             enableHTML: enableHTML,
+                                                                             plugins: plugins) {
+                    let imageContents = bridge.segments.filter(\.isImage).compactMap { $0.nodes.first }
+                        .map { block($0) }
+                    ReaderNativeImageSelectionContainer(document: bridge, styleSheet: styleSheet,
+                                                        enableHTML: enableHTML, plugins: plugins,
+                                                        onLinkTap: onLinkTap,
+                                                        imageContents: imageContents,
+                                                        naturalImageSizes: imageSizes,
+                                                        spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
+                        renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                                 onCharacterTap: onCharacterTap)
+                    }
+                } else {
+                    ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
+                                         spacing: styleSheet.blockSpacing, startSelecting: false,
+                                         onSelectionFinished: nil) { segment, beginSelection, onCharacterTap in
+                        renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                                 onCharacterTap: onCharacterTap)
+                    }
                 }
             }
         case let .individual(node):

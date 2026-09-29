@@ -1,7 +1,10 @@
 # iOS Reader: native selection across an image
 
-Status: **not implemented**. This is a record of a failed isolated prototype. The
-production Reader still uses its explicit block range selection for images.
+Status: **draft implementation, physical acceptance pending**. The earlier
+native TextKit drag failed on the iPhone. A revised selection gesture and
+multi-image text projection now build and pass model tests, but the iPhone was
+unavailable before the new gesture could be run. Keep this branch as a Draft PR.
+The branch includes `main` at `7a19406` (including natural image sizing).
 
 ## Acceptance case
 
@@ -38,16 +41,27 @@ respond to taps, and offer its surrounding-content menu.
   `/Users/cver/Library/Logs/DiagnosticReports/SmoothMarkdownDemo-2026-09-29-190337.ips`.
   Using a plain `UITextView` removed that crash, but not the selection limit.
 
-## Next implementation direction
+## Revised draft and current gate
 
-Keep the image as an independently hosted SwiftUI view, but own the selection
-gesture across the complete text and image geometry. Map drag locations into
-the before/after UTF-16 offsets and update one `UITextView.selectedRange` while
-retaining UIKit's visible selection handles and Copy menu. Verify the system
-handle can be dragged again after the initial selection. Preserve image tap,
-context menu, Dynamic Type, links, and multiline layout. Cover bundled,
-remote, and custom image-builder content before making this the default path.
+- One TextKit selection surface now contains multiple bundled SVG/bitmap image
+  anchors and their surrounding paragraphs. Hosted SwiftUI image views retain
+  image taps and the "Select surrounding content" context menu.
+- Image slots use `NaturalImageLayout.resolvedSize` for the available width, so
+  tall or wide local images follow the Reader's natural-size behavior rather
+  than forcing a fixed 320-point cap.
+- A simultaneous long-press recognizer extends the native `selectedRange` when
+  the drag crosses any image anchor. Copy removes those anchors while retaining
+  adjacent text and inline-code space semantics.
+- `swift test` passed 232 tests (1 skipped). The three cross-platform
+  projection tests passed. Generic iOS `build-for-testing` compiled the Demo,
+  its UI tests, and the native-image XCTest source.
+- **Physical gate:** run `ReaderImageRangeUITests.testNativeDragSelectionCrossesBundledImage`
+  and `testNativeDragSelectionCrossesTwoBundledImages` on the iPhone 17. Save
+  screenshots of the selection handles and verify the system Copy menu puts
+  before/middle/after prose in the clipboard. Also drag a handle again after
+  selection and check image tap/context-menu behavior. The iPhone was
+  unavailable when this revision was prepared.
 
-Do not merge the current prototype source: its physical UI test fails the core
-copy requirement. The existing click-based range remains the safe production
-behavior until a replacement passes physical-device visual and clipboard tests.
+Remote images, custom image builders, non-prose neighbors, and image-only edge
+groups continue to use the existing explicit block range. Do not merge the
+native path before its physical drag, Copy, and visual checks pass.

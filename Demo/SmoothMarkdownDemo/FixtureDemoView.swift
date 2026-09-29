@@ -81,6 +81,15 @@ struct FixtureDemoView: View {
                 SmoothMarkdownView(markdown: "Before table.\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\nAfter table.",
                                    styleSheet: .light(), selectable: true)
             }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-multi-image-range-fixture") {
+            VStack(spacing: 0) {
+                Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("image-range-clipboard")
+                SmoothMarkdownView(markdown: "Before image.\n\n![Bundled vector](native-vector.svg)\n\nMiddle text.\n\n![Bundled vector](native-vector.svg)\n\nAfter image.",
+                                   onImageTapWithMetadata: { _, _, _ in imageTapCount += 1 },
+                                   styleSheet: .light(), selectable: true)
+            }
         } else if ProcessInfo.processInfo.arguments.contains("--reader-image-range-fixture") {
             VStack(spacing: 0) {
                 Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
