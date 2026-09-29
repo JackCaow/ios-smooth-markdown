@@ -1592,6 +1592,27 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Edits only the body of leading YAML frontmatter. Its delimiters and all
+    /// other blocks retain their exact source; an embedded closing marker is rejected.
+    @discardableResult
+    public func replaceFrontmatterContent(id: String, with content: String) -> Bool {
+        let document = semanticDocument
+        guard let first = document.blocks.first, first.id == id, case .raw = first.kind,
+              first.leadingTrivia.isEmpty,
+              let frontmatter = MarkdownSourceFrontmatter.parsePrefix(text),
+              first.source == frontmatter.source,
+              let replacementSource = frontmatter.replacingContent(content) else { return false }
+        let replacement = MarkdownDocumentBlock(id: id, kind: .raw, source: replacementSource)
+        let updated = document.replacingBlock(replacement).toMarkdown()
+        let reparsed = codec.parse(updated)
+        guard reparsed.blocks.count == document.blocks.count,
+              reparsed.trailingTrivia == document.trailingTrivia,
+              reparsed.blocks.first?.source == replacementSource,
+              zip(reparsed.blocks.dropFirst(), document.blocks.dropFirst()).allSatisfy({ pair in pair.0 == pair.1 })
+        else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     /// Updates a formatted code block's language as one source-backed undo step.
     /// Empty language selects plain text; unsupported characters are rejected.
     @discardableResult

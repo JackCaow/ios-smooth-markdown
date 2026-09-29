@@ -1042,6 +1042,13 @@ private struct FormattedBlockRow: View {
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
+            case .raw where block.id == controller.semanticDocument.blocks.first?.id &&
+                MarkdownSourceFrontmatter.parsePrefix(block.source)?.source == block.source:
+                blockLabel("Frontmatter")
+                if let frontmatter = MarkdownSourceFrontmatter.parsePrefix(block.source) {
+                    FrontmatterContentField(controller: controller, blockID: block.id,
+                                            content: frontmatter.content)
+                }
             case .raw where MarkdownSourceQuote(source: block.source) != nil:
                 FormattedQuoteView(controller: controller, blockID: block.id,
                                    quote: MarkdownSourceQuote(source: block.source)!,
@@ -1417,6 +1424,43 @@ private struct FormattedBlockRow: View {
             .padding(.vertical, editorTheme.blockHeaderColor == nil ? 0 : 3)
             .background(editorTheme.blockHeaderColor ?? .clear,
                         in: RoundedRectangle(cornerRadius: 4))
+    }
+}
+
+/// Keeps keyboard editing local to the field while each accepted change enters
+/// the editor's ordinary source undo history.
+private struct FrontmatterContentField: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let content: String
+    @State private var draft: String
+
+    init(controller: MarkdownEditorController, blockID: String, content: String) {
+        self.controller = controller
+        self.blockID = blockID
+        self.content = content
+        _draft = State(initialValue: content.replacingOccurrences(of: "\r\n", with: "\n"))
+    }
+
+    var body: some View {
+        TextEditor(text: $draft)
+            .font(.system(.body, design: .monospaced))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .frame(minHeight: 110)
+            .accessibilityLabel("Frontmatter content")
+            .accessibilityIdentifier("frontmatter-content-\(blockID)")
+            .onChange(of: draft) { _, value in
+                let canonical = content.replacingOccurrences(of: "\r\n", with: "\n")
+                guard value != canonical else { return }
+                if !controller.replaceFrontmatterContent(id: blockID, with: value) {
+                    draft = canonical
+                }
+            }
+            .onChange(of: content) { _, value in
+                let normalized = value.replacingOccurrences(of: "\r\n", with: "\n")
+                if draft != normalized { draft = normalized }
+            }
     }
 }
 
