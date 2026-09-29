@@ -24,6 +24,19 @@ private struct TestPluginBuilder: MarkdownWidgetBuilder {
     }
 }
 
+private struct TestExtensionBuilder: MarkdownWidgetBuilder {
+    var identity = ""
+    let accepts: (MarkdownExtensionNode) -> Bool
+    let render: (MarkdownExtensionNode, MarkdownRenderContext) -> AnyView
+
+    func canBuild(_ node: Markup) -> Bool { false }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView { AnyView(Text("unused")) }
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool { accepts(node) }
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView {
+        render(node, context)
+    }
+}
+
 @MainActor
 final class BuilderRegistryTests: XCTestCase {
     func testExactOverrideFallbackAndUnregisteredDefault() {
@@ -286,5 +299,100 @@ final class BuilderRegistryTests: XCTestCase {
         XCTAssertNotNil(renderer.nsImage)
         #endif
         XCTAssertTrue(rendered)
+    }
+
+    func testExtensionNodesUseExactKeyThenInsertionOrderFallback() {
+        let registry = BuilderRegistry()
+        let node = MarkdownExtensionNode.inlineMath("x+y")
+        let fallback = TestExtensionBuilder(identity: "fallback", accepts: { $0.type == "inline_math" },
+                                            render: { _, _ in AnyView(Text("fallback")) })
+        let rejecting = TestExtensionBuilder(identity: "rejecting", accepts: { _ in false },
+                                             render: { _, _ in AnyView(Text("unused")) })
+        let exact = TestExtensionBuilder(identity: "exact", accepts: { $0.type == "inline_math" },
+                                         render: { _, _ in AnyView(Text("exact")) })
+        registry.register("other", builder: fallback)
+        registry.register("inline_math", builder: rejecting)
+        XCTAssertEqual((registry.findBuilder(node) as? TestExtensionBuilder)?.identity, "fallback")
+        registry.register("inline_math", builder: exact)
+        XCTAssertEqual((registry.findBuilder(node) as? TestExtensionBuilder)?.identity, "exact")
+        XCTAssertNil(registry.findBuilder(.footnoteReference("n")))
+        registry.unregister("inline_math")
+        XCTAssertEqual((registry.findBuilder(node) as? TestExtensionBuilder)?.identity, "fallback")
+        XCTAssertEqual(node.source, "$x+y$")
+        XCTAssertEqual(node.content, "x+y")
+
+        let paragraph = MarkdownSyntax.parse("before").child(at: 0)!
+        let groups = ReaderMathSelectionGroup.group(
+            [.markup(paragraph), .displayMath("x+y"), .markup(paragraph)],
+            enableHTML: false, plugins: nil,
+            hasCustomDisplayMath: { $0 == "x+y" })
+        XCTAssertEqual(groups.count, 3, "A custom formula must have its own selection surface")
+        guard case .math("x+y") = groups[1] else { return XCTFail("Expected isolated formula") }
+    }
+
+    func testExtensionRenderHooksAndNestedRegistryPropagation() {
+        let registry = BuilderRegistry()
+        var received: [String] = []
+        for type in ["details", "footnote_definition", "footnote_reference", "inline_math", "block_math"] {
+            registry.register(type, builder: TestExtensionBuilder(
+                accepts: { $0.type == type }, render: { node, context in
+                    received.append(node.type)
+                    if node.type == "details" || node.type == "footnote_definition" {
+                        return AnyView(VStack {
+                            Text(node.attributes["summary"] ?? node.attributes["label"] ?? "")
+                            context.renderMarkdown?(node.content)
+                        })
+                    }
+                    return AnyView(Text(node.content))
+                }))
+        }
+        registry.register("bold", builder: TestBuilder(accepts: { $0 is Strong }, render: { _, _ in
+            received.append("nested bold")
+            return AnyView(Text("bold"))
+        }))
+        let source = "Before $x+y$ [^n]\n\n$$z$$\n\n[^n]: **note**\n\n<details>\n<summary>Expand</summary>\n**inside**\n</details>"
+        let paragraph = MarkdownSyntax.parse("Before $x+y$ [^n]").child(at: 0)!
+        let view = SmoothMarkdownView(markdown: source, builderRegistry: registry, selectable: true)
+        XCTAssertTrue(view.containsCustomBlockBuilder(paragraph),
+                      "Custom math and footnotes must leave native TextKit composition")
+        let renderer = ImageRenderer(content: view.frame(width: 420, height: 600))
+        #if canImport(UIKit)
+        XCTAssertNotNil(renderer.uiImage)
+        #else
+        XCTAssertNotNil(renderer.nsImage)
+        #endif
+        for type in ["details", "footnote_definition", "footnote_reference", "inline_math", "block_math", "nested bold"] {
+            XCTAssertTrue(received.contains(type), "Missing \(type) render hook")
+        }
+    }
+
+    func testHTMLStyleContentHooksWithoutConsumingStatefulTagTokens() {
+        let registry = BuilderRegistry()
+        var received: [String] = []
+        for type in ["underline", "highlight", "subscript", "superscript", "kbd", "styled_span"] {
+            registry.register(type, builder: TestExtensionBuilder(
+                accepts: { $0.type == type }, render: { node, _ in
+                    received.append("\(node.type):\(node.content)")
+                    return AnyView(Text(node.content))
+                }))
+        }
+        let source = "before <u>U</u> <mark>M</mark> <sub>S</sub> <sup>P</sup> <kbd>K</kbd> <span style=\"color:red\">C</span> after"
+        let paragraph = MarkdownSyntax.parse(source, enableHTML: true).child(at: 0)!
+        let view = SmoothMarkdownView(markdown: source, enableHTML: true,
+                                      builderRegistry: registry, selectable: true)
+        XCTAssertTrue(view.containsCustomBlockBuilder(paragraph))
+        let renderer = ImageRenderer(content: view.frame(width: 520, height: 180))
+        #if canImport(UIKit)
+        XCTAssertNotNil(renderer.uiImage)
+        #else
+        XCTAssertNotNil(renderer.nsImage)
+        #endif
+        for expected in ["underline:U", "highlight:M", "subscript:S", "superscript:P", "kbd:K", "styled_span:C"] {
+            XCTAssertTrue(received.contains(expected), "Missing \(expected) style hook")
+        }
+        let styled = MarkdownExtensionNode.htmlStyle(type: "styled_span", tag: "span", text: "C",
+                                                     attributes: ["style": "color:red"])
+        XCTAssertEqual(styled.attributes["style"], "color:red")
+        XCTAssertEqual(styled.attributes["tag"], "span")
     }
 }
