@@ -180,6 +180,17 @@ struct DemoAIChatView: View {
                         .onChange(of: scrollRevision) { _, _ in
                             reader.scrollTo("ai-chat-bottom", anchor: .bottom)
                         }
+                        .overlay {
+                            if messages.isEmpty {
+                                Text("发送消息，或点击右上角快捷提示词")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 24)
+                                    .allowsHitTesting(false)
+                                    .accessibilityIdentifier("ai-chat-empty-hint")
+                            }
+                        }
                     }
                     composer
                 }
