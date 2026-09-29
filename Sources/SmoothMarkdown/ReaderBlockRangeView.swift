@@ -3,10 +3,11 @@ import SwiftUI
 import UIKit
 
 /// Keeps SwiftUI non-text blocks in their original layout while exposing a
-/// block range that can cross them. Code uses its existing Copy button's menu
-/// so a context menu on the text does not steal character-selection gestures.
+/// block range that can cross them. Its manual Copy button and optional Actions
+/// menu use the same semantic range text without taking text gestures.
 @available(iOS 17.0, *)
 struct ReaderBlockRangeView: View {
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderBlockRangeDocument
     let enableHTML: Bool
     let plugins: ParserPluginRegistry?
@@ -44,6 +45,14 @@ struct ReaderBlockRangeView: View {
         guard let first = anchor.utf16, let last = focus.utf16, first != last else { return nil }
         return .init(blocks: anchor.block...anchor.block, startUTF16: min(first, last),
                      endUTF16: max(first, last))
+    }
+
+    private var selectedCopyText: String? {
+        guard let selection else { return nil }
+        return document.copiedText(in: selection.blocks,
+                                   startUTF16: selection.startUTF16,
+                                   endUTF16: selection.endUTF16,
+                                   enableHTML: enableHTML, plugins: plugins)
     }
 
     var body: some View {
@@ -100,17 +109,16 @@ struct ReaderBlockRangeView: View {
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Button("Copy") {
-                        if let selection,
-                           let copied = document.copiedText(in: selection.blocks,
-                                                            startUTF16: selection.startUTF16,
-                                                            endUTF16: selection.endUTF16,
-                                                            enableHTML: enableHTML, plugins: plugins) {
-                            UIPasteboard.general.string = copied
-                            reset()
-                        }
+                        copySelection()
                     }
-                    .disabled(selection == nil)
+                    .disabled(selectedCopyText == nil)
                     .accessibilityIdentifier("reader-image-range-copy")
+                    if let textSelectionMenuBuilder, let selectedCopyText, !selectedCopyText.isEmpty {
+                        ReaderSelectionActionsButton(selectedText: selectedCopyText,
+                                                     builder: textSelectionMenuBuilder,
+                                                     copy: copySelection,
+                                                     accessibilityIdentifier: "reader-range-actions")
+                    }
                     Button("Cancel") { reset() }
                         .accessibilityIdentifier("reader-image-range-cancel")
                 }
@@ -126,6 +134,12 @@ struct ReaderBlockRangeView: View {
     private func isSelected(_ index: Int) -> Bool {
         if let selection { return selection.blocks.contains(index) }
         return anchor?.block == index
+    }
+
+    private func copySelection() {
+        guard let selectedCopyText else { return }
+        UIPasteboard.general.string = selectedCopyText
+        reset()
     }
 
     private func selectEndpoint(_ endpoint: Endpoint) {

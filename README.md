@@ -15,7 +15,7 @@ SmoothMarkdownView(markdown: source, selectable: true)
     }
 ```
 
-The modifier also works on `StreamMarkdownView`. It receives the cleaned text that Copy would place on the clipboard and UIKit's suggested actions. It applies only to `UITextView` text surfaces; code, images, math, custom plugin views, and manual cross-block range controls have separate menus.
+The modifier also works on `StreamMarkdownView`. Native TextKit selection, including ranges across hosted code, images, and math, supplies the semantic text that Copy would place on the clipboard and UIKit's suggested actions. Image-only selections have no text action. Separate code, math, bundled plugin, and manual cross-block controls offer an Actions button that passes the complete block or chosen range text and a suggested Copy action to the same builder. Their existing Copy controls remain available. SwiftUI `Text` substring selection inside those separate views cannot expose its selection to this UIKit menu builder; custom plugin views keep their own controls.
 
 On iOS, pass a `SmoothSelectionController` to a selectable reader to select its complete native TextKit document from app controls:
 

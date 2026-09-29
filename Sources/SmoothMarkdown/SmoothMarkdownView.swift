@@ -26,6 +26,9 @@ public struct SmoothMarkdownView: View {
     public static func clearCache() { MarkdownParseCache.shared.clear() }
 
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    #if os(iOS)
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
+    #endif
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
@@ -304,7 +307,9 @@ public struct SmoothMarkdownView: View {
                                                      styleSheet: styleSheet, selectable: false,
                                                      onSelectSurroundingContent: nil))
             }
-            return AnyView(StandardCodeBlockView(code: code, styleSheet: styleSheet, selectable: false))
+            return AnyView(StandardCodeBlockView(code: code, language: language,
+                                                 styleSheet: styleSheet, selectable: false,
+                                                 onCopy: onCodeCopy))
         case let .table(source):
             guard let table = parse(source).child(at: 0) as? Markdown.Table else { return nil }
             return AnyView(tableView(table, selectable: false))
@@ -617,13 +622,20 @@ public struct SmoothMarkdownView: View {
     }
 
     private func standaloneBlockMath(_ latex: String) -> some View {
-        blockMath(latex)
-            .contextMenu {
-                Button("Copy formula") { UIPasteboard.general.string = latex }
+        VStack(alignment: .trailing, spacing: 0) {
+            blockMath(latex)
+                .contextMenu {
+                    Button("Copy formula") { UIPasteboard.general.string = latex }
+                }
+                .accessibilityAction(named: Text("Copy formula")) {
+                    UIPasteboard.general.string = latex
+                }
+            if selectable, let textSelectionMenuBuilder, !latex.isEmpty {
+                ReaderSelectionActionsButton(selectedText: latex, builder: textSelectionMenuBuilder,
+                                             copy: { UIPasteboard.general.string = latex },
+                                             accessibilityIdentifier: "reader-math-actions")
             }
-            .accessibilityAction(named: Text("Copy formula")) {
-                UIPasteboard.general.string = latex
-            }
+        }
     }
     #endif
 
@@ -730,7 +742,9 @@ public struct SmoothMarkdownView: View {
                                       styleSheet: styleSheet, selectable: selectable,
                                       onSelectSurroundingContent: onSelectSurroundingContent)
             } else {
-                StandardCodeBlockView(code: code.code, styleSheet: styleSheet, selectable: selectable)
+                StandardCodeBlockView(code: code.code, language: code.language,
+                                      styleSheet: styleSheet, selectable: selectable,
+                                      onCopy: onCodeCopy)
             }
         } else if let quote = node as? BlockQuote {
             blockquote(enhanced: useEnhancedComponents) {
@@ -1064,7 +1078,20 @@ public struct SmoothMarkdownView: View {
         guard MarkdownEnhancedComponents.usesBuiltInAICard(for: plugin.id, enabled: useEnhancedComponents) else {
             return AnyView(Text("Unknown node type: \(plugin.id)"))
         }
-        return plugin.render(match)
+        let rendered = plugin.render(match)
+        #if os(iOS)
+        if selectable, let textSelectionMenuBuilder,
+           let copyText = ReaderPluginSelectionText.copyText(pluginID: plugin.id, content: match.content) {
+            return AnyView(VStack(alignment: .trailing, spacing: 0) {
+                rendered
+                ReaderSelectionActionsButton(selectedText: copyText,
+                                             builder: textSelectionMenuBuilder,
+                                             copy: { UIPasteboard.general.string = copyText },
+                                             accessibilityIdentifier: "reader-plugin-actions")
+            })
+        }
+        #endif
+        return rendered
     }
 
     private struct InlineStyle {
