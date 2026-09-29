@@ -57,6 +57,11 @@ struct EnhancedCodeBlockView: View {
                     .markdownTextSelection(selectable)
                     .padding(styleSheet.resolvedCodeBlockPadding)
             }
+            // A long, unwrapped code line must stay inside this viewport while
+            // the user scrolls it. Text selection can otherwise draw beyond the
+            // horizontal ScrollView's visible bounds on iOS.
+            .frame(maxWidth: .infinity)
+            .clipped()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
@@ -68,6 +73,7 @@ struct EnhancedCodeBlockView: View {
                         .strokeBorder(decoration.borderColor ?? .clear, lineWidth: decoration.borderWidth)
                 }
         }
+        .clipShape(RoundedRectangle(cornerRadius: styleSheet.resolvedCodeBlockDecoration.cornerRadius))
         .onDisappear { resetTask?.cancel() }
     }
 
