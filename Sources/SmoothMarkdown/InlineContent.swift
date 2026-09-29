@@ -30,6 +30,22 @@ enum InlineContent {
         enableHTML: Bool, plugins: ParserPluginRegistry?, to result: inout [Run]
     ) {
         for child in node.children {
+            // Flutter treats the body of an HTML <code> tag as one verbatim inline
+            // span. swift-markdown has already parsed markers such as **bold**
+            // into child nodes, so reconstruct their Markdown spelling here.
+            if enableHTML, tags.contains(where: { $0.name == "code" }) {
+                if let html = child as? InlineHTML,
+                   let tag = SafeHTML.lexTag(html.rawHTML), tag.name == "code",
+                   tag.isClosing, tag.end == (html.rawHTML as NSString).length {
+                    if let match = tags.lastIndex(where: { $0.name == "code" }) {
+                        tags.removeSubrange(match...)
+                    }
+                } else {
+                    let raw = (child as? Markdown.Text)?.string ?? child.format()
+                    result.append(.text(raw, style, tags, code: true))
+                }
+                continue
+            }
             if let html = child as? InlineHTML {
                 if enableHTML, let tag = SafeHTML.lexTag(html.rawHTML),
                    tag.end == (html.rawHTML as NSString).length {
