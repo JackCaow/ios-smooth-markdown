@@ -38,6 +38,25 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["demo-current-title"].label, "Complex Example")
     }
 
+    func testSourceSheetClosesBeforeChangingThemeAndOpeningEditor() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("language-en", in: app)
+        app.buttons["view-markdown-source"].tap()
+        XCTAssertTrue(app.navigationBars["Markdown Source"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["markdown-source-content"].label.contains("# Basic Text Formatting"))
+        let sourceScreenshot = XCTAttachment(screenshot: app.screenshot())
+        sourceScreenshot.name = "Markdown Source Sheet"
+        sourceScreenshot.lifetime = .keepAlways
+        add(sourceScreenshot)
+        app.buttons["Close"].tap()
+        choose("example-complex-example", in: app)
+        app.buttons["theme-menu"].tap()
+        app.buttons["VS Code Dark"].tap()
+        app.buttons["open-demo-editor"].tap()
+        XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
+    }
+
     func testDrawerEditorEntryOpensEditor() {
         let app = XCUIApplication()
         app.launch()
