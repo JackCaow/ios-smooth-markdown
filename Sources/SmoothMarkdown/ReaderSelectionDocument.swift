@@ -13,6 +13,8 @@ struct ReaderSelectionDocument {
         let style: InlineContent.Style
         let code: Bool
         var keycap = false
+        var htmlUnderline = false
+        var highlighted = false
     }
 
     struct Line: Equatable {
@@ -170,14 +172,15 @@ struct ReaderSelectionDocument {
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
             case let .text(value, style, tags, code):
-                // Other HTML elements still use SwiftUI until TextKit can reproduce
-                // their styles. A keycap has its own native decoration and copy path.
-                guard tags.allSatisfy({ $0.name == "kbd" }), !code else {
-                    if tags.isEmpty { output.append(.init(text: value, style: style, code: code)); continue }
-                    return nil
+                if tags.contains(where: { $0.name == "kbd" }) {
+                    guard tags.allSatisfy({ $0.name == "kbd" }), !code else { return nil }
+                    output.append(.init(text: value, style: style, code: false, keycap: true))
+                } else {
+                    guard tags.allSatisfy({ ["u", "ins", "mark"].contains($0.name) }) else { return nil }
+                    output.append(.init(text: value, style: style, code: code,
+                                        htmlUnderline: tags.contains { $0.name == "u" || $0.name == "ins" },
+                                        highlighted: tags.contains { $0.name == "mark" }))
                 }
-                output.append(.init(text: value, style: style, code: false,
-                                    keycap: !tags.isEmpty))
             case .image, .footnote, .math, .plugin: return nil
             }
         }

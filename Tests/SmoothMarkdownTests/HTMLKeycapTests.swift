@@ -20,7 +20,7 @@ final class HTMLKeycapTests: XCTestCase {
     }
 
     func testUnsupportedHTMLDoesNotEnterNativeKeycapPath() {
-        let paragraph = MarkdownSyntax.parse("<kbd>Ctrl</kbd> <mark>highlight</mark>", enableHTML: true).child(at: 0)!
+        let paragraph = MarkdownSyntax.parse("<kbd>Ctrl</kbd> <span style=\"color:red\">highlight</span>", enableHTML: true).child(at: 0)!
         XCTAssertNil(ReaderSelectionDocument.inline(paragraph, enableHTML: true, plugins: nil))
         let splitKeycap = MarkdownSyntax.parse("<kbd>Ctrl **C**</kbd>", enableHTML: true).child(at: 0)!
         XCTAssertNil(ReaderSelectionDocument.inline(splitKeycap, enableHTML: true, plugins: nil))

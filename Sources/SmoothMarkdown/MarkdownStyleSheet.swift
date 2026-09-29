@@ -114,6 +114,10 @@ public struct MarkdownStyleSheet {
     public var superscriptStyle: MarkdownInlineTextStyle?
     /// Text inside HTML `<kbd>`; defaults to 13pt monospaced like Flutter.
     public var kbdStyle: MarkdownInlineTextStyle?
+    /// HTML `<u>` and `<ins>` decoration, independent of Markdown links.
+    public var underlineStyle: MarkdownInlineTextStyle?
+    /// HTML `<mark>` foreground and background. Explicit values override `highlightColor`.
+    public var highlightStyle: MarkdownInlineTextStyle?
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     /// Overrides the legacy quote colors and left border width when provided.
@@ -200,7 +204,9 @@ public struct MarkdownStyleSheet {
         subscriptStyle: MarkdownInlineTextStyle? = nil,
         superscriptStyle: MarkdownInlineTextStyle? = nil,
         kbdStyle: MarkdownInlineTextStyle? = nil,
-        tableBorder: MarkdownTableBorder? = nil
+        tableBorder: MarkdownTableBorder? = nil,
+        underlineStyle: MarkdownInlineTextStyle? = nil,
+        highlightStyle: MarkdownInlineTextStyle? = nil
     ) {
         self.backgroundColor = backgroundColor
         self.textColor = textColor
@@ -221,6 +227,8 @@ public struct MarkdownStyleSheet {
         self.subscriptStyle = subscriptStyle
         self.superscriptStyle = superscriptStyle
         self.kbdStyle = kbdStyle
+        self.underlineStyle = underlineStyle
+        self.highlightStyle = highlightStyle
         self.quoteBarColor = quoteBarColor
         self.quoteBackground = quoteBackground
         self.blockquoteDecoration = blockquoteDecoration
@@ -264,12 +272,15 @@ public struct MarkdownStyleSheet {
              tableBorderColor: rgb(0xE0E0E0),
              tableHeaderBackgroundColor: rgb(0xEEEEEE),
              ruleColor: rgb(0xBDBDBD), footnoteColor: rgb(0x1976D2),
+             highlightColor: rgb(0xFFF176),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: false,
              codeBlockDecoration: .init(borderColor: rgb(0xE0E0E0), borderWidth: 1, cornerRadius: 4),
              inlineCodeStyle: .init(fontSize: 14),
              subscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale),
-             superscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale))
+             superscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale),
+             underlineStyle: .init(underline: true),
+             highlightStyle: .init(textColor: rgb(0x212121)))
     }
 
     public static func dark() -> Self {
@@ -280,12 +291,14 @@ public struct MarkdownStyleSheet {
              tableBorderColor: rgb(0x616161),
              tableHeaderBackgroundColor: rgb(0x303030),
              ruleColor: rgb(0x616161), footnoteColor: rgb(0x64B5F6),
+             highlightColor: rgb(0x4D4400),
              headingFonts: defaultHeadingFonts, paragraphFont: .body,
              blockSpacing: 16, listIndent: 24, darkCodeHighlighting: true,
              codeBlockDecoration: .init(borderColor: rgb(0x616161), borderWidth: 1, cornerRadius: 4),
              inlineCodeStyle: .init(fontSize: 14),
              subscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale),
-             superscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale))
+             superscriptStyle: .init(fontSize: MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale),
+             underlineStyle: .init(underline: true))
     }
 
     public static func github(dark: Bool = false) -> Self {
@@ -371,6 +384,23 @@ public struct MarkdownStyleSheet {
         if let script {
             result.fontSize = MarkdownHTMLScript.bodyPointSize * MarkdownHTMLScript.fontScale
             result.apply(script == .sub ? subscriptStyle : superscriptStyle)
+        }
+        return result
+    }
+
+    /// HTML marks layer on top of the surrounding Markdown style. The older
+    /// `highlightColor` remains the background fallback when no explicit
+    /// `highlightStyle.backgroundColor` was supplied.
+    internal func resolvedHTMLStyle(_ base: MarkdownInlineTextStyle,
+                                    underline: Bool, highlight: Bool) -> MarkdownInlineTextStyle {
+        var result = base
+        if underline {
+            result.apply(.init(underline: true))
+            result.apply(underlineStyle)
+        }
+        if highlight {
+            result.apply(.init(backgroundColor: highlightColor ?? Self.rgb(0xFFF176)))
+            result.apply(highlightStyle)
         }
         return result
     }

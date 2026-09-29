@@ -818,6 +818,7 @@ public struct SmoothMarkdownView: View {
         var italic = style.italic
         var strike = style.strike
         var htmlUnderline = false
+        var htmlHighlight = false
         var htmlCode = false
         let script = enableHTML ? MarkdownHTMLScript.active(in: tags) : nil
         var htmlForeground: Color?
@@ -831,7 +832,7 @@ public struct SmoothMarkdownView: View {
                 case "i", "em": italic = true
                 case "s", "del", "strike": strike = true
                 case "u", "ins": htmlUnderline = true
-                case "mark": htmlBackground = styleSheet.highlightColor ?? .yellow.opacity(0.4)
+                case "mark": htmlHighlight = true
                 case "code", "kbd":
                     htmlCode = true
                 case "a":
@@ -847,9 +848,11 @@ public struct SmoothMarkdownView: View {
                 }
             }
         }
-        let inlineStyle = styleSheet.resolvedInlineStyle(bold: bold, italic: italic, strike: strike,
-                                                         link: link != nil, code: code || htmlCode,
-                                                         script: script)
+        let inlineStyle = styleSheet.resolvedHTMLStyle(
+            styleSheet.resolvedInlineStyle(bold: bold, italic: italic, strike: strike,
+                                           link: link != nil, code: code || htmlCode,
+                                           script: script),
+            underline: htmlUnderline, highlight: htmlHighlight)
         var attributed = AttributedString(value)
         if let background = htmlBackground ?? inlineStyle.backgroundColor { attributed.backgroundColor = background }
         if let link { attributed.link = link }
@@ -863,7 +866,7 @@ public struct SmoothMarkdownView: View {
         if inlineStyle.bold == true { result = result.bold() }
         if inlineStyle.italic == true { result = result.italic() }
         if inlineStyle.strikethrough == true { result = result.strikethrough() }
-        if htmlUnderline || inlineStyle.underline == true { result = result.underline() }
+        if inlineStyle.underline == true { result = result.underline() }
         if let script { result = result.baselineOffset(script.baselineOffset(scale: inlineFontScale)) }
         if let foreground = htmlForeground ?? inlineStyle.textColor { result = result.foregroundColor(foreground) }
         return result
