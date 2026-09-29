@@ -33,6 +33,8 @@ public struct SmoothMarkdownView: View {
     public let onTextLongPress: ((@escaping () -> Void) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
+    /// Overrides parsed block nodes by type or `canBuild`, while other nodes use native rendering.
+    public let builderRegistry: BuilderRegistry?
     /// Reuses parsed documents for repeated source when no parser plugins are installed.
     /// Disable for rapidly changing content such as a live stream.
     public let enableCache: Bool
@@ -55,6 +57,7 @@ public struct SmoothMarkdownView: View {
         onTextLongPress: ((@escaping () -> Void) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
+        builderRegistry: BuilderRegistry? = nil,
         enableCache: Bool = true,
         selectable: Bool = false,
         enableCrossBlockSelection: Bool = true,
@@ -72,6 +75,7 @@ public struct SmoothMarkdownView: View {
         self.onTextLongPress = onTextLongPress
         self.styleSheet = styleSheet
         self.plugins = plugins
+        self.builderRegistry = builderRegistry
         self.enableCache = enableCache
         self.selectable = selectable
         self.enableCrossBlockSelection = enableCrossBlockSelection
@@ -119,6 +123,19 @@ public struct SmoothMarkdownView: View {
                        onSelectSurroundingContent: (() -> Void)? = nil) -> AnyView {
         AnyView(blockContent(node, alignment: alignment,
                              onSelectSurroundingContent: onSelectSurroundingContent))
+    }
+
+    private func hasCustomBuilder(_ node: Markup) -> Bool {
+        builderRegistry?.findBuilder(node) != nil
+    }
+
+    func containsCustomBlockBuilder(_ node: Markup) -> Bool {
+        guard builderRegistry != nil else { return false }
+        if hasCustomBuilder(node) { return true }
+        guard node is BlockQuote || node is OrderedList || node is UnorderedList || node is Markdown.ListItem else {
+            return false
+        }
+        return node.children.contains(where: containsCustomBlockBuilder)
     }
 
     @ViewBuilder
@@ -175,7 +192,8 @@ public struct SmoothMarkdownView: View {
         }
         ForEach(Array(ReaderMathSelectionGroup.group(items, enableHTML: enableHTML,
                                                      plugins: plugins,
-                                                     allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton).enumerated()), id: \.offset) { _, group in
+                                                     allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton,
+                                                     hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { _, group in
             switch group {
             case let .legacy(legacy): readerGroup(legacy)
             case let .math(latex): standaloneBlockMath(latex)
@@ -204,7 +222,8 @@ public struct SmoothMarkdownView: View {
                                                       enableHTML: enableHTML, plugins: plugins,
                                                       enabled: enableCrossBlockSelection && !voiceOverEnabled &&
                                                           (selectable || onTextLongPress != nil),
-                                                      allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton).enumerated()), id: \.offset) { _, group in
+                                                      allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton,
+                                                      hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { _, group in
                 readerGroup(group)
             }
             #else
@@ -261,7 +280,9 @@ public struct SmoothMarkdownView: View {
                 }
             }
         case let .individual(node):
-            if let onTextLongPress,
+            if containsCustomBlockBuilder(node) {
+                block(node)
+            } else if let onTextLongPress,
                let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
                 ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                         onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
@@ -331,7 +352,11 @@ public struct SmoothMarkdownView: View {
     @ViewBuilder
     private func blockContent(_ node: Markup, alignment: TextAlignment? = nil,
                               onSelectSurroundingContent: (() -> Void)? = nil) -> some View {
-        if let heading = node as? Heading {
+        if let builder = builderRegistry?.findBuilder(node) {
+            builder.build(node, context: MarkdownRenderContext(styleSheet: styleSheet,
+                                                               selectable: selectable,
+                                                               renderBlock: { child in block(child, alignment: alignment) }))
+        } else if let heading = node as? Heading {
             let decorated = heading.level <= 2
             let primary = Color.accentColor
             VStack(alignment: .leading, spacing: 0) {
@@ -497,17 +522,21 @@ public struct SmoothMarkdownView: View {
         VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
             ForEach(Array(node.children.enumerated()), id: \.offset) { index, child in
                 if let item = child as? Markdown.ListItem {
-                    HStack(alignment: .top, spacing: 8) {
-                        SwiftUI.Text(listMarker(item, index: index, start: start))
-                            .font(styleSheet.listBulletFont)
-                            .foregroundColor(styleSheet.listBulletColor)
-                            .frame(width: styleSheet.listIndent, alignment: .leading)
-                        VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
-                            ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
-                                block(blockNode)
+                    if hasCustomBuilder(item) {
+                        block(item)
+                    } else {
+                        HStack(alignment: .top, spacing: 8) {
+                            SwiftUI.Text(listMarker(item, index: index, start: start))
+                                .font(styleSheet.listBulletFont)
+                                .foregroundColor(styleSheet.listBulletColor)
+                                .frame(width: styleSheet.listIndent, alignment: .leading)
+                            VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
+                                ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
+                                    block(blockNode)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }

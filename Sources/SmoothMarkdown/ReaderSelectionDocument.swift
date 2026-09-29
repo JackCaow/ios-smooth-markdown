@@ -353,7 +353,8 @@ enum ReaderMathSelectionGroup {
     case bridge([ReaderBlockRangeDocument.Item])
 
     static func group(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
-                      plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false) -> [ReaderMathSelectionGroup] {
+                      plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false,
+                      hasCustomBuilder: (Markup) -> Bool = { _ in false }) -> [ReaderMathSelectionGroup] {
         var output: [ReaderMathSelectionGroup] = []
         var pending: [ReaderBlockRangeDocument.Item] = []
         func flush() {
@@ -373,7 +374,8 @@ enum ReaderMathSelectionGroup {
                 }
                 output.append(contentsOf: ReaderSelectionGroup.group(nodes, enableHTML: enableHTML,
                                                                       plugins: plugins,
-                                                                      allowCodeBlocks: allowCodeBlocks).map(Self.legacy))
+                                                                      allowCodeBlocks: allowCodeBlocks,
+                                                                      hasCustomBuilder: hasCustomBuilder).map(Self.legacy))
             }
             pending.removeAll()
         }
@@ -382,6 +384,11 @@ enum ReaderMathSelectionGroup {
             case .displayMath:
                 pending.append(item)
             case let .markup(node):
+                if hasCustomBuilder(node) {
+                    flush()
+                    output.append(.legacy(.individual(node)))
+                    continue
+                }
                 if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                     ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) ||
                     (allowCodeBlocks && node is Markdown.CodeBlock) ||
@@ -421,7 +428,8 @@ enum ReaderSelectionGroup {
     }
 
     static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?,
-                      enabled: Bool = true, allowCodeBlocks: Bool = false) -> [ReaderSelectionGroup] {
+                      enabled: Bool = true, allowCodeBlocks: Bool = false,
+                      hasCustomBuilder: (Markup) -> Bool = { _ in false }) -> [ReaderSelectionGroup] {
         guard enabled else { return nodes.map(ReaderSelectionGroup.individual) }
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
@@ -445,6 +453,11 @@ enum ReaderSelectionGroup {
             pending.removeAll()
         }
         for node in nodes {
+            if hasCustomBuilder(node) {
+                flush()
+                result.append(.individual(node))
+                continue
+            }
             if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                 isStandaloneImage(node, enableHTML: enableHTML) ||
                 (allowCodeBlocks && node is Markdown.CodeBlock) ||
