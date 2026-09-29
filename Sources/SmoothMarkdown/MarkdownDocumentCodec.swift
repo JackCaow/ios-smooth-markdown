@@ -61,8 +61,20 @@ public struct MarkdownDocumentCodec {
                 index += 1
             case .list:
                 index += 1
-                while index < lines.count && !lines[index].isBlank &&
-                    !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
+                while index < lines.count {
+                    if lines[index].isBlank {
+                        var next = index
+                        while next < lines.count && lines[next].isBlank { next += 1 }
+                        guard next < lines.count,
+                              !isDefiniteBreak(lines[next].text, at: next, lines: lines, pluginLines: pluginLines),
+                              MarkdownSourceList.parse(lines[start...next].map(\.raw).joined()) != nil
+                        else { break }
+                        index = next + 1
+                        continue
+                    }
+                    if isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { break }
+                    index += 1
+                }
                 let source = lines[start..<index].map(\.raw).joined()
                 kind = MarkdownSourceList.parse(source).map(MarkdownSemanticBlock.list) ?? .raw
             case .raw:

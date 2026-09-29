@@ -824,6 +824,32 @@ public final class MarkdownEditorController: ObservableObject {
         return (edit.focusIndex, edit.focusContinuationIndex, edit.focusOffset)
     }
 
+    /// A visible fallback for structured paste the formatted list model cannot
+    /// represent. The exact clipboard text replaces only the current row's
+    /// selected source range, then Source mode exposes the result for editing.
+    @discardableResult
+    func pasteListLineVerbatimInSource(id: String, index: Int, continuationIndex: Int? = nil,
+                                      trailingIndex: Int? = nil, range: NSRange,
+                                      markdown: String, displayedText: String) -> Bool {
+        guard !markdown.isEmpty, mode == .formatted else { return false }
+        let document = semanticDocument
+        guard let block = document.blockById(id), case let .list(list) = block.kind,
+              let blockRange = document.sourceRange(of: id),
+              let line = list.sourceLine(at: index, continuationIndex: continuationIndex,
+                                         trailingIndex: trailingIndex),
+              line.content == displayedText,
+              range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= (line.content as NSString).length else { return false }
+        let absolute = NSRange(location: blockRange.location + line.offset + range.location,
+                               length: range.length)
+        guard isValidSourceRange(absolute),
+              (text as NSString).substring(with: absolute) ==
+                (line.content as NSString).substring(with: range) else { return false }
+        replaceRange(absolute, with: markdown)
+        mode = .source
+        return true
+    }
+
     /// Return outdents an empty nested item, exits an empty root item, or adds a sibling.
     @discardableResult
     func submitSemanticListItem(id: String, at index: Int, contentOffset: Int? = nil) -> Bool {
@@ -841,7 +867,7 @@ public final class MarkdownEditorController: ObservableObject {
         if item.content.isEmpty && item.continuations.isEmpty && !list.hasNestedItems(at: index),
            !list.isNestedItem(at: index) {
             guard let blockRange = document.sourceRange(of: id) else { return false }
-            let itemOffset = list.items[..<index].reduce(0) { $0 + ($1.source as NSString).length }
+            guard let itemOffset = list.sourceOffset(ofItemAt: index) else { return false }
             let itemRange = NSRange(location: blockRange.location + itemOffset,
                                     length: (item.source as NSString).length)
             let newline = text.contains("\r\n") ? "\r\n" : "\n"

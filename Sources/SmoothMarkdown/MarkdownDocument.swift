@@ -32,10 +32,7 @@ public struct MarkdownDocumentBlock: Equatable, Identifiable {
         case let .paragraph(markdown), let .heading(_, markdown): markdown
         case let .fencedCode(_, _, code): code
         case let .table(table): table.toMarkdown()
-        case let .list(list):
-            list.items.map { item in
-                ([item.content] + item.continuations.map(\.content)).joined(separator: "\n")
-            }.joined(separator: "\n")
+        case let .list(list): list.plainText
         case .horizontalRule: ""
         case let .plugin(_, match): match.content
         case .raw: source

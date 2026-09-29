@@ -5,6 +5,38 @@ import UIKit
 #endif
 
 final class SourceListEditorTests: XCTestCase {
+    @MainActor
+    func testParentContinuationAfterChildrenStaysEditableAndRoundTrips() {
+        let source = "- Before \r\n  - child A\r\n  - child B\r\n\r\n   after\r\n- Keep"
+        let controller = MarkdownEditorController(text: source)
+        guard case let .list(list) = controller.semanticDocument.blocks[0].kind else {
+            return XCTFail("Loose parent paragraph must remain an editable list")
+        }
+        XCTAssertEqual(controller.semanticDocument.toMarkdown(), source)
+        XCTAssertEqual(list.items.count, 4)
+        XCTAssertEqual(list.items[0].trailingContinuations.map(\.content), ["after"])
+        XCTAssertEqual(list.items[0].trailingContinuations[0].leadingTrivia, "\r\n")
+        XCTAssertEqual(list.trailingOwners(after: 2), [0])
+        XCTAssertEqual(list.sourceLine(at: 0, trailingIndex: 0)?.content, "after")
+        XCTAssertEqual(list.sourceOffset(ofItemAt: 3),
+                       ("- Before \r\n  - child A\r\n  - child B\r\n\r\n   after\r\n" as NSString).length)
+        XCTAssertEqual(list.items[3].source, "- Keep")
+        XCTAssertTrue(controller.updateSemanticList(id: "block-0") {
+            $0.replacingTrailingContinuationContent(at: 0, lineIndex: 0, with: "after edit")
+        })
+        XCTAssertEqual(controller.text, source.replacingOccurrences(of: "   after", with: "   after edit"))
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+    }
+
+    func testUnsafeTrailingBlockDoesNotBecomeEditableParentParagraph() {
+        for source in ["- Parent\n  - child\n\n  > quote\n- Keep",
+                       "- Parent\n  - child\n\n  # Heading\n- Keep",
+                       "- Parent\n  - child\n\n      code\n- Keep"] {
+            XCTAssertNil(MarkdownSourceList.parse(source))
+            XCTAssertEqual(MarkdownDocumentCodec().parse(source).toMarkdown(), source)
+        }
+    }
     func testMixedListRoundTripsMarkersIndentAndLineEndings() {
         let source = "Intro\r\n\r\n  7)  Seven\r\n    8) Eight\r\n\t* [X]\tDone\r\n\t- [ ] Pending\r\n\r\n<custom>raw</custom>\r\n"
         let document = MarkdownDocumentCodec().parse(source)

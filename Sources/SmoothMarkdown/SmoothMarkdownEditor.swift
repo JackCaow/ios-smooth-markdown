@@ -1491,6 +1491,7 @@ private struct FormattedListView: View {
     @State private var selectedItems: MarkdownSemanticListItemSelection?
     @State private var rangeLinkDestination = "https://"
     @State private var showingRangeLinkEditor = false
+    @State private var showingPasteFailure = false
 
     private func isSelected(_ index: Int) -> Bool {
         guard let selectedItems else { return false }
@@ -1508,6 +1509,11 @@ private struct FormattedListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                .alert("Paste could not be applied", isPresented: $showingPasteFailure) {
+                    Button("OK") { }
+                } message: {
+                    Text("The list changed before the paste. Your text is still on the clipboard; tap the row and paste again.")
+                }
             if let selectedItems {
                 HStack(spacing: 8) {
                     Menu("Format items") {
@@ -1571,13 +1577,18 @@ private struct FormattedListView: View {
                                 }
                         }, onIndent: { outdent in
                             _ = changeIndent(at: index, outdent: outdent)
-                        }, onStructuredPaste: { range, markdown in
-                            guard MarkdownEditorController.isStructuredBlockPaste(markdown, hasMarkedText: false),
-                                  let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
-                                    id: blockID, index: index, range: range, markdown: markdown,
-                                    ifTextIs: sourceAtRender) else { return false }
-                            focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
-                            return true
+                        }, onStructuredPaste: { range, markdown, displayedText in
+                            if let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                id: blockID, index: index, range: range, markdown: markdown,
+                                ifTextIs: sourceAtRender) {
+                                focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                                return true
+                            }
+                            if controller.pasteListLineVerbatimInSource(id: blockID, index: index,
+                                                                        range: range, markdown: markdown,
+                                                                        displayedText: displayedText) { return true }
+                            showingPasteFailure = true
+                            return false
                         })
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
                         .frame(maxWidth: .infinity)
@@ -1618,14 +1629,20 @@ private struct FormattedListView: View {
                             }, focusRequest: requestedFocus(for: index, continuationIndex: lineIndex),
                             onSubmit: nil, onIndent: { outdent in
                                 _ = changeIndent(at: index, outdent: outdent)
-                            }, onStructuredPaste: { range, markdown in
-                                guard MarkdownEditorController.isStructuredBlockPaste(markdown, hasMarkedText: false),
-                                      let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
-                                        id: blockID, index: index, continuationIndex: lineIndex,
-                                        range: range, markdown: markdown,
-                                        ifTextIs: sourceAtRender) else { return false }
-                                focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
-                                return true
+                            }, onStructuredPaste: { range, markdown, displayedText in
+                                if let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                    id: blockID, index: index, continuationIndex: lineIndex,
+                                    range: range, markdown: markdown,
+                                    ifTextIs: sourceAtRender) {
+                                    focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                                    return true
+                                }
+                                if controller.pasteListLineVerbatimInSource(id: blockID, index: index,
+                                                                            continuationIndex: lineIndex,
+                                                                            range: range, markdown: markdown,
+                                                                            displayedText: displayedText) { return true }
+                                showingPasteFailure = true
+                                return false
                             })
                         .padding(.leading, CGFloat(continuation.indent.count - item.indent.count) * 8)
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)-continuation-\(lineIndex)")
@@ -1636,6 +1653,44 @@ private struct FormattedListView: View {
                 .background(isSelected(index) ?
                             (editorTheme.selectionColor ?? Color.accentColor.opacity(0.15)) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
+                ForEach(list.trailingOwners(after: index), id: \.self) { parentIndex in
+                    ForEach(list.items[parentIndex].trailingContinuations.indices, id: \.self) { lineIndex in
+                        let continuation = list.items[parentIndex].trailingContinuations[lineIndex]
+                        FormattedListItemField(text: Binding(get: {
+                            guard let block = controller.semanticDocument.blockById(blockID),
+                                  case let .list(current) = block.kind,
+                                  current.items.indices.contains(parentIndex),
+                                  current.items[parentIndex].trailingContinuations.indices.contains(lineIndex) else {
+                                return continuation.content
+                            }
+                            return current.items[parentIndex].trailingContinuations[lineIndex].content
+                        }, set: { value in
+                            controller.updateSemanticList(id: blockID) {
+                                $0.replacingTrailingContinuationContent(at: parentIndex,
+                                                                        lineIndex: lineIndex, with: value)
+                            }
+                        }), blockID: blockID, index: parentIndex, isRangeSelected: isSelected(parentIndex),
+                            onRangeDrag: { anchor, focus in
+                                let selection = MarkdownSemanticListItemSelection(blockID: blockID,
+                                                                                   anchorIndex: anchor,
+                                                                                   focusIndex: focus)
+                                if controller.copySemanticListItemRange(selection) != nil {
+                                    selectedItems = selection
+                                }
+                            }, focusRequest: nil, onSubmit: nil, onIndent: { _ in },
+                            onStructuredPaste: { range, markdown, displayedText in
+                                if controller.pasteListLineVerbatimInSource(id: blockID, index: parentIndex,
+                                                                            trailingIndex: lineIndex,
+                                                                            range: range, markdown: markdown,
+                                                                            displayedText: displayedText) { return true }
+                                showingPasteFailure = true
+                                return false
+                            })
+                            .padding(.leading, CGFloat(continuation.indent.count) * 8 + 4)
+                            .padding(.top, 4)
+                            .accessibilityIdentifier("list-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                    }
+                }
             }
         }
         .alert("Link URL", isPresented: $showingRangeLinkEditor) {
@@ -1755,7 +1810,7 @@ private struct FormattedListItemField: UIViewRepresentable {
     let focusRequest: (token: UUID, offset: Int)?
     let onSubmit: ((Int) -> Void)?
     let onIndent: (Bool) -> Void
-    let onStructuredPaste: (NSRange, String) -> Bool
+    let onStructuredPaste: (NSRange, String, String) -> Bool
 
     func makeUIView(context: Context) -> FormattedListKeyboardTextField {
         let field = FormattedListKeyboardTextField()
@@ -1826,10 +1881,11 @@ private struct FormattedListItemField: UIViewRepresentable {
 
         func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
                        replacementString string: String) -> Bool {
-            if MarkdownEditorController.isStructuredBlockPaste(string, hasMarkedText: textField.markedTextRange != nil) {
+            if textField.markedTextRange == nil, string.contains("\n") || string.contains("\r") {
                 // A single-line field cannot safely absorb rejected block syntax.
-                // Keep its displayed text in sync with the source model.
-                _ = parent.onStructuredPaste(range, string)
+                // Route prose paragraphs and blank lines through the same
+                // source-preserving fallback as structured Markdown.
+                _ = parent.onStructuredPaste(range, string, textField.text ?? "")
                 return false
             }
             return true
