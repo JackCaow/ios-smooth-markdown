@@ -65,7 +65,7 @@ final class QwenChatClientTests: XCTestCase {
         var decoder = QwenSSEDecoder()
         var output: [String] = []
         // One byte at a time includes splits inside both JSON syntax and Han characters.
-        for byte in source.utf8 { output += decoder.consume(Data([byte])) }
+        for byte in source.utf8 { output += decoder.consume(byte) }
         output += decoder.finish()
         XCTAssertEqual(output.joined(), "<thinking>\n分析\n</thinking>\n\n答案")
         XCTAssertTrue(decoder.isDone)

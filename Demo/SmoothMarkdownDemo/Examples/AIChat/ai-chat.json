@@ -1,6 +1,6 @@
 {
   "source": "flutter-smooth-markdown/example/lib/ai_chat_demo.dart",
-  "sourceSha256": "e0059206db22088c030c82df91d70d884172291295aebd6a26c57f6467ba6ab4",
+  "sourceSha256": "b76d37b3d2912a2958c08928613b102c02d0bb936618ab47968d641cd2d37a85",
   "chunkSizeUTF16": 5,
   "delayMillis": 20,
   "welcome": "\n# 🤖 AI Chat\n\n本页面可连接 **DeepSeek**，也可用模拟响应测试以下 AI 特性解析：\n\n## 支持的 AI 格式\n\n1. **Thinking Block** - AI 思考过程\n2. **Artifact Block** - 代码/文档制品\n3. **Tool Call Block** - 工具调用\n\n点击右上角的 **快捷提示词** 菜单来测试各种功能。\n\n---\n\n💡 **提示**: 未配置 DeepSeek API Key 时使用模拟响应。点击右上角设置图标可配置 Key 和切换模式。\n",

@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: JackCaow/flutter-smooth-markdown
-          ref: 6a6b9a9d34c6cb8debede46cccb3bb608004f72f
+          ref: 0634734ccc6e2c63ab78904a68496f4b0a29f071
           path: flutter-smooth-markdown
       - name: Check Flutter Demo fixtures
         working-directory: ios-smooth-markdown

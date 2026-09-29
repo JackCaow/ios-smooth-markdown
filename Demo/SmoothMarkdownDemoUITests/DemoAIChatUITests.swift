@@ -1,6 +1,47 @@
 import XCTest
 
 final class DemoAIChatUITests: XCTestCase {
+    /// Run explicitly after tools/run_demo_on_device_with_deepseek.sh has launched the app.
+    func testPrelaunchedDeepSeekDevelopmentKeyOnPhysicalDevice() throws {
+        let app = XCUIApplication()
+        app.activate()
+        if !app.buttons["ai-chat-settings"].exists {
+            XCTAssertTrue(app.buttons["open-examples"].waitForExistence(timeout: 10))
+            app.buttons["open-examples"].tap()
+            let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+            XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
+            let entry = app.buttons["feature-aiChat"]
+            for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
+            XCTAssertTrue(entry.isHittable)
+            entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        }
+
+        let status = app.staticTexts["ai-chat-status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 5))
+        if status.label == "模拟模式" {
+            throw XCTSkip("Launch the installed Demo with the local Keychain script before this optional live test")
+        }
+        XCTAssertEqual(status.label, "deepseek-flash")
+
+        let input = app.textFields["ai-chat-input"]
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        input.tap()
+        input.typeText("Reply with exactly OK.")
+        app.buttons["ai-chat-send"].tap()
+        let replySource = app.buttons["ai-chat-source"]
+        XCTAssertTrue(replySource.waitForExistence(timeout: 90))
+        XCTAssertEqual(status.label, "deepseek-flash")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "iPhone DeepSeek live reply with development Key"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        replySource.tap()
+        let response = app.staticTexts["ai-chat-source-content"]
+        XCTAssertTrue(response.waitForExistence(timeout: 5))
+        XCTAssertFalse(response.label.contains("⚠️"))
+        XCTAssertFalse(response.label.isEmpty)
+    }
+
     func testCompactDeepSeekChatOnPhysicalDevice() {
         let app = XCUIApplication()
         app.launchEnvironment["DEEPSEEK_API_KEY"] = ""
@@ -124,6 +165,10 @@ final class DemoAIChatUITests: XCTestCase {
         for _ in 0..<12 where !thinkingCard.exists { chatScroll.swipeDown() }
         XCTAssertTrue(thinkingCard.waitForExistence(timeout: 5))
         XCTAssertEqual(thinkingCard.label, "Thinking...")
+        let replyScreenshot = XCTAttachment(screenshot: app.screenshot())
+        replyScreenshot.name = "iPhone DeepSeek chat with mock reply"
+        replyScreenshot.lifetime = .keepAlways
+        add(replyScreenshot)
 
         // The complete simulated response, including the closing tag, survives streaming.
         for _ in 0..<6 { chatScroll.swipeUp() }
