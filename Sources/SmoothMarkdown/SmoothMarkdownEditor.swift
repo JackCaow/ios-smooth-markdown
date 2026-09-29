@@ -692,13 +692,21 @@ private struct FormattedBlocksView: View {
                             }
                             .disabled(!controller.canReplaceVisibleTextRange(selected))
                             .accessibilityIdentifier("visible-range-delete")
-                            Button("Replace from clipboard") {
+                            Button("Replace with plain text from clipboard") {
                                 if let value = UIPasteboard.general.string,
                                    controller.replaceVisibleTextRange(selected, with: value) {
                                     clearRange()
                                 }
                             }
+                            .disabled(UIPasteboard.general.string.map {
+                                !controller.canReplaceVisibleTextRange(selected, with: $0)
+                            } ?? true)
                             .accessibilityIdentifier("visible-range-replace")
+                            Button("Edit Markdown in Source mode") {
+                                controller.mode = .source
+                                clearRange()
+                            }
+                            .accessibilityIdentifier("visible-range-source-fallback")
                         }
                         .accessibilityIdentifier("visible-range-format")
                         Text("Rendered characters selected")
