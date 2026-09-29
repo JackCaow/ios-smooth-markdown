@@ -456,26 +456,32 @@ public final class MarkdownEditorController: ObservableObject {
         return [block.id: result]
     }
 
-    /// Character tints inside cells touched by a source-backed text range.
-    /// Whole intermediary tables keep their existing row-level tint.
+    /// Character tints for every table cell touched by a source-backed range.
+    /// Escaped pipes use the same visible/source boundary map as cell endpoints.
     public func semanticTableCellHighlightRanges(_ selection: MarkdownSemanticTextSelection)
         -> [String: [Int: [Int: NSRange]]]? {
-        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
-        let blocks = semanticDocument.blocks
+        guard let resolved = resolveSemanticTextSelection(selection, allowTableCellSpan: true) else { return nil }
+        let document = semanticDocument
+        let blocks = document.blocks
         var result: [String: [Int: [Int: NSRange]]] = [:]
         for index in resolved.firstIndex...resolved.lastIndex {
             let block = blocks[index]
             guard case let .table(table) = block.kind else { continue }
-            let startsHere = index == resolved.firstIndex && resolved.start.tableRow != nil
-            let endsHere = index == resolved.lastIndex && resolved.end.tableRow != nil
-            guard startsHere || endsHere else { continue }
-            let row = startsHere ? resolved.start.tableRow! : resolved.end.tableRow!
-            let column = startsHere ? resolved.start.tableColumn! : resolved.end.tableColumn!
-            let raw = row == 0 ? table.headers[column] : table.rows[row - 1][column]
-            let length = (Self.visibleTableCell(raw).text as NSString).length
-            let lower = startsHere ? resolved.startOffset : 0
-            let upper = endsHere ? resolved.endOffset : length
-            result[block.id] = [row: [column: NSRange(location: lower, length: upper - lower)]]
+            for row in 0...table.rows.count {
+                let cells = row == 0 ? table.headers : table.rows[row - 1]
+                for (column, raw) in cells.enumerated() {
+                    guard let sourceRange = document.sourceRangeOfTableCell(blockID: block.id,
+                                                                            row: row, column: column) else { return nil }
+                    let lower = max(sourceRange.location, resolved.startSourceOffset)
+                    let upper = min(NSMaxRange(sourceRange), resolved.endSourceOffset)
+                    guard lower < upper else { continue }
+                    let boundaries = Self.visibleTableCell(raw).boundaries
+                    guard let visibleStart = boundaries.firstIndex(of: lower - sourceRange.location),
+                          let visibleEnd = boundaries.firstIndex(of: upper - sourceRange.location) else { return nil }
+                    result[block.id, default: [:]][row, default: [:]][column] =
+                        NSRange(location: visibleStart, length: visibleEnd - visibleStart)
+                }
+            }
         }
         return result
     }
@@ -1031,48 +1037,183 @@ public final class MarkdownEditorController: ObservableObject {
         return nil
     }
 
-    /// Whole structured rows may be copied or deleted with the range, but only
-    /// paragraph and heading text can receive an inline mark.
-    public func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
-        guard let resolved = resolveSemanticTextSelection(selection) else { return false }
-        return semanticDocument.blocks[resolved.firstIndex...resolved.lastIndex].allSatisfy { block in
-            switch block.kind {
-            case .paragraph, .heading: return true
-            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return false
+    private struct InlineSourceField {
+        let range: NSRange
+        let content: String
+    }
+
+    /// Each field is the exact source span displayed by one formatted editor
+    /// row. Markers, table separators, quote prefixes, and trivia stay outside.
+    private func inlineSourceFields(in block: MarkdownDocumentBlock,
+                                    document: MarkdownDocument) -> [InlineSourceField]? {
+        guard let blockRange = document.sourceRange(of: block.id) else { return nil }
+        func field(_ offset: Int, _ content: String) -> InlineSourceField {
+            .init(range: NSRange(location: blockRange.location + offset,
+                                 length: (content as NSString).length), content: content)
+        }
+        switch block.kind {
+        case .paragraph, .heading:
+            let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+            let offset = (block.source as NSString).length - (block.plainText as NSString).length - ending
+            guard offset >= 0 else { return nil }
+            return [field(offset, block.plainText)]
+        case let .list(list):
+            var fields: [InlineSourceField] = []
+            for index in list.items.indices {
+                guard let primary = list.sourceLine(at: index) else { return nil }
+                fields.append(field(primary.offset, primary.content))
+                for line in list.items[index].continuations.indices {
+                    guard let continuation = list.sourceLine(at: index, continuationIndex: line) else { return nil }
+                    fields.append(field(continuation.offset, continuation.content))
+                }
+                for line in list.items[index].trailingContinuations.indices {
+                    guard let trailing = list.sourceLine(at: index, trailingIndex: line) else { return nil }
+                    fields.append(field(trailing.offset, trailing.content))
+                }
             }
+            return fields.sorted { $0.range.location < $1.range.location }
+        case let .table(table):
+            var fields: [InlineSourceField] = []
+            for row in 0...table.rows.count {
+                let cells = row == 0 ? table.headers : table.rows[row - 1]
+                for (column, content) in cells.enumerated() {
+                    guard let range = document.sourceRangeOfTableCell(blockID: block.id,
+                                                                       row: row, column: column) else { return nil }
+                    fields.append(.init(range: range, content: content))
+                }
+            }
+            return fields
+        case .raw:
+            guard let quote = MarkdownSourceQuote(source: block.source) else { return nil }
+            return quote.lines.map { field($0.bodyOffset, $0.content) }
+        case .fencedCode, .horizontalRule, .plugin: return nil
         }
     }
 
-    /// Applies one mark to the selected character fragment in each adjacent
-    /// paragraph or heading. Each row retains its marker, trivia, and ending.
+    private func selectedInlineSourceFields(_ resolved: ResolvedSemanticTextSelection,
+                                            document: MarkdownDocument)
+        -> [(blockIndex: Int, field: InlineSourceField, selection: NSRange)]? {
+        let source = text as NSString
+        var selected: [(blockIndex: Int, field: InlineSourceField, selection: NSRange)] = []
+        for index in resolved.firstIndex...resolved.lastIndex {
+            guard let fields = inlineSourceFields(in: document.blocks[index], document: document) else { return nil }
+            for field in fields {
+                guard field.range.location >= 0, NSMaxRange(field.range) <= source.length,
+                      source.substring(with: field.range) == field.content else { return nil }
+                let lower = max(field.range.location, resolved.startSourceOffset)
+                let upper = min(NSMaxRange(field.range), resolved.endSourceOffset)
+                if lower < upper {
+                    selected.append((index, field,
+                                     NSRange(location: lower - field.range.location, length: upper - lower)))
+                }
+            }
+        }
+        selected.sort { $0.field.range.location < $1.field.range.location }
+        guard !selected.isEmpty else { return nil }
+        for pair in zip(selected, selected.dropFirst()) where
+            NSMaxRange(pair.0.field.range) > pair.1.field.range.location { return nil }
+        return selected
+    }
+
+    private static func sameInlineStructure(_ before: MarkdownDocumentBlock,
+                                            _ after: MarkdownDocumentBlock) -> Bool {
+        guard before.leadingTrivia == after.leadingTrivia else { return false }
+        switch (before.kind, after.kind) {
+        case (.paragraph, .paragraph): return true
+        case let (.heading(left, _), .heading(right, _)): return left == right
+        case let (.table(left), .table(right)):
+            return left.columnCount == right.columnCount && left.rows.count == right.rows.count &&
+                left.alignments == right.alignments
+        case let (.list(left), .list(right)):
+            guard left.items.count == right.items.count else { return false }
+            return zip(left.items, right.items).allSatisfy { a, b in
+                a.indent == b.indent && a.marker == b.marker && a.spacing == b.spacing &&
+                a.taskMarker == b.taskMarker && a.taskSpacing == b.taskSpacing &&
+                a.lineEnding == b.lineEnding && a.continuations.count == b.continuations.count &&
+                a.trailingContinuations.count == b.trailingContinuations.count &&
+                zip(a.continuations, b.continuations).allSatisfy {
+                    $0.indent == $1.indent && $0.lineEnding == $1.lineEnding &&
+                        $0.leadingTrivia == $1.leadingTrivia
+                } && zip(a.trailingContinuations, b.trailingContinuations).allSatisfy {
+                    $0.indent == $1.indent && $0.lineEnding == $1.lineEnding &&
+                        $0.leadingTrivia == $1.leadingTrivia
+                }
+            }
+        case (.raw, .raw):
+            guard let left = MarkdownSourceQuote(source: before.source),
+                  let right = MarkdownSourceQuote(source: after.source),
+                  left.lines.count == right.lines.count else { return false }
+            return zip(left.lines, right.lines).allSatisfy {
+                $0.prefix == $1.prefix && $0.ending == $1.ending
+            }
+        default: return false
+        }
+    }
+
+    /// Reports whether every touched block has exact source-backed text fields.
+    public func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection, allowTableCellSpan: true) else { return false }
+        return selectedInlineSourceFields(resolved, document: semanticDocument) != nil
+    }
+
+    /// Links retain the existing prose-only boundary; structured ranges expose
+    /// the four basic marks without presenting an action that cannot run.
+    public func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                       mark: MarkdownInlineMark) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection, allowTableCellSpan: true) else { return false }
+        let document = semanticDocument
+        guard let fields = selectedInlineSourceFields(resolved, document: document) else { return false }
+        if case .link = mark {
+            return fields.allSatisfy { entry in
+                switch document.blocks[entry.blockIndex].kind {
+                case .paragraph, .heading: true
+                default: false
+                }
+            }
+        }
+        return true
+    }
+
+    /// Applies one mark to each selected physical field, committing a single
+    /// source-preserving edit only after every field and block reparses safely.
     @discardableResult
     public func applySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection,
                                                     mark: MarkdownInlineMark) -> Bool {
-        guard canApplySemanticInlineMarkToTextRange(selection),
-              let resolved = resolveSemanticTextSelection(selection) else { return false }
+        guard canApplySemanticInlineMarkToTextRange(selection, mark: mark),
+              let resolved = resolveSemanticTextSelection(selection, allowTableCellSpan: true) else { return false }
         let document = semanticDocument
-        var nextBlocks = document.blocks
-        var changed = false
-        for index in resolved.firstIndex...resolved.lastIndex {
-            let block = nextBlocks[index]
-            let body = block.plainText
-            let start = index == resolved.firstIndex ? resolved.startOffset : 0
-            let end = index == resolved.lastIndex ? resolved.endOffset : (body as NSString).length
-            if start == end { continue }
-            guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: body,
-                                                                         selection: NSRange(location: start, length: end - start)),
-                  let replacement = block.replacingContent(edit.markdown) else { return false }
-            nextBlocks[index] = replacement
-            changed = true
+        guard let fields = selectedInlineSourceFields(resolved, document: document) else { return false }
+        var edits: [(range: NSRange, markdown: String)] = []
+        for entry in fields {
+            guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: entry.field.content,
+                                                                         selection: entry.selection) else { return false }
+            edits.append((entry.field.range, edit.markdown))
         }
-        guard changed else { return false }
-        let updated = MarkdownDocument(blocks: nextBlocks, trailingTrivia: document.trailingTrivia).toMarkdown()
+        var updated = text
+        for edit in edits.reversed() {
+            updated = (updated as NSString).replacingCharacters(in: edit.range, with: edit.markdown)
+        }
+        guard updated != text else { return false }
         let reparsed = codec.parse(updated)
-        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == nextBlocks.count,
-              zip(reparsed.blocks, nextBlocks).allSatisfy({ parsed, proposed in
-                  parsed.id == proposed.id && parsed.kind == proposed.kind &&
-                      parsed.source == proposed.source && parsed.leadingTrivia == proposed.leadingTrivia
+        let changed = Set(fields.map { $0.blockIndex })
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == document.blocks.count,
+              reparsed.trailingTrivia == document.trailingTrivia,
+              zip(reparsed.blocks, document.blocks).enumerated().allSatisfy({ index, pair in
+                  pair.0.id == pair.1.id && (changed.contains(index) ?
+                      Self.sameInlineStructure(pair.1, pair.0) : Self.sameSourceBlock(pair.0, pair.1))
               }) else { return false }
+        // Reparse must retain every physical field in the same order. This
+        // catches a table delimiter, list owner, or quote body being reclassified
+        // even when the outer block kind and dimensions appear unchanged.
+        let replacements = Dictionary(uniqueKeysWithValues: edits.map { ($0.range, $0.markdown) })
+        for index in changed {
+            guard let before = inlineSourceFields(in: document.blocks[index], document: document),
+                  let after = inlineSourceFields(in: reparsed.blocks[index], document: reparsed),
+                  before.count == after.count,
+                  zip(before, after).allSatisfy({ old, new in
+                      new.content == (replacements[old.range] ?? old.content)
+                  }) else { return false }
+        }
         return replaceSemanticMarkdown(updated)
     }
 
@@ -1124,7 +1265,8 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
-    private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection)
+    private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection,
+                                              allowTableCellSpan: Bool = false)
         -> ResolvedSemanticTextSelection? {
         guard selection.source == nil || selection.source == text else { return nil }
         let document = semanticDocument
@@ -1216,8 +1358,11 @@ public final class MarkdownEditorController: ObservableObject {
         } else { sameCodeBlock = false }
         let sameTableCell = firstIndex == lastIndex && start.tableRow != nil &&
             start.tableRow == end.tableRow && start.tableColumn == end.tableColumn
+        let sameTable = allowTableCellSpan && firstIndex == lastIndex &&
+            start.tableRow != nil && end.tableRow != nil
         let sameQuote = firstIndex == lastIndex && start.quoteLineIndex != nil && end.quoteLineIndex != nil
-        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock || sameTableCell || sameQuote),
+        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock ||
+               sameTableCell || sameTable || sameQuote),
               startSourceOffset < endSourceOffset else { return nil }
         return .init(firstIndex: firstIndex, lastIndex: lastIndex,
                      start: start, end: end,
