@@ -29,6 +29,11 @@ final class QuoteTextRangeEditorTests: XCTestCase {
         XCTAssertFalse(controller.canUndo)
         XCTAssertTrue(controller.redo())
         XCTAssertEqual(controller.text, "Before\r\n\r\n> AlX😀\r\n> Gamma\r\n\r\nAfter")
+        let deleting = MarkdownEditorController(text: source)
+        XCTAssertTrue(deleting.deleteSemanticTextRange(selection))
+        XCTAssertEqual(deleting.text, "Before\r\n\r\n> Al😀\r\n> Gamma\r\n\r\nAfter")
+        XCTAssertTrue(deleting.undo())
+        XCTAssertEqual(deleting.text, source)
     }
 
     func testNestedQuoteLineEditPreservesPrefixAndAdjacentLines() {
