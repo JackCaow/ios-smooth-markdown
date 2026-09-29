@@ -131,10 +131,15 @@ struct ReaderSelectionDocument {
 }
 
 /// A block range across content that must retain its SwiftUI rendering.
-/// Images contribute no text; tables contribute their visible cell text.
+/// Images contribute no text; tables and display math contribute copyable text.
 struct ReaderBlockRangeDocument {
+    enum Item {
+        case markup(Markup)
+        case displayMath(String)
+    }
+
     struct Segment {
-        enum Kind { case text, image, table }
+        enum Kind: Equatable { case text, image, table, displayMath(String) }
         let nodes: [Markup]
         let kind: Kind
         var isImage: Bool { kind == .image }
@@ -144,23 +149,33 @@ struct ReaderBlockRangeDocument {
     let segments: [Segment]
 
     init?(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) {
+        self.init(nodes.map(Item.markup), enableHTML: enableHTML, plugins: plugins)
+    }
+
+    init?(_ items: [Item], enableHTML: Bool, plugins: ParserPluginRegistry?) {
         var result: [Segment] = []
         var textRun: [Markup] = []
         func flushText() {
             if !textRun.isEmpty { result.append(.init(nodes: textRun, kind: .text)) }
             textRun.removeAll()
         }
-        for node in nodes {
-            if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
+        for item in items {
+            switch item {
+            case let .displayMath(latex):
                 flushText()
-                result.append(.init(nodes: [node], kind: .image))
-            } else if node is Markdown.Table,
-                      Self.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
-                flushText()
-                result.append(.init(nodes: [node], kind: .table))
-            } else if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) {
-                textRun.append(node)
-            } else { return nil }
+                result.append(.init(nodes: [], kind: .displayMath(latex)))
+            case let .markup(node):
+                if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
+                    flushText()
+                    result.append(.init(nodes: [node], kind: .image))
+                } else if node is Markdown.Table,
+                          Self.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
+                    flushText()
+                    result.append(.init(nodes: [node], kind: .table))
+                } else if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) {
+                    textRun.append(node)
+                } else { return nil }
+            }
         }
         flushText()
         guard result.contains(where: \.isBridge), result.count > 1 else { return nil }
@@ -173,6 +188,7 @@ struct ReaderBlockRangeDocument {
         for segment in segments[range] {
             switch segment.kind {
             case .image: continue
+            case let .displayMath(latex): parts.append(latex)
             case .table:
                 guard let node = segment.nodes.first,
                       let text = Self.tableText(node, enableHTML: enableHTML, plugins: plugins) else { return nil }
@@ -200,6 +216,57 @@ struct ReaderBlockRangeDocument {
             output.append(cells.joined(separator: "\t"))
         }
         return output.joined(separator: "\n")
+    }
+}
+
+/// Groups display math with adjacent supported reader blocks without turning
+/// a fenced code block or an unsupported node into a copyable range.
+enum ReaderMathSelectionGroup {
+    case legacy(ReaderSelectionGroup)
+    case math(String)
+    case bridge([ReaderBlockRangeDocument.Item])
+
+    static func group(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
+                      plugins: ParserPluginRegistry?) -> [ReaderMathSelectionGroup] {
+        var output: [ReaderMathSelectionGroup] = []
+        var pending: [ReaderBlockRangeDocument.Item] = []
+        func flush() {
+            guard !pending.isEmpty else { return }
+            let math = pending.compactMap { item -> String? in
+                if case let .displayMath(latex) = item { return latex }
+                return nil
+            }
+            if !math.isEmpty, pending.count > 1 {
+                output.append(.bridge(pending))
+            } else if let latex = math.first {
+                output.append(.math(latex))
+            } else {
+                let nodes = pending.compactMap { item -> Markup? in
+                    if case let .markup(node) = item { return node }
+                    return nil
+                }
+                output.append(contentsOf: ReaderSelectionGroup.group(nodes, enableHTML: enableHTML,
+                                                                      plugins: plugins).map(Self.legacy))
+            }
+            pending.removeAll()
+        }
+        for item in items {
+            switch item {
+            case .displayMath:
+                pending.append(item)
+            case let .markup(node):
+                if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
+                    ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) ||
+                    ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
+                    pending.append(item)
+                } else {
+                    flush()
+                    output.append(.legacy(.individual(node)))
+                }
+            }
+        }
+        flush()
+        return output
     }
 }
 

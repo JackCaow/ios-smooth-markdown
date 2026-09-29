@@ -29,7 +29,20 @@ struct FixtureDemoView: View {
     ]
 
     var body: some View {
-        if ProcessInfo.processInfo.arguments.contains("--reader-table-range-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--reader-math-range-fixture") {
+            VStack(spacing: 0) {
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("math-range-clipboard")
+                SmoothMarkdownView(markdown: "Before formula.\n\n$$\nE=mc^2\n$$\n\nAfter formula.",
+                                   styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-math-standalone-fixture") {
+            VStack(spacing: 0) {
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("math-range-clipboard")
+                SmoothMarkdownView(markdown: "$$E=mc^2$$", styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-table-range-fixture") {
             VStack(spacing: 0) {
                 Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
                 Text("Copied: \(clipboardPreview)").accessibilityIdentifier("table-range-clipboard")

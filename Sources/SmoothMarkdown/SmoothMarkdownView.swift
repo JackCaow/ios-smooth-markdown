@@ -2,6 +2,9 @@ import Markdown
 import SwiftDraw
 import SwiftUI
 import SwiftUIMath
+#if os(iOS)
+import UIKit
+#endif
 
 /// Renders the currently supported CommonMark and GFM blocks with SwiftUI.
 public struct SmoothMarkdownView: View {
@@ -141,12 +144,49 @@ public struct SmoothMarkdownView: View {
     private func footnoteSection(_ section: FootnoteSyntax.Section) -> some View {
         switch section {
         case let .markdown(source):
+            #if os(iOS)
+            if enableCrossBlockSelection && !voiceOverEnabled && (selectable || onTextLongPress != nil) {
+                readerMathSection(source)
+            } else {
+                ForEach(Array(MathSyntax.sections(source).enumerated()), id: \.offset) { _, item in
+                    mathSection(item)
+                }
+            }
+            #else
             ForEach(Array(MathSyntax.sections(source).enumerated()), id: \.offset) { _, item in
                 mathSection(item)
             }
+            #endif
         case let .definition(definition): footnoteDefinition(definition)
         }
     }
+
+    #if os(iOS)
+    @ViewBuilder
+    private func readerMathSection(_ source: String) -> some View {
+        let items: [ReaderBlockRangeDocument.Item] = MathSyntax.sections(source).flatMap { section in
+            switch section {
+            case let .markdown(markdown): return Array(parse(markdown).children).map(ReaderBlockRangeDocument.Item.markup)
+            case let .block(latex): return [.displayMath(latex)]
+            }
+        }
+        ForEach(Array(ReaderMathSelectionGroup.group(items, enableHTML: enableHTML,
+                                                     plugins: plugins).enumerated()), id: \.offset) { _, group in
+            switch group {
+            case let .legacy(legacy): readerGroup(legacy)
+            case let .math(latex): standaloneBlockMath(latex)
+            case let .bridge(items):
+                if let document = ReaderBlockRangeDocument(items, enableHTML: enableHTML, plugins: plugins) {
+                    ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
+                                         spacing: styleSheet.blockSpacing) { segment in
+                        if case let .displayMath(latex) = segment.kind { return AnyView(blockMath(latex)) }
+                        return renderReaderBlockSegment(segment)
+                    }
+                }
+            }
+        }
+    }
+    #endif
 
     @ViewBuilder
     private func mathSection(_ section: MathSyntax.Section) -> some View {
@@ -157,47 +197,71 @@ public struct SmoothMarkdownView: View {
                                                       enableHTML: enableHTML, plugins: plugins,
                                                       enabled: enableCrossBlockSelection && !voiceOverEnabled &&
                                                           (selectable || onTextLongPress != nil)).enumerated()), id: \.offset) { _, group in
-                switch group {
-                case let .selectable(nodes):
-                    if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
-                        ReaderSelectionTextView(document: document, styleSheet: styleSheet,
-                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                                selectable: selectable)
-                    }
-                case let .blockBridge(nodes):
-                    if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
-                        ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
-                                             spacing: styleSheet.blockSpacing) { segment in
-                            if segment.isBridge, let node = segment.nodes.first { return block(node) }
-                            guard let node = segment.nodes.first else { return AnyView(EmptyView()) }
-                            if let document = ReaderSelectionDocument.compose(segment.nodes,
-                                                                                enableHTML: enableHTML, plugins: plugins),
-                               (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil) {
-                                return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
-                                                                       onLinkTap: onLinkTap,
-                                                                       onTextLongPress: onTextLongPress,
-                                                                       selectable: selectable))
-                            }
-                            return block(node)
-                        }
-                    }
-                case let .individual(node):
-                    if let onTextLongPress,
-                       let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
-                        ReaderSelectionTextView(document: document, styleSheet: styleSheet,
-                                                onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                                selectable: selectable)
-                    } else {
-                        block(node)
-                    }
-                }
+                readerGroup(group)
             }
             #else
             ForEach(Array(parse(source).children.enumerated()), id: \.offset) { _, node in block(node) }
             #endif
-        case let .block(latex): blockMath(latex)
+        case let .block(latex):
+            #if os(iOS)
+            if selectable || onTextLongPress != nil { standaloneBlockMath(latex) }
+            else { blockMath(latex) }
+            #else
+            blockMath(latex)
+            #endif
         }
     }
+
+    #if os(iOS)
+    @ViewBuilder
+    private func readerGroup(_ group: ReaderSelectionGroup) -> some View {
+        switch group {
+        case let .selectable(nodes):
+            if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
+                ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                        onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                        selectable: selectable)
+            }
+        case let .blockBridge(nodes):
+            if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
+                ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
+                                     spacing: styleSheet.blockSpacing, renderSegment: renderReaderBlockSegment)
+            }
+        case let .individual(node):
+            if let onTextLongPress,
+               let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
+                ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                        onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                        selectable: selectable)
+            } else {
+                block(node)
+            }
+        }
+    }
+
+    private func renderReaderBlockSegment(_ segment: ReaderBlockRangeDocument.Segment) -> AnyView {
+        if segment.isBridge, let node = segment.nodes.first { return block(node) }
+        guard let node = segment.nodes.first else { return AnyView(EmptyView()) }
+        if let document = ReaderSelectionDocument.compose(segment.nodes,
+                                                           enableHTML: enableHTML, plugins: plugins),
+           (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil) {
+            return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                                   onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                                   selectable: selectable))
+        }
+        return block(node)
+    }
+
+    private func standaloneBlockMath(_ latex: String) -> some View {
+        blockMath(latex)
+            .contextMenu {
+                Button("Copy formula") { UIPasteboard.general.string = latex }
+            }
+            .accessibilityAction(named: Text("Copy formula")) {
+                UIPasteboard.general.string = latex
+            }
+    }
+    #endif
 
     private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
         let summary = parse(details.summary)
