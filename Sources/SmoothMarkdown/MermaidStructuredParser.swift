@@ -140,14 +140,20 @@ enum MermaidStructuredParser {
                 let marker: MermaidMarker? = token.contains("|") ? .inheritance :
                     token.contains("*") ? .composition : token.contains("o") ? .aggregation : nil
                 let atSource = token.hasPrefix("<") || token.hasPrefix("*") || token.hasPrefix("o")
-                edges.append(.init(from: from, to: to, label: groups[6].isEmpty ? nil : groups[6],
+                // Flutter treats a plain left-pointing relation as a directed
+                // edge from the right-hand class. Keep that direction in the
+                // model too, so layout ranks and endpoint labels agree.
+                let reverse = atSource && marker == nil && token.hasPrefix("<")
+                let sourceLabel = reverse ? groups[4] : groups[2]
+                let targetLabel = reverse ? groups[2] : groups[4]
+                edges.append(.init(from: reverse ? to : from, to: reverse ? from : to,
+                                   label: groups[6].isEmpty ? nil : groups[6],
                                    line: token.contains(".") ? .dotted : .solid,
-                                   arrow: marker == nil && token.hasSuffix(">") ? .arrow : .none,
-                                   sourceArrow: marker == nil && token.hasPrefix("<") ? .arrow : .none,
+                                   arrow: marker == nil && (token.hasSuffix(">") || reverse) ? .arrow : .none,
                                    sourceMarker: atSource ? marker : nil,
                                    targetMarker: atSource ? nil : marker,
-                                   sourceLabel: groups[2].isEmpty ? nil : groups[2],
-                                   targetLabel: groups[4].isEmpty ? nil : groups[4]))
+                                   sourceLabel: sourceLabel.isEmpty ? nil : sourceLabel,
+                                   targetLabel: targetLabel.isEmpty ? nil : targetLabel))
                 return true
             }
             if let groups = capture("^(\(MermaidStructuredParser.id))\\s*:\\s*(.+)$", line) {
