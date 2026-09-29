@@ -16,7 +16,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     /// Used by a range spanning a visual block to place a UTF-16 text endpoint.
     let onCharacterTap: ((Int) -> Void)?
 
-    func makeUIView(context: Context) -> QuoteTextView {
+    static func makeTextView() -> QuoteTextView {
         // Decorations use NSLayoutManager glyph coordinates. Creating a default
         // UITextView uses TextKit 2 on iOS 16+, then accessing layoutManager
         // while drawing switches it to TextKit 1 after SwiftUI has measured it.
@@ -24,13 +24,19 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         let view = QuoteTextView(usingTextLayoutManager: false)
         view.backgroundColor = .clear
         view.isEditable = false
-        // Conversation bubbles own the first long press. Enabling UITextView's
-        // selection at this point lets its private recognizers win first.
-        view.isSelectable = selectable && onTextLongPress == nil && onCharacterTap == nil
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.dataDetectorTypes = []
+        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        return view
+    }
+
+    func makeUIView(context: Context) -> QuoteTextView {
+        let view = Self.makeTextView()
+        // Conversation bubbles own the first long press. Enabling UITextView's
+        // selection at this point lets its private recognizers win first.
+        view.isSelectable = selectable && onTextLongPress == nil && onCharacterTap == nil
         view.delegate = context.coordinator
         // UITextView requires isSelectable for its built-in link interaction.
         // Keep links tappable when the reader itself is not selectable.
@@ -62,7 +68,6 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             context.coordinator.editMenu = editMenu
         }
         view.accessibilityCustomActions = selectionAccessibilityActions(for: view)
-        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return view
     }
 

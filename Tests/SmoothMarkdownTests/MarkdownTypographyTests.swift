@@ -95,14 +95,11 @@ final class MarkdownTypographyTests: XCTestCase {
         let reader = ReaderSelectionTextView(document: document, styleSheet: .light(),
                                               onLinkTap: nil, onTextLongPress: nil,
                                               selectable: true, onCharacterTap: nil)
-        let host = UIHostingController(rootView: reader)
-        host.view.frame = CGRect(x: 0, y: 0, width: 370, height: 900)
-        host.view.layoutIfNeeded()
-        func quoteView(_ view: UIView) -> QuoteTextView? {
-            if let quote = view as? QuoteTextView { return quote }
-            return view.subviews.lazy.compactMap(quoteView).first
-        }
-        guard let native = quoteView(host.view) else { return XCTFail("Reader text view missing") }
+        // Exercise the same factory makeUIView uses without depending on when
+        // UIHostingController attaches its SwiftUI subtree in CI.
+        let native = ReaderSelectionTextView.makeTextView()
+        native.attributedText = reader.attributedContent(traits: MarkdownTypography.traits(for: .large)).text
+        native.frame = CGRect(x: 0, y: 0, width: 370, height: 900)
         XCTAssertNil(native.textLayoutManager, "TextKit 2 would be replaced after the first glyph geometry read")
         let before = native.sizeThatFits(CGSize(width: 370, height: CGFloat.greatestFiniteMagnitude)).height
         native.layoutManager.ensureLayout(for: native.textContainer)
