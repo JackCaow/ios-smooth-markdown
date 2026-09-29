@@ -12,6 +12,8 @@ public struct MarkdownSourceListItem: Equatable {
     public let content: String
     public let lineEnding: String
     public let continuations: [MarkdownSourceListContinuation]
+    /// Paragraph lines that occur after this item's nested child list.
+    public let trailingContinuations: [MarkdownSourceListContinuation]
 
     public var kind: Kind {
         if taskMarker != nil { return .task }
@@ -27,7 +29,7 @@ public struct MarkdownSourceListItem: Equatable {
         guard !value.contains("\n"), !value.contains("\r") else { return nil }
         return .init(indent: indent, marker: marker, spacing: spacing, taskMarker: taskMarker,
                      taskSpacing: taskSpacing, content: value, lineEnding: lineEnding,
-                     continuations: continuations)
+                     continuations: continuations, trailingContinuations: trailingContinuations)
     }
 
     fileprivate func settingChecked(_ checked: Bool) -> Self? {
@@ -35,7 +37,7 @@ public struct MarkdownSourceListItem: Equatable {
         let nextMarker = checked ? (taskMarker == "[X]" ? "[X]" : "[x]") : "[ ]"
         return .init(indent: indent, marker: marker, spacing: spacing, taskMarker: nextMarker,
                      taskSpacing: taskSpacing, content: content, lineEnding: lineEnding,
-                     continuations: continuations)
+                     continuations: continuations, trailingContinuations: trailingContinuations)
     }
 
     fileprivate func replacingContinuation(at index: Int, with value: String) -> Self? {
@@ -44,12 +46,22 @@ public struct MarkdownSourceListItem: Equatable {
         next[index] = next[index].replacingContent(value)
         return .init(indent: indent, marker: marker, spacing: spacing, taskMarker: taskMarker,
                      taskSpacing: taskSpacing, content: content, lineEnding: lineEnding,
-                     continuations: next)
+                     continuations: next, trailingContinuations: trailingContinuations)
+    }
+
+    fileprivate func replacingTrailingContinuation(at index: Int, with value: String) -> Self? {
+        guard trailingContinuations.indices.contains(index), !value.contains("\n"), !value.contains("\r") else { return nil }
+        var next = trailingContinuations
+        next[index] = next[index].replacingContent(value)
+        return .init(indent: indent, marker: marker, spacing: spacing, taskMarker: taskMarker,
+                     taskSpacing: taskSpacing, content: content, lineEnding: lineEnding,
+                     continuations: continuations, trailingContinuations: next)
     }
 
     fileprivate init(indent: String, marker: String, spacing: String, taskMarker: String?,
                      taskSpacing: String, content: String, lineEnding: String,
-                     continuations: [MarkdownSourceListContinuation] = []) {
+                     continuations: [MarkdownSourceListContinuation] = [],
+                     trailingContinuations: [MarkdownSourceListContinuation] = []) {
         self.indent = indent
         self.marker = marker
         self.spacing = spacing
@@ -58,6 +70,7 @@ public struct MarkdownSourceListItem: Equatable {
         self.content = content
         self.lineEnding = lineEnding
         self.continuations = continuations
+        self.trailingContinuations = trailingContinuations
     }
 }
 
@@ -66,11 +79,20 @@ public struct MarkdownSourceListContinuation: Equatable {
     public let indent: String
     public let content: String
     public let lineEnding: String
+    /// Blank lines separating a loose parent paragraph from its child list.
+    public let leadingTrivia: String
 
-    public var source: String { indent + content + lineEnding }
+    init(indent: String, content: String, lineEnding: String, leadingTrivia: String = "") {
+        self.indent = indent
+        self.content = content
+        self.lineEnding = lineEnding
+        self.leadingTrivia = leadingTrivia
+    }
+
+    public var source: String { leadingTrivia + indent + content + lineEnding }
 
     fileprivate func replacingContent(_ value: String) -> Self {
-        .init(indent: indent, content: value, lineEnding: lineEnding)
+        .init(indent: indent, content: value, lineEnding: lineEnding, leadingTrivia: leadingTrivia)
     }
 }
 
@@ -78,7 +100,229 @@ public struct MarkdownSourceListContinuation: Equatable {
 public struct MarkdownSourceList: Equatable {
     public let items: [MarkdownSourceListItem]
 
-    public func toMarkdown() -> String { items.map(\.source).joined() }
+    /// A source edit for a list-row paste. The focus points at the last pasted
+    /// child, rather than the original row whose UIKit field will be rebuilt.
+    struct BlockPasteEdit {
+        let source: String
+        let focusIndex: Int
+        let focusContinuationIndex: Int?
+        let focusOffset: Int
+        let sourceCaretOffset: Int
+    }
+
+    public func toMarkdown() -> String {
+        var result = ""
+        forEachSourceSegment { _, segment, _ in result += segment }
+        return result
+    }
+
+    var plainText: String {
+        var lines: [String] = []
+        forEachSourceSegment { index, _, isTrailing in
+            if isTrailing {
+                lines += items[index].trailingContinuations.map(\.content)
+            } else {
+                let item = items[index]
+                lines.append(item.content)
+                lines += item.continuations.map(\.content)
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    func sourceOffset(ofItemAt index: Int) -> Int? {
+        guard items.indices.contains(index) else { return nil }
+        var offset = 0
+        var result: Int?
+        forEachSourceSegment { owner, segment, isTrailing in
+            if owner == index && !isTrailing { result = offset }
+            offset += (segment as NSString).length
+        }
+        return result
+    }
+
+    func sourceOffsetOfTrailingContinuations(for index: Int) -> Int? {
+        guard items.indices.contains(index), !items[index].trailingContinuations.isEmpty else { return nil }
+        var offset = 0
+        var result: Int?
+        forEachSourceSegment { owner, segment, isTrailing in
+            if owner == index && isTrailing { result = offset }
+            offset += (segment as NSString).length
+        }
+        return result
+    }
+
+    func sourceLine(at index: Int, continuationIndex: Int? = nil, trailingIndex: Int? = nil)
+        -> (offset: Int, content: String)? {
+        guard items.indices.contains(index), continuationIndex == nil || trailingIndex == nil else { return nil }
+        let item = items[index]
+        if let trailingIndex {
+            guard item.trailingContinuations.indices.contains(trailingIndex),
+                  let start = sourceOffsetOfTrailingContinuations(for: index) else { return nil }
+            let line = item.trailingContinuations[trailingIndex]
+            let previous = item.trailingContinuations[..<trailingIndex].reduce(0) {
+                $0 + ($1.source as NSString).length
+            }
+            let prefix = line.leadingTrivia + line.indent
+            return (start + previous + (prefix as NSString).length, line.content)
+        }
+        guard let start = sourceOffset(ofItemAt: index) else { return nil }
+        let primaryPrefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
+        if let continuationIndex {
+            guard item.continuations.indices.contains(continuationIndex) else { return nil }
+            let line = item.continuations[continuationIndex]
+            let previous = item.continuations[..<continuationIndex].reduce(0) {
+                $0 + ($1.source as NSString).length
+            }
+            let primary = primaryPrefix + item.content + item.lineEnding
+            let prefix = line.leadingTrivia + line.indent
+            return (start + (primary as NSString).length + previous + (prefix as NSString).length, line.content)
+        }
+        return (start + (primaryPrefix as NSString).length, item.content)
+    }
+
+    /// Parents whose deferred paragraphs occur immediately after this item.
+    func trailingOwners(after index: Int) -> [Int] {
+        guard items.indices.contains(index) else { return [] }
+        let nextWidth = items.indices.contains(index + 1) ?
+            Self.indentationWidth(items[index + 1].indent) : -1
+        return (0...index).reversed().filter { parent in
+            guard !items[parent].trailingContinuations.isEmpty else { return false }
+            let width = Self.indentationWidth(items[parent].indent)
+            return nextWidth <= width && (parent == index ||
+                items[(parent + 1)...index].allSatisfy { Self.indentationWidth($0.indent) > width })
+        }
+    }
+
+    private func forEachSourceSegment(_ consume: (Int, String, Bool) -> Void) {
+        var open: [Int] = []
+        for (index, item) in items.enumerated() {
+            let width = Self.indentationWidth(item.indent)
+            while let previous = open.last,
+                  Self.indentationWidth(items[previous].indent) >= width {
+                consume(previous, items[previous].trailingContinuations.map(\.source).joined(), true)
+                open.removeLast()
+            }
+            consume(index, item.source, false)
+            open.append(index)
+        }
+        for previous in open.reversed() {
+            consume(previous, items[previous].trailingContinuations.map(\.source).joined(), true)
+        }
+    }
+
+    /// Inserts a list fragment below one item without serializing the old
+    /// marker, task checkbox, descendants, or adjacent items. A suffix becomes
+    /// the parent's own paragraph after its new children, provided the model
+    /// can round-trip that exact source and preserve every old item.
+    func replacingLineRangeWithNestedList(at index: Int, continuationIndex: Int? = nil,
+                                          range: NSRange, markdown: String) -> BlockPasteEdit? {
+        guard items.indices.contains(index), !markdown.isEmpty else { return nil }
+        let item = items[index]
+        let line: String
+        let lineStart: Int
+        let parentPrefix: String
+        guard let precedingLength = sourceOffset(ofItemAt: index) else { return nil }
+        if let continuationIndex {
+            guard continuationIndex == item.continuations.count - 1 else { return nil }
+            let continuation = item.continuations[continuationIndex]
+            line = continuation.content
+            let primary = item.indent + item.marker + item.spacing + (item.taskMarker ?? "")
+                + item.taskSpacing + item.content + item.lineEnding
+            let previousContinuations = item.continuations[..<continuationIndex]
+                .reduce(0) { partial, previous in partial + (previous.source as NSString).length }
+            lineStart = precedingLength + (primary as NSString).length
+                + previousContinuations + (continuation.indent as NSString).length
+            parentPrefix = item.indent + item.marker + item.spacing
+        } else {
+            line = item.content
+            let primaryPrefix = item.indent + item.marker + item.spacing
+                + (item.taskMarker ?? "") + item.taskSpacing
+            lineStart = precedingLength + (primaryPrefix as NSString).length
+            parentPrefix = item.indent + item.marker + item.spacing
+        }
+        let body = line as NSString
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= body.length, Range(range, in: line) != nil else { return nil }
+        let units = Array(line.utf16)
+        func isScalarBoundary(_ offset: Int) -> Bool {
+            guard offset > 0, offset < units.count else { return true }
+            return !((0xD800...0xDBFF).contains(units[offset - 1]) &&
+                     (0xDC00...0xDFFF).contains(units[offset]))
+        }
+        guard isScalarBoundary(range.location), isScalarBoundary(NSMaxRange(range)) else { return nil }
+        let before = body.substring(to: range.location)
+        let after = body.substring(from: NSMaxRange(range))
+        guard !parentPrefix.contains("\t"),
+              (after.isEmpty || (item.trailingContinuations.isEmpty && !hasNestedItems(at: index))),
+              MarkdownInlineMarkEditor.canSplitForBlockPaste(line, range: range) else { return nil }
+        if !after.isEmpty {
+            let leadingSpaceCount = after.prefix(while: { $0 == " " }).count
+            guard leadingSpaceCount < 4, !after.hasPrefix("\t"),
+                  Self.isSafeTrailingParagraph(after) else { return nil }
+        }
+        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .newlines)
+        let parsedFragment = MarkdownDocumentCodec().parse(normalized)
+        guard !parsedFragment.blocks.isEmpty, parsedFragment.toMarkdown() == normalized,
+              parsedFragment.blocks.allSatisfy({ if case .list = $0.kind { return true }; return false }),
+              let first = parsedFragment.blocks.first,
+              case .list = first.kind else { return nil }
+        let indent = String(repeating: " ", count: Self.indentationWidth(parentPrefix))
+        let ending = toMarkdown().contains("\r\n") ? "\r\n" : "\n"
+        let nested = normalized.components(separatedBy: "\n")
+            .map { $0.isEmpty ? "" : indent + $0 }.joined(separator: ending)
+        let leading = before + ending + nested
+        let insertion = leading + (after.isEmpty ? "" : ending + ending + indent + after)
+        let source = (toMarkdown() as NSString).replacingCharacters(in: NSRange(location: lineStart, length: body.length),
+                                                                     with: insertion)
+        let parsed = MarkdownDocumentCodec().parse(source)
+        guard parsed.blocks.count == 1, case let .list(result) = parsed.blocks[0].kind,
+              parsed.toMarkdown() == source else { return nil }
+        let oldTail = Array(items.dropFirst(index + 1))
+        let editedLinePreserved: Bool
+        if let continuationIndex {
+            editedLinePreserved = result.items[index].content == item.content &&
+                result.items[index].continuations.count == item.continuations.count &&
+                result.items[index].continuations[..<continuationIndex] == item.continuations[..<continuationIndex] &&
+                result.items[index].continuations[continuationIndex].content == before
+        } else {
+            editedLinePreserved = result.items[index].content == before &&
+                result.items[index].continuations == item.continuations
+        }
+        guard Array(result.items[..<index]) == Array(items[..<index]),
+              result.items.count > items.count,
+              result.items[index].indent == item.indent,
+              result.items[index].marker == item.marker,
+              result.items[index].spacing == item.spacing,
+              result.items[index].taskMarker == item.taskMarker,
+              result.items[index].taskSpacing == item.taskSpacing,
+              editedLinePreserved,
+              Array(result.items.dropFirst(result.items.count - oldTail.count)) == oldTail else { return nil }
+        if !after.isEmpty {
+            guard result.items[index].trailingContinuations.count == 1,
+                  result.items[index].trailingContinuations[0].source == ending + indent + after +
+                    (continuationIndex.map { item.continuations[$0].lineEnding } ?? item.lineEnding),
+                  result.items[index].trailingContinuations[0].content.trimmingCharacters(in: .whitespaces) ==
+                    after.trimmingCharacters(in: .whitespaces) else { return nil }
+        }
+        let added = result.items.count - items.count
+        let focusIndex = index + added
+        guard result.items.indices.contains(focusIndex),
+              Self.indentationWidth(result.items[focusIndex].indent) > Self.indentationWidth(item.indent),
+              (index + 1...focusIndex).allSatisfy({
+                  Self.indentationWidth(result.items[$0].indent) > Self.indentationWidth(item.indent)
+              }) else { return nil }
+        let caret = lineStart + (leading as NSString).length
+        let focused = result.items[focusIndex]
+        let focusContinuationIndex = focused.continuations.isEmpty ? nil : focused.continuations.count - 1
+        let focusText = focusContinuationIndex.map { focused.continuations[$0].content } ?? focused.content
+        return .init(source: source, focusIndex: focusIndex,
+                     focusContinuationIndex: focusContinuationIndex,
+                     focusOffset: (focusText as NSString).length,
+                     sourceCaretOffset: caret)
+    }
 
     /// Deletes a contiguous run of siblings while retaining every other item's exact source.
     /// Nested descendants are never silently detached from a selected parent.
@@ -128,7 +372,8 @@ public struct MarkdownSourceList: Equatable {
             next[insertion - 1] = .init(indent: last.indent, marker: last.marker, spacing: last.spacing,
                                          taskMarker: last.taskMarker, taskSpacing: last.taskSpacing,
                                          content: last.content, lineEnding: newline,
-                                         continuations: last.continuations)
+                                         continuations: last.continuations,
+                                         trailingContinuations: last.trailingContinuations)
         }
         next.insert(sibling, at: insertion)
         return .init(items: next)
@@ -169,6 +414,16 @@ public struct MarkdownSourceList: Equatable {
     public func replacingContinuationContent(at itemIndex: Int, lineIndex: Int, with content: String) -> Self? {
         guard items.indices.contains(itemIndex),
               let item = items[itemIndex].replacingContinuation(at: lineIndex, with: content) else { return nil }
+        var next = items
+        next[itemIndex] = item
+        return .init(items: next)
+    }
+
+    /// Edits the parent paragraph that follows its nested child list.
+    public func replacingTrailingContinuationContent(at itemIndex: Int, lineIndex: Int,
+                                                     with content: String) -> Self? {
+        guard items.indices.contains(itemIndex),
+              let item = items[itemIndex].replacingTrailingContinuation(at: lineIndex, with: content) else { return nil }
         var next = items
         next[itemIndex] = item
         return .init(items: next)
@@ -222,13 +477,20 @@ public struct MarkdownSourceList: Equatable {
             guard let indent = Self.shiftingIndent(item.indent, by: columns) else { return nil }
             let continuations = item.continuations.compactMap { line -> MarkdownSourceListContinuation? in
                 guard let shifted = Self.shiftingIndent(line.indent, by: columns) else { return nil }
-                return .init(indent: shifted, content: line.content, lineEnding: line.lineEnding)
+                return .init(indent: shifted, content: line.content, lineEnding: line.lineEnding,
+                             leadingTrivia: line.leadingTrivia)
             }
             guard continuations.count == item.continuations.count else { return nil }
+            let trailing = item.trailingContinuations.compactMap { line -> MarkdownSourceListContinuation? in
+                guard let shifted = Self.shiftingIndent(line.indent, by: columns) else { return nil }
+                return .init(indent: shifted, content: line.content, lineEnding: line.lineEnding,
+                             leadingTrivia: line.leadingTrivia)
+            }
+            guard trailing.count == item.trailingContinuations.count else { return nil }
             next[position] = .init(indent: indent, marker: item.marker, spacing: item.spacing,
                                    taskMarker: item.taskMarker, taskSpacing: item.taskSpacing,
                                    content: item.content, lineEnding: item.lineEnding,
-                                   continuations: continuations)
+                                   continuations: continuations, trailingContinuations: trailing)
         }
         return .init(items: next)
     }
@@ -250,6 +512,7 @@ public struct MarkdownSourceList: Equatable {
         guard !source.isEmpty else { return nil }
         let components = source.components(separatedBy: "\n")
         var items: [MarkdownSourceListItem] = []
+        var pendingBlank = ""
         for index in components.indices {
             if index == components.count - 1 && components[index].isEmpty { break }
             let component = components[index]
@@ -257,7 +520,12 @@ public struct MarkdownSourceList: Equatable {
             let hasCR = component.hasSuffix("\r")
             let line = hasCR ? String(component.dropLast()) : component
             let ending = hasNewline ? (hasCR ? "\r\n" : "\n") : ""
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                pendingBlank += line + ending
+                continue
+            }
             if let parts = match(#"^([ \t]*)([-+*]|[0-9]+[.)])([ \t]+)(.*)$"#, line) {
+                guard pendingBlank.isEmpty else { return nil }
                 let remainder = parts[4]
                 let task = match(#"^(\[[ xX]\])([ \t]*)(.*)$"#, remainder)
                 let validTask = task != nil && (!task![2].isEmpty || task![3].isEmpty)
@@ -266,23 +534,60 @@ public struct MarkdownSourceList: Equatable {
                                    taskSpacing: validTask ? task![2] : "",
                                    content: validTask ? task![3] : remainder, lineEnding: ending))
             } else if let parts = match(#"^([ \t]+)(.*)$"#, line), let previous = items.last {
-                // A paragraph continuation must reach the preceding marker's content column.
-                let contentColumn = indentationWidth(previous.indent + previous.marker + previous.spacing
-                                                    + (previous.taskMarker ?? "") + previous.taskSpacing)
-                guard indentationWidth(parts[1]) >= contentColumn else { return nil }
-                let continuation = MarkdownSourceListContinuation(indent: parts[1], content: parts[2], lineEnding: ending)
-                items[items.count - 1] = .init(indent: previous.indent, marker: previous.marker,
-                                               spacing: previous.spacing, taskMarker: previous.taskMarker,
-                                               taskSpacing: previous.taskSpacing, content: previous.content,
-                                               lineEnding: previous.lineEnding,
-                                               continuations: previous.continuations + [continuation])
+                let lineWidth = indentationWidth(parts[1])
+                let previousWidth = indentationWidth(previous.indent)
+                let owner = items.indices.reversed().first { candidate in
+                    let item = items[candidate]
+                    // Keep the previous direct-continuation rule for tasks.
+                    // After child items, the checkbox is prose and the parent
+                    // paragraph returns to the list marker's content column.
+                    let prefix = item.indent + item.marker + item.spacing +
+                        (candidate == items.count - 1 ? (item.taskMarker ?? "") + item.taskSpacing : "")
+                    let column = indentationWidth(prefix)
+                    return lineWidth >= column &&
+                        (candidate == items.count - 1 || indentationWidth(item.indent) < previousWidth)
+                }
+                guard let owner, pendingBlank.isEmpty || owner < items.count - 1 else { return nil }
+                if owner < items.count - 1 {
+                    let selected = items[owner]
+                    let column = indentationWidth(selected.indent + selected.marker + selected.spacing)
+                    guard lineWidth - column < 4,
+                          isSafeTrailingParagraph(parts[2]) else { return nil }
+                }
+                let continuation = MarkdownSourceListContinuation(indent: parts[1], content: parts[2],
+                                                                  lineEnding: ending, leadingTrivia: pendingBlank)
+                pendingBlank = ""
+                let selected = items[owner]
+                if owner == items.count - 1 {
+                    items[owner] = .init(indent: selected.indent, marker: selected.marker,
+                                         spacing: selected.spacing, taskMarker: selected.taskMarker,
+                                         taskSpacing: selected.taskSpacing, content: selected.content,
+                                         lineEnding: selected.lineEnding,
+                                         continuations: selected.continuations + [continuation],
+                                         trailingContinuations: selected.trailingContinuations)
+                } else {
+                    items[owner] = .init(indent: selected.indent, marker: selected.marker,
+                                         spacing: selected.spacing, taskMarker: selected.taskMarker,
+                                         taskSpacing: selected.taskSpacing, content: selected.content,
+                                         lineEnding: selected.lineEnding,
+                                         continuations: selected.continuations,
+                                         trailingContinuations: selected.trailingContinuations + [continuation])
+                }
             } else { return nil }
         }
-        return items.isEmpty ? nil : .init(items: items)
+        let result = Self(items: items)
+        return items.isEmpty || !pendingBlank.isEmpty || result.toMarkdown() != source ? nil : result
     }
 
     static func isListStart(_ line: String) -> Bool {
         match(#"^[ \t]{0,3}(?:[-+*]|[0-9]+[.)])[ \t]+"#, line) != nil
+    }
+
+    private static func isSafeTrailingParagraph(_ content: String) -> Bool {
+        let parsed = MarkdownDocumentCodec().parse(content)
+        guard parsed.blocks.count == 1 else { return false }
+        if case .paragraph = parsed.blocks[0].kind { return true }
+        return false
     }
 
     private static func match(_ pattern: String, _ value: String) -> [String]? {
