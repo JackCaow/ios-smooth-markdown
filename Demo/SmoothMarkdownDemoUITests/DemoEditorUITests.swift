@@ -45,6 +45,31 @@ final class DemoEditorUITests: XCTestCase {
         XCTAssertTrue(app.textFields["editor-find-field"].waitForExistence(timeout: 5))
     }
 
+    func testFormattedFindNavigatesContinuationTableAndRawHighlights() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--formatted-find-fixture"]
+        app.launch()
+
+        app.buttons["editor-find-open"].tap()
+        let find = app.textFields["editor-find-field"]
+        XCTAssertTrue(find.waitForExistence(timeout: 5))
+        find.tap()
+        find.typeText("target")
+        XCTAssertEqual(app.staticTexts["editor-find-count"].label, "1/5")
+
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue((app.textFields["list-block-0-item-0-continuation-0"].value as? String)?.contains("active") == true)
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue((app.textFields["list-block-0-item-1"].value as? String)?.contains("active") == true)
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue((app.textFields["table-block-1-header-col-0"].value as? String)?.contains("active") == true)
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue((app.textFields["table-block-1-row-0-col-0"].value as? String)?.contains("active") == true)
+        app.buttons["editor-find-next"].tap()
+        XCTAssertTrue((app.staticTexts["raw-text-block-2"].value as? String)?.contains("active") == true)
+        XCTAssertTrue(app.segmentedControls.buttons["Blocks"].isSelected)
+    }
+
     func testFlutterEditorDemoHostCallbacksAndSource() {
         let app = XCUIApplication()
         app.launch()

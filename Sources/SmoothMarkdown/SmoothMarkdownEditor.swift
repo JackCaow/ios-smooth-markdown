@@ -306,7 +306,13 @@ public struct SmoothMarkdownEditor: View {
 
     private var sourceSearchMatches: [NSRange] { controller.findMatches(searchQuery) }
     private var formattedSearchMatches: [MarkdownFormattedFindMatch] {
-        MarkdownFormattedFind.matches(in: controller.semanticDocument, query: searchQuery)
+        MarkdownFormattedFind.matches(in: controller.semanticDocument, query: searchQuery,
+                                      isCustomBlockRendered: { block in
+            guard customBlockBuilder != nil || customBlockEditorBuilder != nil else { return false }
+            if let customBlockMatcher { return customBlockMatcher(block) }
+            if case .plugin = block.kind { return true }
+            return false
+        })
     }
     private var searchMatchCount: Int {
         controller.mode == .formatted ? formattedSearchMatches.count : sourceSearchMatches.count
@@ -1132,6 +1138,7 @@ private struct FormattedBlockRow: View {
             case let .table(table):
                 FormattedTableView(controller: controller, blockID: block.id, table: table,
                                    textHighlights: tableCellHighlights,
+                                   findMatches: findMatches, activeFindMatch: activeFindMatch,
                                    onCaptureTextPosition: onCaptureTextPosition)
             case let .list(list):
                 FormattedListView(controller: controller, blockID: block.id, list: list,
@@ -1156,10 +1163,11 @@ private struct FormattedBlockRow: View {
                                    onCaptureTextPosition: onCaptureTextPosition)
             case .plugin, .raw:
                 blockLabel("Source only")
-                Text(block.source.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(highlightedRawText)
                     .font(.system(.caption, design: .monospaced))
-                    .lineLimit(4)
                     .textSelection(.enabled)
+                    .accessibilityIdentifier("raw-text-\(block.id)")
+                    .accessibilityValue("Find matches: \(rawFindMatches.count)\(activeFindMatch?.field == .rawText ? ", active" : "")")
                 Button("Edit source") {
                     if let range = controller.semanticDocument.sourceRange(of: block.id) {
                         controller.setSelection(range)
@@ -1195,6 +1203,24 @@ private struct FormattedBlockRow: View {
             wikilinkSelectedIndex = 0
             slashSelectedIndex = 0
         }
+    }
+
+    private var rawFindMatches: [NSRange] {
+        findMatches.compactMap { $0.field == .rawText ? $0.range : nil }
+    }
+
+    private var highlightedRawText: AttributedString {
+        let text = MarkdownFormattedFind.rawDisplayText(block.source)
+        let value = NSMutableAttributedString(string: text)
+        let length = (text as NSString).length
+        for range in rawFindMatches where range.location >= 0 && NSMaxRange(range) <= length {
+            value.addAttribute(.backgroundColor, value: UIColor.systemYellow.withAlphaComponent(0.30), range: range)
+        }
+        if let match = activeFindMatch, match.field == .rawText,
+           match.range.location >= 0, NSMaxRange(match.range) <= length {
+            value.addAttribute(.backgroundColor, value: UIColor.systemOrange.withAlphaComponent(0.48), range: match.range)
+        }
+        return AttributedString(value)
     }
 
     private func codeLanguageMenu(info: String) -> some View {
@@ -1573,6 +1599,8 @@ private struct FormattedTableView: View {
     let blockID: String
     let table: MarkdownSourceTable
     let textHighlights: [Int: [Int: NSRange]]?
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
     let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var selectedCells: MarkdownSemanticTableCellSelection?
     @State private var focusedCell: (row: Int, column: Int, selection: NSRange)?
@@ -1663,6 +1691,8 @@ private struct FormattedTableView: View {
                                                    row: 0, column: column, isHeader: true,
                                                    isRangeSelected: isSelected(row: 0, column: column),
                                                    textHighlight: textHighlights?[0]?[column],
+                                                   searchHighlights: searchHighlights(row: 0, column: column),
+                                                   activeSearchHighlight: activeSearchHighlight(row: 0, column: column),
                                                    onRangeDrag: selectCells,
                                                    onSelection: { row, column, range in
                                                        focusedCell = (row, column, range)
@@ -1689,6 +1719,8 @@ private struct FormattedTableView: View {
                                                    row: row, column: column, isHeader: false,
                                                    isRangeSelected: isSelected(row: row + 1, column: column),
                                                    textHighlight: textHighlights?[row + 1]?[column],
+                                                   searchHighlights: searchHighlights(row: row + 1, column: column),
+                                                   activeSearchHighlight: activeSearchHighlight(row: row + 1, column: column),
                                                    onRangeDrag: selectCells,
                                                    onSelection: { row, column, range in
                                                        focusedCell = (row, column, range)
@@ -1727,6 +1759,14 @@ private struct FormattedTableView: View {
         controller.updateSemanticTable(id: blockID, transform)
     }
 
+    private func searchHighlights(row: Int, column: Int) -> [NSRange] {
+        findMatches.compactMap { $0.field == .tableCell(row: row, column: column) ? $0.range : nil }
+    }
+
+    private func activeSearchHighlight(row: Int, column: Int) -> NSRange? {
+        activeFindMatch?.field == .tableCell(row: row, column: column) ? activeFindMatch?.range : nil
+    }
+
     private func alignmentLabel(_ alignment: MarkdownTableAlignment?) -> String {
         switch alignment {
         case .left: "Left"
@@ -1747,6 +1787,8 @@ private struct FormattedTableCell: View {
     let isHeader: Bool
     let isRangeSelected: Bool
     let textHighlight: NSRange?
+    let searchHighlights: [NSRange]
+    let activeSearchHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
     let onSelection: (Int, Int, NSRange) -> Void
 
@@ -1756,6 +1798,7 @@ private struct FormattedTableCell: View {
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
                                  isHeader: isHeader,
                                  isRangeSelected: isRangeSelected, textHighlight: textHighlight,
+                                 searchHighlights: searchHighlights, activeSearchHighlight: activeSearchHighlight,
                                  onRangeDrag: onRangeDrag,
                                  onSelection: onSelection,
                                  onGridPaste: { source in
@@ -1804,6 +1847,8 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let isHeader: Bool
     let isRangeSelected: Bool
     let textHighlight: NSRange?
+    let searchHighlights: [NSRange]
+    let activeSearchHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
     let onSelection: (Int, Int, NSRange) -> Void
     let onGridPaste: (String) -> Bool
@@ -1836,6 +1881,9 @@ private struct FormattedTableInputField: UIViewRepresentable {
         field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
         field.crossCellHighlight = textHighlight
         field.crossCellHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        field.tableSearchHighlights = searchHighlights
+        field.tableActiveSearchHighlight = activeSearchHighlight
+        field.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         let background = editorTheme.tableCellBackground(isSelected: isRangeSelected, isHeader: isHeader)
         field.backgroundColor = background.map(UIColor.init) ??
             (isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear)
@@ -2061,6 +2109,11 @@ private struct FormattedListView: View {
                             }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
                             crossItemHighlight: textHighlights?.continuations[index]?[lineIndex],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .listContinuation(item: index, line: lineIndex) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .listContinuation(item: index, line: lineIndex) ?
+                                activeFindMatch?.range : nil,
                             onSelection: { continuationSelections[index, default: [:]][lineIndex] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
@@ -2131,6 +2184,11 @@ private struct FormattedListView: View {
                             }
                         }), blockID: blockID, index: parentIndex, isRangeSelected: isSelected(parentIndex),
                             crossItemHighlight: textHighlights?.trailing[parentIndex]?[lineIndex],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .listTrailing(item: parentIndex, line: lineIndex) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .listTrailing(item: parentIndex, line: lineIndex) ?
+                                activeFindMatch?.range : nil,
                             onSelection: { trailingSelections[parentIndex, default: [:]][lineIndex] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
@@ -2214,24 +2272,42 @@ class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
     var onRangeDrag: ((FormattedRangeFieldIdentity, FormattedRangeFieldIdentity) -> Void)?
     var crossCellHighlight: NSRange? { didSet { setNeedsLayout() } }
     var crossCellHighlightColor: UIColor? { didSet { setNeedsLayout() } }
+    var tableSearchHighlights: [NSRange] = [] { didSet { setNeedsLayout() } }
+    var tableActiveSearchHighlight: NSRange? { didSet { setNeedsLayout() } }
     private var dragAnchor: FormattedRangeFieldIdentity?
     private let cellRangeLayer = CAShapeLayer()
+    private let tableSearchLayer = CAShapeLayer()
+    private let tableActiveSearchLayer = CAShapeLayer()
 
     override func layoutSubviews() {
         super.layoutSubviews()
         if cellRangeLayer.superlayer == nil { layer.insertSublayer(cellRangeLayer, at: 0) }
+        if tableSearchLayer.superlayer == nil { layer.insertSublayer(tableSearchLayer, above: cellRangeLayer) }
+        if tableActiveSearchLayer.superlayer == nil { layer.insertSublayer(tableActiveSearchLayer, above: tableSearchLayer) }
         cellRangeLayer.frame = bounds
+        tableSearchLayer.frame = bounds
+        tableActiveSearchLayer.frame = bounds
         cellRangeLayer.fillColor = (crossCellHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        cellRangeLayer.path = highlightPath(crossCellHighlight.map { [$0] } ?? []).cgPath
+        tableSearchLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.30).cgColor
+        tableSearchLayer.path = highlightPath(tableSearchHighlights).cgPath
+        tableActiveSearchLayer.fillColor = UIColor.systemOrange.withAlphaComponent(0.48).cgColor
+        tableActiveSearchLayer.path = highlightPath(tableActiveSearchHighlight.map { [$0] } ?? []).cgPath
+    }
+
+    private func highlightPath(_ highlights: [NSRange]) -> UIBezierPath {
         let path = UIBezierPath()
-        if let highlight = crossCellHighlight, highlight.length > 0,
-           let first = position(from: beginningOfDocument, offset: highlight.location),
-           let last = position(from: first, offset: highlight.length),
-           let range = textRange(from: first, to: last) {
+        let length = ((text ?? "") as NSString).length
+        for highlight in highlights where highlight.location >= 0 && highlight.length > 0 &&
+            NSMaxRange(highlight) <= length {
+            guard let first = position(from: beginningOfDocument, offset: highlight.location),
+                  let last = position(from: first, offset: highlight.length),
+                  let range = textRange(from: first, to: last) else { continue }
             for rect in selectionRects(for: range) where !rect.rect.isEmpty {
                 path.append(UIBezierPath(roundedRect: rect.rect, cornerRadius: 2))
             }
         }
-        cellRangeLayer.path = path.cgPath
+        return path
     }
 
     override init(frame: CGRect) {

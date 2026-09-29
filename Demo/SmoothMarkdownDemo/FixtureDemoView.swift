@@ -12,6 +12,7 @@ struct FixtureDemoView: View {
         ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--formatted-find-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
@@ -167,7 +168,8 @@ struct FixtureDemoView: View {
                 ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
-                ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") {
+                ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--formatted-find-fixture") {
                 controller.mode = .formatted
             }
         }
@@ -187,6 +189,9 @@ private func editorFixtureText() -> String {
     }
     if arguments.contains("--empty-list-editor-fixture") { return emptyListEditorFixture }
     if arguments.contains("--nested-list-editor-fixture") { return nestedListEditorFixture }
+    if arguments.contains("--formatted-find-fixture") {
+        return "- Parent\n  target continuation\n- target next\n\n| target header | Other |\n| --- | --- |\n| target body | x |\n\n$$\ntarget raw\n$$"
+    }
     if arguments.contains("--list-editor-fixture") { return listEditorFixture }
     if arguments.contains("--selection-list-editor-fixture") { return "- First\n- Second\n- Third" }
     if arguments.contains("--host-io-fixture") { return hostIOFixture }

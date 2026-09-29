@@ -6,7 +6,12 @@ struct MarkdownFormattedFindMatch: Equatable {
     enum Field: Equatable {
         case prose
         case listItem(Int)
+        case listContinuation(item: Int, line: Int)
+        case listTrailing(item: Int, line: Int)
         case quoteLine(Int)
+        /// Row zero is the header; body rows start at one.
+        case tableCell(row: Int, column: Int)
+        case rawText
     }
 
     let blockID: String
@@ -15,10 +20,12 @@ struct MarkdownFormattedFindMatch: Equatable {
 }
 
 enum MarkdownFormattedFind {
-    static func matches(in document: MarkdownDocument, query: String, limit: Int = 500) -> [MarkdownFormattedFindMatch] {
+    static func matches(in document: MarkdownDocument, query: String, limit: Int = 500,
+                        isCustomBlockRendered: ((MarkdownDocumentBlock) -> Bool)? = nil) -> [MarkdownFormattedFindMatch] {
         guard !query.isEmpty, limit > 0 else { return [] }
         var result: [MarkdownFormattedFindMatch] = []
-        for block in document.blocks {
+        for (blockIndex, block) in document.blocks.enumerated() {
+            if isCustomBlockRendered?(block) == true { continue }
             switch block.kind {
             case .paragraph, .heading:
                 // The inline map omits Markdown markers and link destinations.
@@ -30,6 +37,30 @@ enum MarkdownFormattedFind {
                 for (index, item) in list.items.enumerated() {
                     append(item.content, blockID: block.id, field: .listItem(index),
                            query: query, limit: limit, to: &result)
+                    for (line, continuation) in item.continuations.enumerated() {
+                        append(continuation.content, blockID: block.id,
+                               field: .listContinuation(item: index, line: line),
+                               query: query, limit: limit, to: &result)
+                    }
+                    for owner in list.trailingOwners(after: index) {
+                        for (line, continuation) in list.items[owner].trailingContinuations.enumerated() {
+                            append(continuation.content, blockID: block.id,
+                                   field: .listTrailing(item: owner, line: line),
+                                   query: query, limit: limit, to: &result)
+                        }
+                    }
+                    if result.count == limit { break }
+                }
+            case let .table(table):
+                for row in 0...table.rows.count {
+                    let cells = row == 0 ? table.headers : table.rows[row - 1]
+                    for (column, cell) in cells.enumerated() {
+                        // The editable field unescapes literal pipes but retains inline Markdown.
+                        append(cell.replacingOccurrences(of: "\\|", with: "|"), blockID: block.id,
+                               field: .tableCell(row: row, column: column),
+                               query: query, limit: limit, to: &result)
+                        if result.count == limit { break }
+                    }
                     if result.count == limit { break }
                 }
             case .raw:
@@ -39,12 +70,19 @@ enum MarkdownFormattedFind {
                                query: query, limit: limit, to: &result)
                         if result.count == limit { break }
                     }
+                } else if blockIndex != 0 || MarkdownSourceFrontmatter.parsePrefix(block.source)?.source != block.source {
+                    append(rawDisplayText(block.source), blockID: block.id, field: .rawText,
+                           query: query, limit: limit, to: &result)
                 }
-            case .fencedCode, .table, .horizontalRule, .plugin: break
+            case .fencedCode, .horizontalRule, .plugin: break
             }
             if result.count == limit { break }
         }
         return result
+    }
+
+    static func rawDisplayText(_ source: String) -> String {
+        source.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func append(_ text: String, blockID: String, field: MarkdownFormattedFindMatch.Field,
