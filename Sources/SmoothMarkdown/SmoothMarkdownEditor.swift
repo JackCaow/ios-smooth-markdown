@@ -19,6 +19,8 @@ public struct SmoothMarkdownEditor: View {
     @State private var performanceReporter = MarkdownEditorPerformanceReporter()
     @FocusState private var searchFieldFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.markdownEditorTheme) private var ambientEditorTheme
+    private let editorTheme: MarkdownEditorTheme?
     private let onSave: ((String) -> Void)?
     private let onChanged: ((String) -> Void)?
     private let onModeChanged: ((MarkdownEditorMode) -> Void)?
@@ -44,6 +46,7 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
+                editorTheme: MarkdownEditorTheme? = nil,
                 onChanged: ((String) -> Void)? = nil,
                 onModeChanged: ((MarkdownEditorMode) -> Void)? = nil,
                 onSelectionChanged: ((NSRange) -> Void)? = nil,
@@ -72,6 +75,7 @@ public struct SmoothMarkdownEditor: View {
                 customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
         self.controller = controller
         self.onSave = onSave
+        self.editorTheme = editorTheme
         self.onChanged = onChanged
         self.onModeChanged = onModeChanged
         self.onSelectionChanged = onSelectionChanged
@@ -146,6 +150,7 @@ public struct SmoothMarkdownEditor: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 4)
+                .background(searchOpen ? (effectiveTheme.searchBarColor ?? .clear) : .clear)
             }
 
             if focusMode || searchOpen {
@@ -157,7 +162,7 @@ public struct SmoothMarkdownEditor: View {
                     .accessibilityHidden(true)
             }
 
-            Divider()
+            Divider().overlay(effectiveTheme.dividerColor ?? .clear)
             ZStack(alignment: .topTrailing) {
                 Group {
                     switch controller.mode {
@@ -169,18 +174,19 @@ public struct SmoothMarkdownEditor: View {
                                             capabilities: capabilities,
                                             enableSlashCommands: enableSlashCommands,
                                             customSlashCommands: customSlashCommands,
+                                            contentPadding: effectiveTheme.contentPadding,
                                             customBlockMatcher: customBlockMatcher,
                                             customBlockBuilder: customBlockBuilder,
                                             customBlockEditorBuilder: customBlockEditorBuilder)
                     case .preview:
-                        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+                        previewView
                     case .split:
                         GeometryReader { geometry in
                             VStack(spacing: 0) {
                                 sourceTextView
                                     .frame(height: geometry.size.height / 2)
-                                Divider()
-                                SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+                                Divider().overlay(effectiveTheme.dividerColor ?? .clear)
+                                previewView
                                     .frame(height: geometry.size.height / 2)
                             }
                         }
@@ -214,10 +220,19 @@ public struct SmoothMarkdownEditor: View {
             sourceFocusTracker.setFocused(false, callback: onFocusChanged)
             performanceReporter.cancel()
         }
+        .background(effectiveTheme.editorBackgroundColor ?? .clear)
+        .modifier(EditorOptionalCornerRadius(radius: effectiveTheme.editorBorderRadius))
+        .overlay {
+            if let color = effectiveTheme.editorBorderColor {
+                RoundedRectangle(cornerRadius: max(0, effectiveTheme.editorBorderRadius ?? 0))
+                    .stroke(color)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     private var sourceTextView: some View {
-        SourceTextView(controller: controller,
+        SourceTextView(controller: controller, theme: effectiveTheme,
                        onFocusChanged: { focused in
                            sourceFocusTracker.setFocused(focused, callback: onFocusChanged)
                        },
@@ -226,6 +241,16 @@ public struct SmoothMarkdownEditor: View {
                            sourceIsComposing = composing
                            schedulePerformanceSnapshot()
                        })
+    }
+
+    private var effectiveTheme: MarkdownEditorTheme {
+        ambientEditorTheme.merging(editorTheme)
+    }
+
+    private var previewView: some View {
+        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+            .padding(effectiveTheme.previewPadding ?? EdgeInsets())
+            .background(effectiveTheme.previewBackgroundColor ?? .clear)
     }
 
     private func schedulePerformanceSnapshot() {
@@ -356,7 +381,9 @@ public struct SmoothMarkdownEditor: View {
             .padding(.horizontal)
             .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
         }
-        .frame(minHeight: 44))
+        .frame(minHeight: 44)
+        .foregroundStyle(effectiveTheme.toolbarIconColor ?? .primary)
+        .background(effectiveTheme.toolbarColor ?? .clear))
         return toolbarBuilder?(defaultToolbar) ?? defaultToolbar
     }
 
@@ -366,6 +393,20 @@ public struct SmoothMarkdownEditor: View {
         Task { @MainActor in
             _ = await work()
             hostIOBusy = false
+        }
+    }
+}
+
+@available(iOS 17.0, *)
+private struct EditorOptionalCornerRadius: ViewModifier {
+    let radius: CGFloat?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let radius {
+            content.clipShape(RoundedRectangle(cornerRadius: max(0, radius)))
+        } else {
+            content
         }
     }
 }
@@ -422,6 +463,7 @@ private struct FormattedBlocksView: View {
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
+    let contentPadding: EdgeInsets?
     let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
@@ -703,7 +745,7 @@ private struct FormattedBlocksView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
+            .padding(contentPadding ?? EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
         }
         .alert("Link URL", isPresented: $showingTextRangeLinkEditor) {
             TextField("https://example.com", text: $textRangeLinkDestination)
@@ -2006,6 +2048,7 @@ private struct VisibleInlineTextView: UIViewRepresentable {
 @available(iOS 17.0, *)
 private struct SourceTextView: UIViewRepresentable {
     @ObservedObject var controller: MarkdownEditorController
+    let theme: MarkdownEditorTheme
     let onFocusChanged: ((Bool) -> Void)?
     let onCompositionChanged: ((Bool) -> Void)?
 
@@ -2013,10 +2056,10 @@ private struct SourceTextView: UIViewRepresentable {
         let view = UITextView()
         view.delegate = context.coordinator
         view.accessibilityIdentifier = "markdown-source"
-        view.font = UIFontMetrics(forTextStyle: .body)
-            .scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
         view.adjustsFontForContentSizeCategory = true
-        view.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+        context.coordinator.defaultTextColor = view.textColor
+        context.coordinator.defaultBackgroundColor = view.backgroundColor
+        applyTheme(to: view, coordinator: context.coordinator)
         view.autocapitalizationType = .none
         view.autocorrectionType = .no
         view.text = controller.text
@@ -2026,6 +2069,7 @@ private struct SourceTextView: UIViewRepresentable {
 
     func updateUIView(_ view: UITextView, context: Context) {
         context.coordinator.parent = self
+        applyTheme(to: view, coordinator: context.coordinator)
         if view.text != controller.text { view.text = controller.text }
         if view.selectedRange != controller.selection {
             view.selectedRange = controller.selection
@@ -2035,6 +2079,36 @@ private struct SourceTextView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    private func applyTheme(to view: UITextView, coordinator: Coordinator) {
+        let size = max(1, theme.sourceFontSize ?? 15)
+        let baseFont = theme.sourceFontName.flatMap { UIFont(name: $0, size: size) }
+            ?? .monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: baseFont)
+        if view.font != font { view.font = font }
+        if let textColor = theme.sourceTextColor.map(UIColor.init) {
+            if view.textColor != textColor { view.textColor = textColor }
+            coordinator.didOverrideTextColor = true
+        } else if coordinator.didOverrideTextColor {
+            view.textColor = coordinator.defaultTextColor
+            coordinator.didOverrideTextColor = false
+        }
+        if let backgroundColor = theme.sourceBackgroundColor.map(UIColor.init) {
+            if view.backgroundColor != backgroundColor { view.backgroundColor = backgroundColor }
+            coordinator.didOverrideBackgroundColor = true
+        } else if coordinator.didOverrideBackgroundColor {
+            view.backgroundColor = coordinator.defaultBackgroundColor
+            coordinator.didOverrideBackgroundColor = false
+        }
+        if let padding = theme.sourcePadding {
+            let inset = UIEdgeInsets(top: padding.top, left: padding.leading,
+                                     bottom: padding.bottom, right: padding.trailing)
+            if view.textContainerInset != inset { view.textContainerInset = inset }
+        } else {
+            let inset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
+            if view.textContainerInset != inset { view.textContainerInset = inset }
+        }
+    }
+
     static func dismantleUIView(_ view: UITextView, coordinator: Coordinator) {
         if view.isFirstResponder { view.resignFirstResponder() }
         coordinator.parent.onFocusChanged?(false)
@@ -2043,6 +2117,10 @@ private struct SourceTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SourceTextView
+        var defaultTextColor: UIColor?
+        var defaultBackgroundColor: UIColor?
+        var didOverrideTextColor = false
+        var didOverrideBackgroundColor = false
         init(parent: SourceTextView) { self.parent = parent }
 
         func textViewDidBeginEditing(_ textView: UITextView) { parent.onFocusChanged?(true) }
