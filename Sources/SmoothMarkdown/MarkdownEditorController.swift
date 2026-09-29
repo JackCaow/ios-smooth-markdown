@@ -9,24 +9,31 @@ struct PendingListParagraph: Equatable {
     let insertedTerminator: String
 }
 
-/// A UTF-16 offset in the editable body of a formatted paragraph or heading.
-/// Markdown markers are visible in that body, as they are in the formatted editor.
+/// A UTF-16 offset in a formatted paragraph, heading, or root list item's
+/// primary text line. Markdown markers inside that text are visible in Blocks.
 public struct MarkdownSemanticTextPosition: Equatable {
     public let blockID: String
     public let offset: Int
+    /// The root item within a source-backed list. `nil` selects prose text.
+    public let listItemIndex: Int?
 
-    public init(blockID: String, offset: Int) {
+    public init(blockID: String, offset: Int, listItemIndex: Int? = nil) {
         self.blockID = blockID
         self.offset = offset
+        self.listItemIndex = listItemIndex
     }
 }
 
 /// Two character endpoints in the formatted document; either direction is valid.
 public struct MarkdownSemanticTextSelection: Equatable {
+    /// Optional source snapshot. Pass it for commands captured from a Blocks UI.
+    public let source: String?
     public let anchor: MarkdownSemanticTextPosition
     public let focus: MarkdownSemanticTextPosition
 
-    public init(anchor: MarkdownSemanticTextPosition, focus: MarkdownSemanticTextPosition) {
+    public init(anchor: MarkdownSemanticTextPosition, focus: MarkdownSemanticTextPosition,
+                source: String? = nil) {
+        self.source = source
         self.anchor = anchor
         self.focus = focus
     }
@@ -224,6 +231,8 @@ public final class MarkdownEditorController: ObservableObject {
     private struct ResolvedSemanticTextSelection {
         let firstIndex: Int
         let lastIndex: Int
+        let start: MarkdownSemanticTextPosition
+        let end: MarkdownSemanticTextPosition
         let startOffset: Int
         let endOffset: Int
         let startSourceOffset: Int
@@ -239,10 +248,23 @@ public final class MarkdownEditorController: ObservableObject {
         let last = document.blocks[resolved.lastIndex]
         let start = resolved.startOffset == 0 && isHeading(first) ?
             document.sourceRange(of: first.id)!.location : resolved.startSourceOffset
-        let end = resolved.endOffset == 0 && isHeading(last) ?
-            document.sourceRange(of: last.id)!.location : resolved.endSourceOffset
+        let end: Int
+        if resolved.endOffset == 0 && isHeading(last) {
+            end = document.sourceRange(of: last.id)!.location
+        } else if let index = resolved.end.listItemIndex, resolved.endOffset == 0,
+                  case let .list(list) = last.kind, let itemStart = list.sourceOffset(ofItemAt: index) {
+            end = document.sourceRange(of: last.id)!.location + itemStart
+        } else {
+            end = resolved.endSourceOffset
+        }
+        guard start <= end else { return nil }
         let range = NSRange(location: start, length: end - start)
-        return (text as NSString).substring(with: range)
+        let copied = (text as NSString).substring(with: range)
+        if let index = resolved.start.listItemIndex, case let .list(list) = first.kind {
+            let item = list.items[index]
+            return item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing + copied
+        }
+        return copied
     }
 
     /// Text-coordinate highlights for prose endpoints and complete intervening rows.
@@ -254,10 +276,44 @@ public final class MarkdownEditorController: ObservableObject {
         var result: [String: NSRange] = [:]
         for index in resolved.firstIndex...resolved.lastIndex {
             let block = blocks[index]
+            if case .list = block.kind {
+                // List rows receive an item-level text tint from the companion
+                // range map; this entry keeps complete/intervening rows tinted.
+                result[block.id] = NSRange(location: 0, length: 1)
+                continue
+            }
             let length = (block.plainText as NSString).length
             let start = index == resolved.firstIndex ? resolved.startOffset : 0
             let end = index == resolved.lastIndex ? resolved.endOffset : length
             result[block.id] = NSRange(location: start, length: end - start)
+        }
+        return result
+    }
+
+    /// UTF-16 character tints for root list item primary fields touched by a
+    /// semantic range. Nested items and continuation lines have no endpoint map.
+    public func semanticListItemHighlightRanges(_ selection: MarkdownSemanticTextSelection)
+        -> [String: [Int: NSRange]]? {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
+        let blocks = semanticDocument.blocks
+        var result: [String: [Int: NSRange]] = [:]
+        for blockIndex in resolved.firstIndex...resolved.lastIndex {
+            let block = blocks[blockIndex]
+            guard case let .list(list) = block.kind else { continue }
+            // A complete intermediary list keeps its existing whole-row tint.
+            let startsHere = blockIndex == resolved.firstIndex && resolved.start.listItemIndex != nil
+            let endsHere = blockIndex == resolved.lastIndex && resolved.end.listItemIndex != nil
+            guard startsHere || endsHere else { continue }
+            let first = startsHere ? resolved.start.listItemIndex! : 0
+            let last = endsHere ? resolved.end.listItemIndex! : list.items.count - 1
+            var items: [Int: NSRange] = [:]
+            for index in first...last {
+                let length = (list.items[index].content as NSString).length
+                let lower = startsHere && index == first ? resolved.startOffset : 0
+                let upper = endsHere && index == last ? resolved.endOffset : length
+                items[index] = NSRange(location: lower, length: upper - lower)
+            }
+            result[block.id] = items
         }
         return result
     }
@@ -800,42 +856,54 @@ public final class MarkdownEditorController: ObservableObject {
 
     private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection)
         -> ResolvedSemanticTextSelection? {
+        guard selection.source == nil || selection.source == text else { return nil }
         let document = semanticDocument
         guard let anchorIndex = document.blocks.firstIndex(where: { $0.id == selection.anchor.blockID }),
-              let focusIndex = document.blocks.firstIndex(where: { $0.id == selection.focus.blockID }),
-              anchorIndex != focusIndex else { return nil }
-        let forward = anchorIndex < focusIndex
+              let focusIndex = document.blocks.firstIndex(where: { $0.id == selection.focus.blockID }) else { return nil }
         let firstIndex = min(anchorIndex, focusIndex)
         let lastIndex = max(anchorIndex, focusIndex)
-        let start = forward ? selection.anchor : selection.focus
-        let end = forward ? selection.focus : selection.anchor
-        for block in [document.blocks[firstIndex], document.blocks[lastIndex]] {
-            switch block.kind {
-            case .paragraph, .heading: break
-            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
-            }
-        }
         func sourceOffset(_ position: MarkdownSemanticTextPosition) -> Int? {
             guard let block = document.blockById(position.blockID),
-                  let range = document.sourceRange(of: position.blockID),
-                  position.offset >= 0, position.offset <= (block.plainText as NSString).length,
-                  Range(NSRange(location: position.offset, length: 0), in: block.plainText) != nil else {
-                return nil
+                  let range = document.sourceRange(of: position.blockID) else { return nil }
+            let bodyStart: Int
+            let body: String
+            switch block.kind {
+            case .paragraph, .heading:
+                guard position.listItemIndex == nil else { return nil }
+                body = block.plainText
+                let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
+                bodyStart = (block.source as NSString).length - (body as NSString).length - ending
+            case let .list(list):
+                guard let index = position.listItemIndex, list.items.indices.contains(index),
+                      let root = list.items.first,
+                      list.items.allSatisfy({ $0.indent == root.indent &&
+                          $0.continuations.isEmpty && $0.trailingContinuations.isEmpty }),
+                      let line = list.sourceLine(at: index) else { return nil }
+                body = line.content
+                bodyStart = line.offset
+            case .fencedCode, .table, .horizontalRule, .plugin, .raw: return nil
             }
-            let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
-            let bodyStart = (block.source as NSString).length - (block.plainText as NSString).length - ending
-            guard bodyStart >= 0,
+            guard position.offset >= 0, position.offset <= (body as NSString).length,
+                  Range(NSRange(location: position.offset, length: 0), in: body) != nil,
+                  bodyStart >= 0,
+                  bodyStart + (body as NSString).length <= (block.source as NSString).length,
                   (block.source as NSString).substring(with: NSRange(location: bodyStart,
-                                                                     length: (block.plainText as NSString).length)) == block.plainText else {
-                return nil
-            }
+                                                                     length: (body as NSString).length)) == body else { return nil }
             let absolute = range.location + bodyStart + position.offset
             guard isValidSourceRange(NSRange(location: absolute, length: 0)) else { return nil }
             return absolute
         }
-        guard let startSourceOffset = sourceOffset(start), let endSourceOffset = sourceOffset(end),
+        guard let anchorSourceOffset = sourceOffset(selection.anchor),
+              let focusSourceOffset = sourceOffset(selection.focus) else { return nil }
+        let forward = anchorSourceOffset <= focusSourceOffset
+        let start = forward ? selection.anchor : selection.focus
+        let end = forward ? selection.focus : selection.anchor
+        let startSourceOffset = forward ? anchorSourceOffset : focusSourceOffset
+        let endSourceOffset = forward ? focusSourceOffset : anchorSourceOffset
+        guard (firstIndex != lastIndex || start.listItemIndex != nil),
               startSourceOffset < endSourceOffset else { return nil }
         return .init(firstIndex: firstIndex, lastIndex: lastIndex,
+                     start: start, end: end,
                      startOffset: start.offset, endOffset: end.offset,
                      startSourceOffset: startSourceOffset, endSourceOffset: endSourceOffset)
     }
@@ -844,6 +912,11 @@ public final class MarkdownEditorController: ObservableObject {
                                                   with replacement: String) -> (markdown: String, caret: Int)? {
         guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
         let original = semanticDocument
+        let first = original.blocks[resolved.firstIndex]
+        let last = original.blocks[resolved.lastIndex]
+        if resolved.start.listItemIndex != nil || resolved.end.listItemIndex != nil {
+            guard !replacement.contains("\n"), !replacement.contains("\r") else { return nil }
+        }
         let source = text as NSString
         let replacementRange = NSRange(location: resolved.startSourceOffset,
                                        length: resolved.endSourceOffset - resolved.startSourceOffset)
@@ -858,12 +931,46 @@ public final class MarkdownEditorController: ObservableObject {
                   parsed.blocks[index].leadingTrivia == original.blocks[index].leadingTrivia else { return nil }
         }
         let merged = parsed.blocks[resolved.firstIndex]
-        let first = original.blocks[resolved.firstIndex]
         guard merged.leadingTrivia == first.leadingTrivia else { return nil }
         switch (first.kind, merged.kind) {
         case (.paragraph, .paragraph): break
         case let (.heading(oldLevel, _), .heading(newLevel, _)) where oldLevel == newLevel: break
+        case (.list, .list): break
         default: return nil
+        }
+        if let index = resolved.start.listItemIndex, case let .list(oldList) = first.kind,
+           case let .list(newList) = merged.kind {
+            guard newList.items.indices.contains(index),
+                  Array(newList.items[..<index]) == Array(oldList.items[..<index]) else { return nil }
+            let startBody = oldList.items[index].content as NSString
+            let oldItem = oldList.items[index]
+            let newItem = newList.items[index]
+            guard newItem.indent == oldItem.indent, newItem.marker == oldItem.marker,
+                  newItem.spacing == oldItem.spacing, newItem.taskMarker == oldItem.taskMarker,
+                  newItem.taskSpacing == oldItem.taskSpacing else { return nil }
+            let endBody: String
+            if let endIndex = resolved.end.listItemIndex, case let .list(endList) = last.kind {
+                endBody = endList.items[endIndex].content
+                let tail = Array(endList.items.dropFirst(endIndex + 1))
+                guard newList.items.count == index + 1 + tail.count,
+                      Array(newList.items.suffix(tail.count)) == tail else { return nil }
+            } else {
+                endBody = last.plainText
+                guard newList.items.count == index + 1 else { return nil }
+            }
+            let expected = startBody.substring(to: resolved.startOffset) + replacement +
+                (endBody as NSString).substring(from: resolved.endOffset)
+            guard newList.items[index].content == expected else { return nil }
+        } else if let endIndex = resolved.end.listItemIndex,
+                  case let .list(endList) = last.kind {
+            // A prose prefix can absorb only the final root item. Otherwise
+            // untouched following items would become an ambiguous new block.
+            guard endIndex == endList.items.count - 1 else { return nil }
+            let startBody = first.plainText as NSString
+            let endBody = endList.items[endIndex].content as NSString
+            let expected = startBody.substring(to: resolved.startOffset) + replacement +
+                endBody.substring(from: resolved.endOffset)
+            guard merged.plainText == expected else { return nil }
         }
         for oldIndex in (resolved.lastIndex + 1)..<original.blocks.count {
             let newIndex = oldIndex - (resolved.lastIndex - resolved.firstIndex)
