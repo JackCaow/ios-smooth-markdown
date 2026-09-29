@@ -55,9 +55,13 @@ final class CrossBlockEditorTests: XCTestCase {
                      "A drag endpoint must never split an emoji surrogate pair")
     }
 
-    func testNativeDragDoesNotHighlightUnsupportedBlocks() {
+    func testNativeDragHighlightsWholeStructuredBlockBetweenProseEndpoints() {
         let controller = MarkdownEditorController(text: "Before\n\n- item\n\nAfter")
-        XCTAssertNil(controller.semanticTextHighlightRanges(range("block-0", 2, "block-2", 2)))
+        let selected = range("block-0", 2, "block-2", 2)
+        let highlights = controller.semanticTextHighlightRanges(selected)
+        XCTAssertEqual(highlights?["block-0"], NSRange(location: 2, length: 4))
+        XCTAssertNotNil(highlights?["block-1"], "The complete list row must be visibly selected")
+        XCTAssertEqual(highlights?["block-2"], NSRange(location: 0, length: 2))
     }
 
     func testCharacterCopyIncludesOnlySelectedHeadingMarkers() {
@@ -68,7 +72,7 @@ final class CrossBlockEditorTests: XCTestCase {
                        "rt\n\n")
     }
 
-    func testCharacterRangeRejectsStructuralAndUnsupportedEdits() {
+    func testCharacterRangeRejectsStructuralAndInvalidEndpoints() {
         let controller = MarkdownEditorController(text: "Before\n\n# Heading\n\nAfter")
         let selected = range("block-0", 3, "block-1", 2)
         XCTAssertFalse(controller.replaceSemanticTextRange(selected, with: "\n\n- item\n\n"))
@@ -77,10 +81,45 @@ final class CrossBlockEditorTests: XCTestCase {
 
         let list = MarkdownEditorController(text: "Before\n\n- item\n\nAfter")
         let crossingList = range("block-0", 2, "block-2", 2)
-        XCTAssertNil(list.copySemanticTextRange(crossingList))
-        XCTAssertFalse(list.deleteSemanticTextRange(crossingList))
-        XCTAssertFalse(list.canUndo)
+        XCTAssertEqual(list.copySemanticTextRange(crossingList), "fore\n\n- item\n\nAf")
+        XCTAssertTrue(list.deleteSemanticTextRange(crossingList))
+        XCTAssertEqual(list.text, "Beter")
+        XCTAssertTrue(list.undo())
+        XCTAssertEqual(list.text, "Before\n\n- item\n\nAfter")
+        XCTAssertNil(list.copySemanticTextRange(range("block-1", 2, "block-2", 2)),
+                     "Partial endpoints inside a list require a separate source coordinate API")
         XCTAssertNil(list.copySemanticTextRange(range("block-0", 2, "missing", 0)))
+    }
+
+    func testCharacterRangeCopiesAndReplacesAcrossCompleteListCodeAndTable() {
+        let original = "Start alpha\n\n- one\n- two\n\n```swift\nlet x = 1\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nEnd omega\n\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-4", 3, "block-0", 6)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "alpha\n\n- one\n- two\n\n```swift\nlet x = 1\n```\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\nEnd")
+        XCTAssertFalse(controller.canApplySemanticInlineMarkToTextRange(selected))
+        XCTAssertFalse(controller.applySemanticInlineMarkToTextRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertTrue(controller.canReplaceSemanticTextRange(selected, with: "X"))
+        XCTAssertTrue(controller.replaceSemanticTextRange(selected, with: "X"))
+        XCTAssertEqual(controller.text, "Start X omega\n\nKeep")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, "Start X omega\n\nKeep")
+    }
+
+    func testCharacterRangeDeletesCompleteRuleAndRawHtmlWithoutChangingOuterSource() {
+        let original = "Start alpha\r\n\r\n---\r\n\r\n<div>raw</div>\r\n\r\nEnd omega\r\n\r\nKeep"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-0", 6, "block-3", 3)
+        XCTAssertEqual(controller.copySemanticTextRange(selected),
+                       "alpha\r\n\r\n---\r\n\r\n<div>raw</div>\r\n\r\nEnd")
+        XCTAssertTrue(controller.deleteSemanticTextRange(selected))
+        XCTAssertEqual(controller.text, "Start  omega\r\n\r\nKeep")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
     }
 
     func testTextRangeFormatsPartialHeadingAndParagraphWithoutChangingSourceTrivia() {

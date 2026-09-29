@@ -633,6 +633,7 @@ private struct FormattedBlocksView: View {
                                 }
                             }
                             .accessibilityIdentifier("text-range-format")
+                            .disabled(!controller.canApplySemanticInlineMarkToTextRange(textRange))
                             Button("Copy text range") {
                                 if let copied = controller.copySemanticTextRange(textRange) {
                                     UIPasteboard.general.string = copied
@@ -936,6 +937,14 @@ private struct FormattedBlockRow: View {
     @State private var showLinkEditor = false
     @State private var editingMarkdown = false
 
+    private var hasWholeBlockTextRangeHighlight: Bool {
+        guard crossBlockHighlight != nil else { return false }
+        switch block.kind {
+        case .paragraph, .heading: return false
+        case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return true
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let customBlockView {
@@ -989,7 +998,9 @@ private struct FormattedBlockRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(editorTheme.blockPadding ?? EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-        .background(Color(uiColor: .secondarySystemBackground),
+        .background(hasWholeBlockTextRangeHighlight ?
+                    (editorTheme.selectionColor ?? Color.accentColor).opacity(0.22) :
+                    Color(uiColor: .secondarySystemBackground),
                     in: RoundedRectangle(cornerRadius: max(0, editorTheme.blockBorderRadius ?? 8)))
         .overlay {
             if let color = editorTheme.blockBorderColor {
