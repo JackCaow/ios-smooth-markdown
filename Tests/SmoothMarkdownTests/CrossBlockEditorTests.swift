@@ -165,16 +165,50 @@ final class CrossBlockEditorTests: XCTestCase {
         XCTAssertFalse(unsafe.canUndo)
     }
 
-    func testComplexBlocksCanBeCopiedButNotDeletedAndInvalidRangeDoesNothing() {
+    func testWholeListCanBeCopiedAndDeletedWithUndoWhileInvalidRangeDoesNothing() {
         let original = "Before\n\n- item\n\nAfter"
         let controller = MarkdownEditorController(text: original)
         XCTAssertEqual(controller.copySemanticBlockRange(from: "block-0", to: "block-1"),
                        "Before\n\n- item\n")
-        XCTAssertFalse(controller.canDeleteSemanticBlockRange(from: "block-0", to: "block-1"))
-        XCTAssertFalse(controller.deleteSemanticBlockRange(from: "block-0", to: "block-1"))
+        XCTAssertTrue(controller.canDeleteSemanticBlockRange(from: "block-0", to: "block-1"))
         XCTAssertNil(controller.copySemanticBlockRange(from: "block-0", to: "missing"))
         XCTAssertNil(controller.copySemanticBlockRange(from: "block-0", to: "block-0"))
+        XCTAssertTrue(controller.deleteSemanticBlockRange(from: "block-0", to: "block-1"))
+        XCTAssertEqual(controller.text, "After")
+        XCTAssertTrue(controller.undo())
         XCTAssertEqual(controller.text, original)
         XCTAssertFalse(controller.canUndo)
+    }
+
+    func testWholeTableAndListDeletionKeepsUntouchedOuterBlocks() {
+        let original = "Before\n\n- item\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\nAfter"
+        let controller = MarkdownEditorController(text: original)
+        XCTAssertEqual(controller.semanticDocument.blocks.count, 4)
+        XCTAssertTrue(controller.canDeleteSemanticBlockRange(from: "block-1", to: "block-2"))
+        XCTAssertTrue(controller.deleteSemanticBlockRange(from: "block-2", to: "block-1"))
+        XCTAssertEqual(controller.text, "Before\n\nAfter")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testRawHTMLBlockCanBeDeletedOnlyAsACompleteTopLevelRow() {
+        let original = "Before\n\n<aside>opaque</aside>\n\n# Heading\n\nAfter"
+        let controller = MarkdownEditorController(text: original)
+        XCTAssertEqual(controller.semanticDocument.blocks.count, 4)
+        XCTAssertTrue(controller.deleteSemanticBlockRange(from: "block-1", to: "block-2"))
+        XCTAssertEqual(controller.text, "Before\n\nAfter")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+    }
+
+    func testDeletingAllStructuredBlocksClearsTrailingTriviaAndUndoes() {
+        let original = "- item\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n"
+        let controller = MarkdownEditorController(text: original)
+        XCTAssertEqual(controller.semanticDocument.blocks.count, 2)
+        XCTAssertTrue(controller.deleteSemanticBlockRange(from: "block-0", to: "block-1"))
+        XCTAssertEqual(controller.text, "")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
     }
 }
