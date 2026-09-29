@@ -20,6 +20,9 @@ struct FixtureDemoView: View {
     @State private var imageTapCount = 0
     @State private var lastImageTap = ""
     @State private var clipboardPreview = ""
+    @State private var codeCopyCount = 0
+    @State private var codeCopyPayload = ""
+    @State private var hostCodeTapCount = 0
     @State private var hostIOStatus = "idle"
     @State private var exportedMarkdown = ""
     private let plugins = ParserPluginRegistry.builtIns()
@@ -30,7 +33,35 @@ struct FixtureDemoView: View {
     ]
 
     var body: some View {
-        if ProcessInfo.processInfo.arguments.contains("--reader-math-range-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--reader-code-range-fixture") {
+            VStack(spacing: 0) {
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("code-range-clipboard")
+                Text("Code callbacks: \(codeCopyCount)").accessibilityIdentifier("code-copy-callback-count")
+                Text("Code callback payload: \(codeCopyPayload)").accessibilityIdentifier("code-copy-callback-payload")
+                SmoothMarkdownView(markdown: "Before code.\n\n```swift\nlet answer = 42\n```\n\nAfter code.",
+                                   onCodeCopy: { code, language in
+                                       codeCopyCount += 1
+                                       codeCopyPayload = "\(code.replacingOccurrences(of: "\n", with: "↵"))|\(language ?? "")"
+                                   },
+                                   styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-code-custom-fixture") {
+            VStack(spacing: 0) {
+                Text("Host taps: \(hostCodeTapCount)").accessibilityIdentifier("host-code-tap-count")
+                SmoothMarkdownView(markdown: "Before code.\n\n```swift\nlet answer = 42\n```\n\nAfter code.",
+                                   codeBuilder: { code, _ in
+                                       AnyView(VStack(alignment: .leading) {
+                                           Text("Host code: \(code.trimmingCharacters(in: .whitespacesAndNewlines))")
+                                           Button("Host code action") { hostCodeTapCount += 1 }
+                                       })
+                                   }, styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-code-no-copy-fixture") {
+            SmoothMarkdownView(markdown: "Before code.\n\n```swift\nlet answer = 42\n```\n\nAfter code.",
+                               codeBlockOptions: .init(showCopyButton: false),
+                               styleSheet: .light(), selectable: true)
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-math-range-fixture") {
             VStack(spacing: 0) {
                 Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
                 Text("Copied: \(clipboardPreview)").accessibilityIdentifier("math-range-clipboard")
