@@ -105,7 +105,9 @@ struct DemoHomeView: View {
                         .accessibilityAddTraits(.isHeader)
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(DemoLocalizations.text("examples", in: language), systemImage: "line.3.horizontal") { showNavigation = true }
+                    Button(DemoLocalizations.text("examples", in: language), systemImage: "line.3.horizontal") {
+                        withAnimation(.easeOut(duration: 0.2)) { showNavigation = true }
+                    }
                         .accessibilityIdentifier("open-examples")
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
@@ -130,27 +132,6 @@ struct DemoHomeView: View {
                     .accessibilityIdentifier("theme-menu")
                 }
             }
-            .sheet(isPresented: $showNavigation, onDismiss: {
-                if openEditorAfterNavigation {
-                    openEditorAfterNavigation = false
-                    openEditor()
-                } else if let feature = openFeatureAfterNavigation {
-                    openFeatureAfterNavigation = nil
-                    routePath.append(.feature(feature))
-                }
-            }) {
-                DemoNavigationSheet(catalog: catalog, selected: $selected, language: $language,
-                                    isDark: theme.isDark,
-                                    onOpenEditor: {
-                                        openEditorAfterNavigation = true
-                                        showNavigation = false
-                                    },
-                                    onOpenFeature: { feature in
-                                        openFeatureAfterNavigation = feature
-                                        showNavigation = false
-                                    })
-                    .presentationDetents([.large])
-            }
             .sheet(isPresented: $showSource) {
                 DemoSourceSheet(markdown: markdown ?? "", language: language)
                     .presentationDetents([.medium, .large])
@@ -164,7 +145,37 @@ struct DemoHomeView: View {
                 }
             }
         }
+        .overlay {
+            if showNavigation {
+                DemoNavigationOverlay(catalog: catalog, selected: $selected, language: $language,
+                                      isDark: theme.isDark,
+                                      onClose: closeNavigation,
+                                      onOpenEditor: {
+                                          openEditorAfterNavigation = true
+                                          closeNavigation()
+                                      },
+                                      onOpenFeature: { feature in
+                                          openFeatureAfterNavigation = feature
+                                          closeNavigation()
+                                      })
+                    .transition(.opacity)
+            }
+        }
+        .onChange(of: showNavigation) { _, isOpen in
+            guard !isOpen else { return }
+            if openEditorAfterNavigation {
+                openEditorAfterNavigation = false
+                openEditor()
+            } else if let feature = openFeatureAfterNavigation {
+                openFeatureAfterNavigation = nil
+                routePath.append(.feature(feature))
+            }
+        }
         .preferredColorScheme(theme.isDark ? .dark : .light)
+    }
+
+    private func closeNavigation() {
+        withAnimation(.easeOut(duration: 0.2)) { showNavigation = false }
     }
 
     private func openEditor() {
@@ -340,18 +351,51 @@ struct DemoHomeView: View {
     }
 }
 
-private struct DemoNavigationSheet: View {
-    @Environment(\.dismiss) private var dismiss
+private struct DemoNavigationOverlay: View {
     let catalog: DemoExampleCatalog
     @Binding var selected: DemoPage
     @Binding var language: DemoLanguage
     let isDark: Bool
+    let onClose: () -> Void
     let onOpenEditor: () -> Void
     let onOpenFeature: (DemoFeature) -> Void
 
     var body: some View {
-        NavigationStack {
-            List {
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                DemoNavigationDrawer(catalog: catalog, selected: $selected, language: $language,
+                                     isDark: isDark, onClose: onClose,
+                                     onOpenEditor: onOpenEditor, onOpenFeature: onOpenFeature)
+                    .frame(width: min(304, geometry.size.width - 48))
+                    .frame(maxHeight: .infinity)
+                    .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
+                    .transition(.move(edge: .leading))
+
+                Button(action: onClose) {
+                    Color.black.opacity(0.42)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(DemoLocalizations.text("close", in: language))
+                .accessibilityIdentifier("navigation-scrim")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct DemoNavigationDrawer: View {
+    let catalog: DemoExampleCatalog
+    @Binding var selected: DemoPage
+    @Binding var language: DemoLanguage
+    let isDark: Bool
+    let onClose: () -> Void
+    let onOpenEditor: () -> Void
+    let onOpenFeature: (DemoFeature) -> Void
+
+    var body: some View {
+        List {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         Image(systemName: "doc.text")
@@ -372,38 +416,43 @@ private struct DemoNavigationSheet: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
                 .accessibilityIdentifier("navigation-header")
-                Section {
-                    Button(action: onOpenEditor) {
-                        HStack(spacing: 14) {
-                            Image(systemName: "square.and.pencil")
-                                .frame(width: 24)
-                            VStack(alignment: .leading) {
-                                Text(DemoLocalizations.text("editor", in: language))
-                                Text("Scratch-style editing preview")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
+                Button(action: onOpenEditor) {
+                    HStack(spacing: 14) {
+                        Image(systemName: "square.and.pencil")
+                            .frame(width: 24)
+                        VStack(alignment: .leading) {
+                            Text(DemoLocalizations.text("editor", in: language))
+                            Text("Scratch-style editing preview")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
-                    .accessibilityIdentifier("navigation-editor")
                 }
-                Section {
-                    ForEach(catalog.examples) { example in
-                        Button { choose(.example(example.id)) } label: {
-                            HStack(spacing: 14) {
-                                Image(systemName: DemoNavigationIcon.example(example.id))
-                                    .frame(width: 24)
-                                    .foregroundStyle(selected == .example(example.id) ? Color.blue : .primary)
-                                Text(DemoLocalizations.exampleTitle(example, in: language))
-                                    .fontWeight(selected == .example(example.id) ? .bold : .regular)
-                                Spacer()
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                .listRowSeparator(.hidden)
+                .overlay(alignment: .bottom) { Divider() }
+                .accessibilityIdentifier("navigation-editor")
+                ForEach(catalog.examples) { example in
+                    Button { choose(.example(example.id)) } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: DemoNavigationIcon.example(example.id))
+                                .frame(width: 24)
+                                .foregroundStyle(selected == .example(example.id) ? Color.blue : .primary)
+                            Text(DemoLocalizations.exampleTitle(example, in: language))
+                                .fontWeight(selected == .example(example.id) ? .bold : .regular)
+                            Spacer()
                         }
-                            .listRowBackground(selected == .example(example.id) && isDark
-                                               ? Color(red: 22 / 255, green: 27 / 255, blue: 34 / 255) : Color.clear)
-                            .accessibilityIdentifier("example-\(example.id)")
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(selected == .example(example.id)
+                                       ? (isDark ? Color(red: 22 / 255, green: 27 / 255, blue: 34 / 255)
+                                          : Color.blue.opacity(0.08)) : Color.clear)
+                    .overlay(alignment: .bottom) {
+                        if example.id == catalog.examples.last?.id { Divider() }
+                    }
+                    .accessibilityIdentifier("example-\(example.id)")
                 }
                 Section(DemoLocalizations.text("drawer_demos", in: language)) {
                     ForEach(DemoFeature.allCases) { feature in
@@ -421,6 +470,7 @@ private struct DemoNavigationSheet: View {
                                 }
                             }
                         }
+                        .listRowSeparator(.hidden)
                         .accessibilityIdentifier("feature-\(feature.rawValue)")
                     }
                 }
@@ -428,27 +478,24 @@ private struct DemoNavigationSheet: View {
                     ForEach(DemoLanguage.allCases) { candidate in
                         Button {
                             language = candidate
-                            dismiss()
+                            onClose()
                         } label: {
                             Label(candidate.nativeName, systemImage: "globe")
                         }
+                        .listRowSeparator(.hidden)
                         .accessibilityIdentifier("language-\(candidate.rawValue)")
                     }
                 }
-            }
-            .accessibilityIdentifier("demo-navigation-list")
-            .navigationTitle(DemoLocalizations.text("examples_demos", in: language))
-            .scrollContentBackground(.hidden)
-            .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { Button(DemoLocalizations.text("close", in: language)) { dismiss() } }
-            }
         }
+        .listStyle(.plain)
+        .accessibilityIdentifier("demo-navigation-list")
+        .scrollContentBackground(.hidden)
+        .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
     }
 
     private func choose(_ page: DemoPage) {
         selected = page
-        dismiss()
+        onClose()
     }
 }
 
