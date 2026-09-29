@@ -50,7 +50,8 @@ final class InlineTextStyleTests: XCTestCase {
             inlineCodeStyle: .init(fontSize: 13, backgroundColor: .yellow)
         )
         let text = ReaderSelectionTextView(document: document, styleSheet: style,
-                                           onLinkTap: nil, onTextLongPress: nil).attributedContent().text
+                                           onLinkTap: nil, onTextLongPress: nil,
+                                           selectable: true).attributedContent().text
         func attributes(for word: String) -> [NSAttributedString.Key: Any] {
             let range = (text.string as NSString).range(of: word)
             XCTAssertNotEqual(range.location, NSNotFound)
