@@ -12,7 +12,7 @@ final class DemoAIChatUITests: XCTestCase {
         let entry = app.buttons["feature-aiChat"]
         for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
-        entry.tap()
+        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.buttons["ai-chat-settings"].tap()
 
         let provider = app.descendants(matching: .any)["ai-chat-provider"]
@@ -37,7 +37,7 @@ final class DemoAIChatUITests: XCTestCase {
         let entry = app.buttons["feature-aiChat"]
         for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
-        entry.tap()
+        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         app.buttons["ai-chat-settings"].tap()
 
         XCTAssertTrue(app.secureTextFields["ai-chat-api-key"].waitForExistence(timeout: 5))
@@ -64,7 +64,7 @@ final class DemoAIChatUITests: XCTestCase {
         let entry = app.buttons["feature-aiChat"]
         for _ in 0..<15 where !entry.isHittable { navigationList.swipeUp() }
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
-        entry.tap()
+        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
 
         let status = app.staticTexts["ai-chat-status"]
         XCTAssertTrue(status.waitForExistence(timeout: 5))
@@ -101,9 +101,9 @@ final class DemoAIChatUITests: XCTestCase {
         XCTAssertTrue(chatScroll.exists)
         // Depending on Dynamic Type and the current scroll anchor, the card can
         // start above or below the visible portion of the lazy message list.
-        for _ in 0..<12 where !thinkingCard.isHittable { chatScroll.swipeUp() }
-        for _ in 0..<12 where !thinkingCard.isHittable { chatScroll.swipeDown() }
-        XCTAssertTrue(thinkingCard.isHittable)
+        for _ in 0..<12 where !thinkingCard.exists { chatScroll.swipeUp() }
+        for _ in 0..<12 where !thinkingCard.exists { chatScroll.swipeDown() }
+        XCTAssertTrue(thinkingCard.waitForExistence(timeout: 5))
         XCTAssertEqual(thinkingCard.label, "Thinking...")
 
         // The complete simulated response, including the closing tag, survives streaming.
