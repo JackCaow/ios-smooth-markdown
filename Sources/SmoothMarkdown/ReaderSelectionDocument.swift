@@ -15,6 +15,8 @@ struct ReaderSelectionDocument {
         var keycap = false
         var htmlUnderline = false
         var highlighted = false
+        /// Rendered `[label]` from a Markdown `[^label]` reference.
+        var footnoteReference = false
     }
 
     struct Line: Equatable {
@@ -181,7 +183,10 @@ struct ReaderSelectionDocument {
                                         htmlUnderline: tags.contains { $0.name == "u" || $0.name == "ins" },
                                         highlighted: tags.contains { $0.name == "mark" }))
                 }
-            case .image, .footnote, .math, .plugin: return nil
+            case let .footnote(label):
+                output.append(.init(text: "[\(label)]", style: .init(), code: false,
+                                    footnoteReference: true))
+            case .image, .math, .plugin: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count

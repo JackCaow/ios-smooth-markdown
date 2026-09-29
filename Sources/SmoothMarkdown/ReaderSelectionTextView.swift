@@ -333,6 +333,15 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     // An integer keeps adjacent <kbd> elements as separate boxes.
                     attributes[keycapAttribute] = output.length + runIndex
                 }
+                if run.footnoteReference {
+                    // Match SmoothMarkdownView.footnoteReference while retaining
+                    // the reference inside the native paragraph selection range.
+                    attributes[.font] = MarkdownTypography.font(textStyle: .footnote,
+                                                                 weight: .regular, customSize: nil,
+                                                                 traits: traits)
+                    attributes[.baselineOffset] = 5
+                    attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
+                }
                 // Keep short inline code together when wrapping. NBSP has the
                 // same UTF-16 length as a space, so native selection offsets stay
                 // valid; the marker restores exact source text on Copy.
