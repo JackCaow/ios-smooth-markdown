@@ -126,6 +126,43 @@ final class ReaderVisibleDocumentProjectionTests: XCTestCase {
                        "Before.\nAfter.")
     }
 
+    func testHostedBuiltInCardsHaveOneMeasuredAnchorAndExactSemanticCopy() {
+        let source = """
+        Before.
+
+        ::: warning Heads up
+        Careful.
+        :::
+
+        ```mermaid
+        flowchart LR
+          A --> B
+        ```
+
+        After.
+        """
+        let document = ReaderVisibleDocumentProjection(markdown: source, plugins: .builtIns(),
+                                                       hostBuiltInPlugins: true)
+        XCTAssertEqual(document.segments.map(\.kind),
+                       [.text, .plugin("admonition"), .plugin("mermaid"), .text])
+        XCTAssertEqual(document.segments[1].text, ReaderVisibleDocumentProjection.attachment)
+        XCTAssertEqual(document.segments[2].text, ReaderVisibleDocumentProjection.attachment)
+        XCTAssertEqual(document.copiedText(in: NSRange(location: 0, length: document.text.utf16.count)),
+                       "Before.\nHeads up\nCareful.\nAfter.")
+    }
+
+    func testBuiltInInlinePluginRunsAgreeWithVisibleProjection() throws {
+        let source = "Hello @alice :smile: #release.\n\nAfter."
+        let nodes = Array(MarkdownSyntax.parse(source).children)
+        let selection = try XCTUnwrap(ReaderSelectionDocument.compose(
+            nodes, enableHTML: false, plugins: .builtIns(), visualBlockAnchors: true))
+        let projection = ReaderVisibleDocumentProjection(markdown: source, plugins: .builtIns())
+        XCTAssertEqual(selection.selectionText, projection.text)
+        XCTAssertEqual(selection.copiedText, "Hello @alice 😄 #release.\nAfter.")
+        XCTAssertEqual(selection.lines[0].runs.filter(\.pluginAccent).map(\.text),
+                       ["@alice", "#release"])
+    }
+
     func testThirdPartyPluginWithoutSelectionContractIsOpaque() throws {
         let plugins = ParserPluginRegistry()
         try plugins.register(BadgePlugin())

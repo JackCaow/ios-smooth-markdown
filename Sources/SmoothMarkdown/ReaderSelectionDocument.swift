@@ -17,6 +17,7 @@ struct ReaderSelectionDocument {
         var keycap = false
         var htmlUnderline = false
         var highlighted = false
+        var pluginAccent = false
         /// Rendered `[label]` from a Markdown `[^label]` reference.
         var footnoteReference = false
         var footnoteDefinitionLabel = false
@@ -123,12 +124,20 @@ struct ReaderSelectionDocument {
             if case let .footnoteDefinition(definition) = item {
                 guard visualBlockAnchors else { return nil }
                 let parsed = MarkdownSyntax.parse(definition.content, enableHTML: enableHTML)
-                guard Array(parsed.children).count == 1, let content = parsed.child(at: 0) as? Paragraph,
+                guard let content = parsed.child(at: 0) as? Paragraph,
                       let contentRuns = inlineRuns(content, enableHTML: enableHTML,
                                                    plugins: plugins) else { return nil }
                 let label = Run(text: "[\(definition.label)]: ", style: .init(), code: false,
                                 footnoteDefinitionLabel: true)
                 lines.append(.init(kind: .footnoteDefinition, runs: [label] + contentRuns,
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case .plugin = item {
+                guard visualBlockAnchors else { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
                                    indent: 0, quoteDepth: 0, quoteIDs: []))
                 continue
             }
@@ -276,7 +285,11 @@ struct ReaderSelectionDocument {
                 guard allowVisualAttachments else { return nil }
                 output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
                                     style: .init(), code: false, formula: latex))
-            case .plugin, .custom: return nil
+            case let .plugin(plugin, match):
+                guard plugin is MentionPlugin || plugin is HashtagPlugin || plugin is EmojiPlugin else { return nil }
+                output.append(.init(text: match.text, style: .init(), code: false,
+                                    pluginAccent: plugin is MentionPlugin || plugin is HashtagPlugin))
+            case .custom: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count
@@ -318,6 +331,7 @@ struct ReaderBlockRangeDocument {
         case displayMath(String)
         case detailsSummary(DetailsSyntax.Block)
         case footnoteDefinition(FootnoteSyntax.Definition)
+        case plugin(BlockPluginMatch)
     }
 
     struct Segment {
@@ -347,7 +361,7 @@ struct ReaderBlockRangeDocument {
             case let .displayMath(latex):
                 flushText()
                 result.append(.init(nodes: [], kind: .displayMath(latex)))
-            case .detailsSummary, .footnoteDefinition:
+            case .detailsSummary, .footnoteDefinition, .plugin:
                 return nil
             case let .markup(node):
                 if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
@@ -483,7 +497,7 @@ enum ReaderMathSelectionGroup {
                 } else {
                     pending.append(item)
                 }
-            case .detailsSummary, .footnoteDefinition:
+            case .detailsSummary, .footnoteDefinition, .plugin:
                 flush()
             case let .markup(node):
                 if hasCustomBuilder(node) {

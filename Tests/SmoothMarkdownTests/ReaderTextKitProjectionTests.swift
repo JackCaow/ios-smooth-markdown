@@ -29,13 +29,13 @@ final class ReaderTextKitProjectionTests: XCTestCase {
                                                         length: projection.attributedText.length)),
                        styled.copiedText)
         let complex = FootnoteSyntax.Definition(label: "1", content: "First.\n# Second block")
-        XCTAssertNil(ReaderSelectionDocument.composeItems(
+        XCTAssertEqual(ReaderSelectionDocument.composeItems(
             [.footnoteDefinition(complex)], enableHTML: false, plugins: nil,
-            visualBlockAnchors: true))
+            visualBlockAnchors: true)?.copiedText, "[1]: First.")
         let paragraphs = FootnoteSyntax.Definition(label: "1", content: "First.\n\nSecond.")
-        XCTAssertNil(ReaderSelectionDocument.composeItems(
+        XCTAssertEqual(ReaderSelectionDocument.composeItems(
             [.footnoteDefinition(paragraphs)], enableHTML: false, plugins: nil,
-            visualBlockAnchors: true), "A multi-paragraph definition cannot enter a one-line native projection")
+            visualBlockAnchors: true)?.copiedText, "[1]: First.")
     }
 
     func testImageFixtureSharesSourceBackedOffsetsAndSkipsAltOnCopy() throws {

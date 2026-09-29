@@ -17,6 +17,7 @@ struct ReaderTextKitProjection {
             case formula(String)
             case code(String, String?)
             case table(String)
+            case plugin(String, BlockPluginMatch)
             /// A custom renderer or visual block without a copy contract.
             case opaque
         }
@@ -93,6 +94,7 @@ struct ReaderTextKitProjection {
         case let .formula(latex): .formula(latex)
         case let .code(source, language): .code(source, language)
         case let .table(source): .table(source)
+        case let .plugin(id, match): .plugin(id, match)
         case .opaque: .opaque
         }
     }

@@ -15,6 +15,7 @@ struct ReaderVisibleDocumentProjection {
         enum Kind: Equatable {
             case text, image(SafeHTML.ImageSpec), formula(String)
             case code(String, String?), table(String)
+            case plugin(String, BlockPluginMatch)
             case opaque
         }
         let kind: Kind
@@ -35,6 +36,10 @@ struct ReaderVisibleDocumentProjection {
         }
         static func table(_ source: String, copy: String) -> Self {
             .init(kind: .table(source), text: ReaderVisibleDocumentProjection.attachment,
+                  copyText: copy)
+        }
+        static func plugin(_ id: String, match: BlockPluginMatch, copy: String) -> Self {
+            .init(kind: .plugin(id, match), text: ReaderVisibleDocumentProjection.attachment,
                   copyText: copy)
         }
         static let attachment = Self(kind: .opaque, text: ReaderVisibleDocumentProjection.attachment, copyText: "")
@@ -82,9 +87,12 @@ struct ReaderVisibleDocumentProjection {
     /// `expansion` is a snapshot of the reader's disclosure state. A caller
     /// must rebuild after a details/thinking/tool card changes state.
     init(markdown: String, enableHTML: Bool = false, plugins: ParserPluginRegistry? = nil,
-         builderRegistry: BuilderRegistry? = nil, expansion: [String: Bool] = [:]) {
+         builderRegistry: BuilderRegistry? = nil, expansion: [String: Bool] = [:],
+         hostBuiltInPlugins: Bool = false, hostBuiltInArtifacts: Bool = false) {
         var builder = Builder(enableHTML: enableHTML, plugins: plugins,
-                              builderRegistry: builderRegistry, expansion: expansion)
+                              builderRegistry: builderRegistry, expansion: expansion,
+                              hostBuiltInPlugins: hostBuiltInPlugins,
+                              hostBuiltInArtifacts: hostBuiltInArtifacts)
         builder.appendDetailsSections(markdown)
         segments = builder.segments
         text = segments.map(\.text).joined(separator: "\n")
@@ -128,17 +136,22 @@ struct ReaderVisibleDocumentProjection {
         let plugins: ParserPluginRegistry?
         let builderRegistry: BuilderRegistry?
         let expansion: [String: Bool]
+        let hostBuiltInPlugins: Bool
+        let hostBuiltInArtifacts: Bool
         var segments: [Segment] = []
         private var occurrences: [String: Int] = [:]
         private var length = 0
         private var scope = "root"
 
         init(enableHTML: Bool, plugins: ParserPluginRegistry?, builderRegistry: BuilderRegistry?,
-             expansion: [String: Bool]) {
+             expansion: [String: Bool], hostBuiltInPlugins: Bool,
+             hostBuiltInArtifacts: Bool) {
             self.enableHTML = enableHTML
             self.plugins = plugins
             self.builderRegistry = builderRegistry
             self.expansion = expansion
+            self.hostBuiltInPlugins = hostBuiltInPlugins
+            self.hostBuiltInArtifacts = hostBuiltInArtifacts
         }
 
         mutating func appendDetailsSections(_ source: String) {
@@ -325,6 +338,33 @@ struct ReaderVisibleDocumentProjection {
                 return
             }
             let kind = Kind.plugin(plugin.id)
+            if hostBuiltInPlugins,
+               plugin is AdmonitionPlugin || plugin is MermaidPlugin ||
+               (hostBuiltInArtifacts && plugin is ArtifactPlugin) {
+                let copy: String
+                if plugin is AdmonitionPlugin {
+                    let type = match.attributes["type"] ?? "custom"
+                    let title = match.attributes["title"].flatMap { $0.isEmpty ? nil : $0 } ?? type.capitalized
+                    copy = match.content.isEmpty ? title : title + "\n" + match.content
+                } else if plugin is ArtifactPlugin {
+                    let block = ArtifactPlugin.block(match)
+                    let label: String = switch block.type {
+                    case .code: block.language?.uppercased() ?? "CODE"
+                    case .document: "DOCUMENT"
+                    case .html: "HTML"
+                    case .svg: "SVG"
+                    case .component: "COMPONENT"
+                    case .mermaid: "DIAGRAM"
+                    case .custom: block.customType?.uppercased() ?? "ARTIFACT"
+                    }
+                    copy = ([block.title, label, block.content].compactMap { $0 }).joined(separator: "\n")
+                } else {
+                    copy = MermaidParser.parse(match.content) == nil
+                        ? "Unsupported Mermaid diagram\n" + match.content : ""
+                }
+                append(kind, [.plugin(plugin.id, match: match, copy: copy)], identity: match.source)
+                return
+            }
             if plugin is AdmonitionPlugin {
                 let type = match.attributes["type"] ?? "custom"
                 let title = match.attributes["title"].flatMap { $0.isEmpty ? nil : $0 } ?? type.capitalized
@@ -383,6 +423,7 @@ struct ReaderVisibleDocumentProjection {
                 case let .formula(latex): return "formula\u{0}" + latex
                 case let .code(source, language): return "code\u{0}" + source + "\u{0}" + (language ?? "")
                 case let .table(source): return "table\u{0}" + source
+                case let .plugin(id, match): return "plugin\u{0}" + id + "\u{0}" + match.source
                 case let .image(spec):
                     return "image\u{0}" + spec.source + "\u{0}" + spec.alt + "\u{0}" +
                         (spec.title ?? "") + "\u{0}" + (spec.width.map { String($0) } ?? "") + "\u{0}" +

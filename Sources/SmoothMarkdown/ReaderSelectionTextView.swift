@@ -402,6 +402,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                                                  traits: traits)
                     attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
                 }
+                if run.pluginAccent { attributes[.foregroundColor] = UIColor.blue }
                 // Keep short inline code together when wrapping. NBSP has the
                 // same UTF-16 length as a space, so native selection offsets stay
                 // valid; the marker restores exact source text on Copy.
