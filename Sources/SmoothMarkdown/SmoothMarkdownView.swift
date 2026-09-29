@@ -182,7 +182,9 @@ public struct SmoothMarkdownView: View {
             case let .bridge(items):
                 if let document = ReaderBlockRangeDocument(items, enableHTML: enableHTML, plugins: plugins) {
                     ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
-                                         spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
+                                         spacing: styleSheet.blockSpacing, startSelecting: false,
+                                         onSelectionStarted: nil,
+                                         onSelectionFinished: nil) { segment, beginSelection, onCharacterTap in
                         if case let .displayMath(latex) = segment.kind { return AnyView(blockMath(latex)) }
                         return renderReaderBlockSegment(segment, beginSelection: beginSelection,
                                                         onCharacterTap: onCharacterTap)
@@ -230,10 +232,32 @@ public struct SmoothMarkdownView: View {
             }
         case let .blockBridge(nodes):
             if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
-                ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
-                                     spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
-                    renderReaderBlockSegment(segment, beginSelection: beginSelection,
-                                             onCharacterTap: onCharacterTap)
+                if selectable && onTextLongPress == nil && imageBuilder == nil,
+                   let imageItems = ReaderNativeImageSelectionView.imageItems(for: bridge,
+                                                                             enableHTML: enableHTML,
+                                                                             plugins: plugins) {
+                    let imageContents = bridge.segments.filter(\.isImage).compactMap { $0.nodes.first }
+                        .map { block($0) }
+                    ReaderNativeImageSelectionContainer(document: bridge, styleSheet: styleSheet,
+                                                        enableHTML: enableHTML, plugins: plugins,
+                                                        onLinkTap: onLinkTap,
+                                                        imageContents: imageContents,
+                                                        imageItems: imageItems,
+                                                        spacing: styleSheet.blockSpacing,
+                                                        renderSegment: { segment, beginSelection, onCharacterTap in
+                        renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                                 onCharacterTap: onCharacterTap)
+                    }, renderRemoteImage: { spec, resolution in
+                        resolvedRemoteImageView(spec, resolution: resolution)
+                    })
+                } else {
+                    ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
+                                         spacing: styleSheet.blockSpacing, startSelecting: false,
+                                         onSelectionStarted: nil,
+                                         onSelectionFinished: nil) { segment, beginSelection, onCharacterTap in
+                        renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                                 onCharacterTap: onCharacterTap)
+                    }
                 }
             }
         case let .individual(node):
@@ -590,6 +614,42 @@ public struct SmoothMarkdownView: View {
                 url: URL(string: name), image: image, label: label, inline: inline)
         }
     }
+
+    #if os(iOS)
+    /// Uses the bytes already decoded for native cross-image selection. The
+    /// loading and failure branches match the standard iOS image renderer.
+    private func resolvedRemoteImageView(_ image: SafeHTML.ImageSpec,
+                                         resolution: ReaderRemoteImageResolution?) -> AnyView {
+        let label = image.alt.isEmpty ? (image.title ?? "Image") : image.alt
+        guard let source = ImageSource.parse(image.source),
+              case let .remote(url, _) = source else {
+            return AnyView(SwiftUI.Text(label))
+        }
+        let width = image.width.map { CGFloat($0) }
+        let height = image.height.map { CGFloat($0) }
+        let content: AnyView
+        switch resolution {
+        case let .svg(svg):
+            content = AnyView(NaturalImageLayout(naturalSize: svg.size,
+                                                 explicitWidth: width, explicitHeight: height) {
+                SVGView(svg: svg).resizable().scaledToFit()
+            })
+        case let .bitmap(bitmap):
+            content = AnyView(NaturalImageLayout(naturalSize: bitmap.size,
+                                                 explicitWidth: width, explicitHeight: height) {
+                SwiftUI.Image(uiImage: bitmap).resizable().scaledToFit()
+            })
+        case .failure, .rejected:
+            if source.remoteFailurePresentation == .svgAltText {
+                content = AnyView(SwiftUI.Text(label))
+            } else {
+                content = AnyView(RemoteBitmapFailureView(label: label))
+            }
+        case nil: content = AnyView(ProgressView())
+        }
+        return accessibleImage(content, url: url, image: image, label: label, inline: false)
+    }
+    #endif
 
     private func accessibleImage<Content: View>(_ content: Content, url: URL?, image: SafeHTML.ImageSpec, label: String, inline: Bool) -> AnyView {
         if onImageTapWithMetadata != nil || (url != nil && onImageTap != nil) {

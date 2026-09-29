@@ -22,6 +22,15 @@ final class ImageSourceTests: XCTestCase {
         XCTAssertNil(ImageSource.parse("https://"))
     }
 
+    func testRemoteFailurePresentationKeepsUnsafeSourcesSeparateFromNetworkErrors() {
+        XCTAssertEqual(ImageSource.parse("https://example.com/broken.png")?.remoteFailurePresentation,
+                       .bitmapErrorIcon)
+        XCTAssertEqual(ImageSource.parse("https://example.com/broken.svg")?.remoteFailurePresentation,
+                       .svgAltText)
+        XCTAssertNil(ImageSource.parse("javascript:alert(1).png")?.remoteFailurePresentation)
+        XCTAssertNil(ImageSource.parse("icon.png")?.remoteFailurePresentation)
+    }
+
     func testBundledSVGParsesWithNativeRenderer() {
         let svg = SVG(named: "vector.svg", in: .module)
         XCTAssertEqual(svg?.size.width, 64)
