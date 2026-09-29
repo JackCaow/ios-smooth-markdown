@@ -11,12 +11,54 @@ targets:
     type: application
     platform: iOS
     sources:
-      - SmoothMarkdownDemo
+      - path: SmoothMarkdownDemo
+        excludes:
+          - Examples/**
+      - path: SmoothMarkdownDemo/Examples
+        buildPhase: resources
+      - path: ../Tests/SmoothMarkdownTests/Fixtures/FlutterREADME.md
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo
-        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: '5.9'
+        CODE_SIGNING_ALLOWED: NO
+    info:
+      path: SmoothMarkdownDemo/Info.plist
+      properties:
+        UILaunchScreen: {}
+    dependencies:
+      - package: SmoothMarkdown
+  SmoothMarkdownDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - SmoothMarkdownDemoUITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.uitests
         SWIFT_VERSION: '5.9'
         CODE_SIGNING_ALLOWED: NO
     dependencies:
-      - package: SmoothMarkdown
+      - target: SmoothMarkdownDemo
+  SmoothMarkdownDemoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - SmoothMarkdownDemoTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.tests
+        SWIFT_VERSION: '5.9'
+        CODE_SIGNING_ALLOWED: NO
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SmoothMarkdownDemo.app/SmoothMarkdownDemo"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: SmoothMarkdownDemo
+  SmoothMarkdownPerformanceUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: SmoothMarkdownDemo

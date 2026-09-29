@@ -1,0 +1,11 @@
+sequenceDiagram
+    participant User
+    participant App
+    participant API
+    participant DB
+    User->>App: 点击按钮
+    App->>API: GET /users
+    API->>DB: SELECT * FROM users
+    DB-->>API: 用户列表
+    API-->>App: JSON 响应
+    App-->>User: 显示数据

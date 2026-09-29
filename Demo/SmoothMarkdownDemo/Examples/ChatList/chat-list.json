@@ -1,0 +1,11 @@
+{
+  "source": "example/lib/chat_list_demo.dart",
+  "sourceSha256": "b576bd4ab9231b232c080bb12ac7740e4f8c8f46c741198e20bca2f32c965021",
+  "sha256": {
+    "welcome": "dd5208158490d9d4659b93d751932dfbcadbb629cc99ba93258248414ff23616",
+    "code": "a134f2f2a330dd90550c1d54e3aaca845bd447db1d68f6ef4e516ebcc3126dfd",
+    "markdown": "ebc1753c6ead2f7ba6255416868e931e6db8bf5e1f273e278d113a138b964934",
+    "performance": "8bab1e4c5eec29af0c019b34e8a254c67c067684e74aa2a2d481df8dc42798e5",
+    "table": "ca8cb9ce0e99cb4655ba5c7971cb30fd3b4a954315a5b33924602b64554df640"
+  }
+}

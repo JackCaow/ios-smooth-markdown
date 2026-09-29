@@ -1,0 +1,21 @@
+gantt
+    title 产品发布计划 v2.0
+    dateFormat YYYY-MM-DD
+
+    section 准备
+        市场调研 :done, mr, 2024-01-01, 14d
+        竞品分析 :done, ca, 2024-01-08, 10d
+        需求确认 :done, rc, after ca, 5d
+
+    section 设计
+        UI设计 :active, ui, 2024-01-23, 20d
+        UX优化 :ux, after ui, 10d
+
+    section 开发
+        核心功能 :crit, core, 2024-02-12, 25d
+        新增特性 :feat, after core, 15d
+        性能优化 :perf, after feat, 10d
+
+    section 发布
+        Beta测试 :beta, 2024-04-02, 14d
+        正式发布 :milestone, rel, 2024-04-16, 0d

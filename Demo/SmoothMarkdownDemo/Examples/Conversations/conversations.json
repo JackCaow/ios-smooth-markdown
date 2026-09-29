@@ -1,0 +1,271 @@
+{
+  "source": "flutter-smooth-markdown/example/lib/conversation_list_demo.dart",
+  "sourceSha256": "a476316493cc4bb73654b892b17cb7439615596cbd38c813cbd04ab08e129941",
+  "conversations": [
+    {
+      "id": "1",
+      "name": "Flutter Dev Team",
+      "avatar": "F",
+      "avatarColorARGB": "FF0553B1",
+      "unreadCount": 5,
+      "lastMessage": "@alice `SmoothMarkdown` 缓存策略更新了吗？性能提升了 **32倍** 🚀",
+      "messages": [
+        {
+          "content": "@alice `SmoothMarkdown` 缓存策略更新了吗？性能提升了 **32倍** 🚀",
+          "isMe": false,
+          "secondsAgo": 120
+        },
+        {
+          "content": "更新了！现在使用 **LRU 缓存**，命中率达到 99.5%。\n\n```dart\nfinal cache = ParseCache(maxSize: 500);\nfinal result = cache.getOrParse(markdown);\n```",
+          "isMe": true,
+          "secondsAgo": 60
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "Alice Chen",
+      "avatar": "A",
+      "avatarColorARGB": "FFE91E63",
+      "unreadCount": 2,
+      "lastMessage": "已经提交了 PR，包含了新的 streaming 功能和完整测试",
+      "messages": [
+        {
+          "content": "Hey! 新的 **streaming** 功能 PR 已经提交了 ✅\n\n包含了：\n- ✅ 流式 Markdown 解析\n- ✅ 增量渲染\n- ✅ 性能优化\n\n帮我 review 一下？",
+          "isMe": false,
+          "secondsAgo": 1800
+        },
+        {
+          "content": "好的，我来看看。\n\n几个建议：\n1. 流式解析时注意内存管理\n2. 增量渲染要用 `RepaintBoundary`\n3. 加一些边界情况的测试",
+          "isMe": true,
+          "secondsAgo": 1200
+        },
+        {
+          "content": "已经提交了 PR，包含了新的 **streaming** 功能和完整的测试覆盖。\n\n```dart\n// 新增的 API\nStreamMarkdown(\n  stream: responseStream,\n  plugins: aiPlugins,\n)\n```",
+          "isMe": false,
+          "secondsAgo": 900
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Bob Wang",
+      "avatar": "B",
+      "avatarColorARGB": "FF4CAF50",
+      "unreadCount": 0,
+      "lastMessage": "对比了几个方案的数据，看看这个表格",
+      "messages": [
+        {
+          "content": "对比了几个方案的数据，你帮我看看选哪个？\n\n| 方案 | 性能 | 内存 | 包大小 |\n|------|:----:|:----:|:------:|\n| A | ⭐⭐⭐⭐⭐ | 低 | 小 |\n| B | ⭐⭐⭐ | 中 | 中 |\n| C | ⭐⭐⭐⭐ | 低 | 大 |",
+          "isMe": false,
+          "secondsAgo": 7200
+        },
+        {
+          "content": "方案 A 看起来最好！\n\n性能和内存都是最优的，包大小也是最小的。\n\n不过我建议再看一下 **长期维护成本**。",
+          "isMe": true,
+          "secondsAgo": 5400
+        },
+        {
+          "content": "有道理，我再调研一下各个方案的社区活跃度和更新频率。\n\n> \"选型不只是看当下，更要看未来。\"\n\n谢谢你的建议！👍",
+          "isMe": false,
+          "secondsAgo": 3600
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "Open Source Community",
+      "avatar": "O",
+      "avatarColorARGB": "FFFF9800",
+      "unreadCount": 99,
+      "lastMessage": "新版本发布啦！🎉 Markdown 渲染性能提升 32x",
+      "messages": [
+        {
+          "content": "# 🎉 v0.7.4 发布通知\n\n各位社区成员，新版本发布啦！\n\n## 主要更新\n- ✅ Markdown 渲染性能提升 **32x**\n- ✅ 新增 Mermaid 图表支持\n- ✅ 流式渲染优化\n- ✅ 插件系统重构\n\n大家快来试试！",
+          "isMe": false,
+          "secondsAgo": 10800
+        },
+        {
+          "content": "太棒了！已经升级了，性能提升非常明显 👍",
+          "isMe": true,
+          "secondsAgo": 10200
+        },
+        {
+          "content": "Mermaid 图表功能特别好用，给你们看一个效果：\n\n```mermaid\ngraph LR\n    A[Markdown] --> B[Parser]\n    B --> C[AST]\n    C --> D[Renderer]\n    D --> E[Widget]\n```",
+          "isMe": true,
+          "secondsAgo": 9900
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "Design Team",
+      "avatar": "D",
+      "avatarColorARGB": "FF9C27B0",
+      "unreadCount": 0,
+      "lastMessage": "新的设计稿 📐 暗色主题 + 8dp 网格系统",
+      "messages": [
+        {
+          "content": "新的设计稿 📐\n\n主要改动：\n1. **颜色系统** - 增加了暗色主题支持\n2. **间距规范** - 统一了 8dp 网格系统\n3. **字体层级** - 新增了 `monospace` 选项",
+          "isMe": false,
+          "secondsAgo": 21600
+        },
+        {
+          "content": "暗色主题看起来很好！\n\n不过间距能不能用 4dp 的倍数？这样更灵活一些。",
+          "isMe": true,
+          "secondsAgo": 19800
+        },
+        {
+          "content": "好的，我们改成 4dp 基础单位。\n\n<details>\n<summary>更新后的字体层级</summary>\n\n- H1: 28sp, Bold\n- H2: 24sp, SemiBold\n- H3: 20sp, Medium\n- Body: 16sp, Regular\n- Caption: 12sp, Regular\n\n</details>",
+          "isMe": false,
+          "secondsAgo": 18000
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "name": "Charlie Li",
+      "avatar": "C",
+      "avatarColorARGB": "FF00BCD4",
+      "unreadCount": 3,
+      "lastMessage": "Euler formula: e^{iπ} + 1 = 0 渲染完美！",
+      "messages": [
+        {
+          "content": "看看这个数学公式渲染效果：\n\nEuler's formula: $e^{i\\pi} + 1 = 0$\n\n还有矩阵：\n\n$$\n\\\\begin{bmatrix}\na & b \\\\\\\\\nc & d\n\\\\end{bmatrix}\n$$",
+          "isMe": false,
+          "secondsAgo": 86400
+        },
+        {
+          "content": "渲染效果完美！✨\n\nMatrix 也显示正确，LaTeX 支持很到位。",
+          "isMe": true,
+          "secondsAgo": 86400
+        }
+      ]
+    },
+    {
+      "id": "7",
+      "name": "Diana Park",
+      "avatar": "D",
+      "avatarColorARGB": "FF795548",
+      "unreadCount": 0,
+      "lastMessage": "Mermaid 图表功能太棒了！",
+      "messages": [
+        {
+          "content": "你看了新的 Mermaid 图表功能吗？\n\n```mermaid\ngraph TD\n    A[请求] --> B{鉴权}\n    B -->|通过| C[处理]\n    B -->|拒绝| D[返回401]\n```\n\n太棒了！",
+          "isMe": false,
+          "secondsAgo": 104400
+        },
+        {
+          "content": "看到了！确实很强大。\n\n而且支持多种图表类型：\n- ✅ Flowchart\n- ✅ Sequence Diagram\n- ✅ Pie Chart\n- ✅ Gantt Chart",
+          "isMe": true,
+          "secondsAgo": 100800
+        }
+      ]
+    },
+    {
+      "id": "8",
+      "name": "Evan Zhou",
+      "avatar": "E",
+      "avatarColorARGB": "FF3F51B5",
+      "unreadCount": 1,
+      "lastMessage": "Bug report: iOS 17.5 上 StreamMarkdown 偶现闪烁",
+      "messages": [
+        {
+          "content": "Bug report: iOS 17.5 上 `StreamMarkdown` 偶现闪烁。\n\n**复现步骤：**\n1. 快速连续发送多条消息\n2. 滚动到顶部再回来\n3. 观察到短暂的白屏闪烁",
+          "isMe": false,
+          "secondsAgo": 172800
+        },
+        {
+          "content": "收到，我来排查一下。\n\n你方便提供一下设备型号和 Flutter 版本吗？",
+          "isMe": true,
+          "secondsAgo": 172800
+        }
+      ]
+    },
+    {
+      "id": "9",
+      "name": "Team Announcements",
+      "avatar": "📢",
+      "avatarColorARGB": "FFF44336",
+      "unreadCount": 0,
+      "lastMessage": "📢 本周五 Sprint Review，下午3点",
+      "messages": [
+        {
+          "content": "# 📢 团队通知\n\n本周五下午 3 点举行 **Sprint Review**。\n\n**议程：**\n1. 上周工作总结\n2. Q2 目标回顾\n3. 技术分享：Flutter 性能优化\n4. Q&A\n\n请大家准时参加！🎯",
+          "isMe": false,
+          "secondsAgo": 259200
+        },
+        {
+          "content": "收到！我会准备性能优化的分享内容。",
+          "isMe": true,
+          "secondsAgo": 259200
+        }
+      ]
+    },
+    {
+      "id": "10",
+      "name": "Fiona Wu",
+      "avatar": "F",
+      "avatarColorARGB": "FF009688",
+      "unreadCount": 0,
+      "lastMessage": "按照你的建议改了缓存策略，效果非常好！",
+      "messages": [
+        {
+          "content": "谢谢你之前的帮助！🙏\n\n按照你的建议，我改了缓存策略以后：\n- 首屏渲染从 **3.6ms** 降到 **0.11ms**\n- 滚动帧率稳定在 **60fps**\n- 内存占用减少 **30%**",
+          "isMe": false,
+          "secondsAgo": 432000
+        },
+        {
+          "content": "不客气！缓存策略确实是性能优化的关键。\n\n你用的什么缓存算法？LRU 还是 LFU？",
+          "isMe": true,
+          "secondsAgo": 432000
+        },
+        {
+          "content": "用的 **LRU**，maxSize 设了 500。\n\n经过压测，命中率稳定在 99% 以上。",
+          "isMe": false,
+          "secondsAgo": 432000
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "name": "George Liu",
+      "avatar": "G",
+      "avatarColorARGB": "FFE64A19",
+      "unreadCount": 0,
+      "lastMessage": "新项目用 Flutter 还是 React Native？",
+      "messages": [
+        {
+          "content": "新项目在技术选型，在纠结用 **Flutter** 还是 **React Native**。\n\n你有什么建议？",
+          "isMe": false,
+          "secondsAgo": 604800
+        },
+        {
+          "content": "看你们团队背景：\n\n| 条件 | Flutter | React Native |\n|------|:-------:|:------------:|\n| 团队有 Dart 经验 | ✅ | - |\n| 团队有 React 经验 | - | ✅ |\n| 需要复杂动画 | ✅ | ⚠️ |\n| 需要 Web 端 | ⚠️ | ✅ |\n\n如果主要做移动端且追求性能，我推荐 Flutter。",
+          "isMe": true,
+          "secondsAgo": 604800
+        }
+      ]
+    },
+    {
+      "id": "12",
+      "name": "Helen Yang",
+      "avatar": "H",
+      "avatarColorARGB": "FF7B1FA2",
+      "unreadCount": 0,
+      "lastMessage": "有没有好的 Markdown 编辑器推荐？",
+      "messages": [
+        {
+          "content": "有没有好的 Markdown 编辑器推荐？\n\n需要支持：\n- [x] 实时预览\n- [x] 语法高亮\n- [x] 暗色主题\n- [ ] 导出 PDF",
+          "isMe": false,
+          "secondsAgo": 864000
+        },
+        {
+          "content": "推荐几个：\n\n1. **VS Code** - 免费 + 强大的插件生态\n2. **Typora** - 所见即所得的体验\n3. **Obsidian** - 笔记 + 知识图谱\n\n如果是 Flutter 内嵌的话，可以直接用 `SmoothMarkdown` 自己搭一个！",
+          "isMe": true,
+          "secondsAgo": 864000
+        }
+      ]
+    }
+  ]
+}

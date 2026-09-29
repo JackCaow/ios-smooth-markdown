@@ -1,0 +1,13 @@
+graph TD
+    Start[开始] --> Input[输入数据]
+    Input --> Validate{数据有效?}
+    Validate -->|是| Process[处理数据]
+    Validate -->|否| Error[显示错误]
+    Error --> Input
+    Process --> Save{保存成功?}
+    Save -->|是| Success[成功]
+    Save -->|否| Retry{重试?}
+    Retry -->|是| Process
+    Retry -->|否| Fail[失败]
+    Success --> End[结束]
+    Fail --> End

@@ -1,0 +1,27 @@
+---
+config:
+  kanban:
+    ticketBaseUrl: 'https://jira.example.com/browse/#TICKET#'
+---
+kanban
+  title 产品开发看板
+
+  backlog[产品待办] wip:10
+    task1[用户认证系统] @{ assigned: "张三", ticket: "PROJ-101", priority: "High" }
+    task2[数据库设计] @{ assigned: "李四", ticket: "PROJ-102", priority: "Normal" }
+    task3[API文档] @{ assigned: "王五", priority: "Low" }
+
+  todo[准备开始] wip:5
+    task4[登录界面] @{ assigned: "赵六", priority: "Very High" }
+    task5[注册流程] @{ assigned: "张三", ticket: "PROJ-105", priority: "High" }
+
+  doing[开发中] wip:3
+    task6[用户仪表板] @{ assigned: "李四", ticket: "PROJ-104", priority: "High" }
+    task7[权限管理] @{ assigned: "王五", ticket: "PROJ-106", priority: "Normal" }
+
+  review[代码审查] wip:2
+    task8[支付集成] @{ assigned: "赵六", ticket: "PROJ-108", priority: "Very High" }
+
+  done[已完成]
+    task9[CI/CD配置] @{ assigned: "张三", ticket: "PROJ-103" }
+    task10[环境搭建] @{ assigned: "李四" }
