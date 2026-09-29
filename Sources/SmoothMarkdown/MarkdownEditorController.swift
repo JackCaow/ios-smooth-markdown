@@ -245,8 +245,9 @@ public final class MarkdownEditorController: ObservableObject {
         return (text as NSString).substring(with: range)
     }
 
-    /// Text-coordinate highlights for a native drag across formatted rows.
-    /// Unsupported structures and invalid UTF-16 endpoints produce no highlights.
+    /// Text-coordinate highlights for prose endpoints and complete intervening rows.
+    /// Structured rows use the range's presence to tint the whole row; their
+    /// plainText length is not a character-selection coordinate for an editor.
     public func semanticTextHighlightRanges(_ selection: MarkdownSemanticTextSelection) -> [String: NSRange]? {
         guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
         let blocks = semanticDocument.blocks
@@ -704,12 +705,25 @@ public final class MarkdownEditorController: ObservableObject {
         return nil
     }
 
+    /// Whole structured rows may be copied or deleted with the range, but only
+    /// paragraph and heading text can receive an inline mark.
+    public func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return false }
+        return semanticDocument.blocks[resolved.firstIndex...resolved.lastIndex].allSatisfy { block in
+            switch block.kind {
+            case .paragraph, .heading: return true
+            case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return false
+            }
+        }
+    }
+
     /// Applies one mark to the selected character fragment in each adjacent
     /// paragraph or heading. Each row retains its marker, trivia, and ending.
     @discardableResult
     public func applySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection,
                                                     mark: MarkdownInlineMark) -> Bool {
-        guard let resolved = resolveSemanticTextSelection(selection) else { return false }
+        guard canApplySemanticInlineMarkToTextRange(selection),
+              let resolved = resolveSemanticTextSelection(selection) else { return false }
         let document = semanticDocument
         var nextBlocks = document.blocks
         var changed = false
@@ -795,7 +809,7 @@ public final class MarkdownEditorController: ObservableObject {
         let lastIndex = max(anchorIndex, focusIndex)
         let start = forward ? selection.anchor : selection.focus
         let end = forward ? selection.focus : selection.anchor
-        for block in document.blocks[firstIndex...lastIndex] {
+        for block in [document.blocks[firstIndex], document.blocks[lastIndex]] {
             switch block.kind {
             case .paragraph, .heading: break
             case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return nil
