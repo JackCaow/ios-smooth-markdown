@@ -10,7 +10,8 @@ final class VisibleInlineRangeEditorTests: XCTestCase {
         XCTAssertEqual(MarkdownInlineMarkEditor.visibleText(of: source), "Start bold link 😀")
         XCTAssertEqual(MarkdownInlineMarkEditor.visibleUTF16Length(of: source),
                        ("Start bold link 😀" as NSString).length)
-        XCTAssertNil(MarkdownInlineMarkEditor.visibleText(of: "Use `code` here"))
+        XCTAssertEqual(MarkdownInlineMarkEditor.visibleText(of: "Use `code` here"), "Use code here")
+        XCTAssertEqual(MarkdownInlineMarkEditor.visibleText(of: "Use `` x`y `` here"), "Use x`y here")
     }
 
     private func selection(_ source: String, _ first: String, _ start: Int, _ last: String, _ end: Int)
@@ -43,6 +44,56 @@ final class VisibleInlineRangeEditorTests: XCTestCase {
                 XCTAssertTrue(edited.contains("https://example.com/path"))
             }
         }
+    }
+
+    func testVisibleStrikeInsideExistingBoldPreservesMarksAndOneUndo() throws {
+        let original = "Start **bold** end"
+        let controller = MarkdownEditorController(text: original)
+        let selected = selection(original, "block-0", 7, "block-0", 9)
+        XCTAssertTrue(controller.applySemanticInlineMarkToVisibleTextRange(selected, mark: .strikethrough))
+        XCTAssertEqual(visible(controller.semanticDocument.blocks[0].plainText), "Start bold end")
+        XCTAssertTrue(controller.text.contains("~~"))
+        XCTAssertTrue(controller.text.contains("**"))
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testVisibleInlineCodeUsesSourceRangeAndOneUndo() {
+        let original = "Start alpha\n\n# beta end"
+        let controller = MarkdownEditorController(text: original)
+        let selected = selection(original, "block-0", 6, "block-1", 4)
+        XCTAssertTrue(controller.applySemanticInlineMarkToVisibleTextRange(selected, mark: .code))
+        XCTAssertEqual(controller.text, "Start `alpha`\n\n# `beta` end")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testVisibleInlineCodeRejectsMarkSyntaxInsideSelectionAtomically() {
+        let original = "Start **bold** end"
+        let controller = MarkdownEditorController(text: original)
+        let selected = selection(original, "block-0", 6, "block-0", 10)
+        XCTAssertFalse(controller.applySemanticInlineMarkToVisibleTextRange(selected, mark: .code))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testTextOutsideExistingInlineCodeCanBeFormattedWithoutChangingCode() {
+        let original = "Start `code` end"
+        let controller = MarkdownEditorController(text: original)
+        let selected = selection(original, "block-0", 0, "block-0", 5)
+        XCTAssertTrue(controller.applySemanticInlineMarkToVisibleTextRange(selected, mark: .strikethrough))
+        XCTAssertEqual(controller.text, "~~Start~~ `code` end")
+        XCTAssertEqual(MarkdownInlineMarkEditor.visibleText(of: controller.semanticDocument.blocks[0].plainText),
+                       "Start code end")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+
+        let insideCode = selection(original, "block-0", 6, "block-0", 10)
+        XCTAssertFalse(controller.applySemanticInlineMarkToVisibleTextRange(insideCode, mark: .bold))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
     }
 
     func testPartialRangeAcrossHeadingAndParagraphKeepsExistingMarksAndOneUndo() {

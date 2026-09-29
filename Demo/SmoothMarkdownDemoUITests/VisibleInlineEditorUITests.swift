@@ -50,6 +50,35 @@ final class VisibleInlineEditorUITests: XCTestCase {
         XCTAssertEqual(source.value as? String, original)
     }
 
+    func testRenderedSelectionOffersInlineCodeAndUndoes() {
+        assertRenderedFormat("Inline code", sourceMarker: "`")
+    }
+
+    func testRenderedSelectionOffersStrikethroughAndUndoes() {
+        assertRenderedFormat("Strikethrough", sourceMarker: "~~")
+    }
+
+    private func assertRenderedFormat(_ action: String, sourceMarker: String) {
+        let app = launchFixture()
+        let rendered = app.textViews["rendered-paragraph-block-0"]
+        XCTAssertTrue(rendered.waitForExistence(timeout: 10))
+        rendered.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).doubleTap()
+
+        let format = app.buttons["visible-range-format"]
+        XCTAssertTrue(format.waitForExistence(timeout: 5))
+        format.tap()
+        let menuAction = app.buttons[action]
+        XCTAssertTrue(menuAction.waitForExistence(timeout: 5))
+        menuAction.tap()
+
+        app.segmentedControls.buttons["Source"].tap()
+        let source = app.textViews["markdown-source"]
+        XCTAssertTrue(source.waitForExistence(timeout: 5))
+        XCTAssertTrue((source.value as? String ?? "").contains(sourceMarker))
+        app.buttons["Undo"].tap()
+        XCTAssertEqual(source.value as? String, original)
+    }
+
     private func launchFixture() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--visible-inline-editor-fixture"]
