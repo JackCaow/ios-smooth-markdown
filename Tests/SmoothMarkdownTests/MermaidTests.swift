@@ -280,6 +280,41 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidLayout.ganttTodayMarkerX(hidden, today: formatter.date(from: "2024-06-02")!, timeZone: utc))
     }
 
+    func testGanttTimelineHasWeeklyAndMonthlyMarkersAlignedWithBars() {
+        let diagram = MermaidParser.parse("""
+        gantt
+          title Schedule
+          section Planning
+            Design :design, 2024-01-01, 30d
+            Review :review, 2024-02-01, 3d
+        """)!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        func tick(_ year: Int, _ month: Int, _ day: Int) -> GanttTimelineTick? {
+            ticks.first { calendar.dateComponents([.year, .month, .day], from: $0.date) ==
+                DateComponents(year: year, month: month, day: day) }
+        }
+        XCTAssertEqual(tick(2024, 1, 1)?.x, 180)
+        XCTAssertEqual(tick(2024, 1, 1)?.isMonth, true)
+        XCTAssertEqual(tick(2024, 1, 1)?.isWeek, true)
+        XCTAssertEqual(tick(2024, 1, 8)?.x, 264)
+        XCTAssertEqual(tick(2024, 1, 8)?.isMonth, false)
+        XCTAssertEqual(tick(2024, 2, 1)?.x, 552)
+        XCTAssertEqual(tick(2024, 2, 1)?.isMonth, true)
+        XCTAssertEqual(MermaidLayout.ganttBars(diagram)[1].minX, tick(2024, 2, 1)?.x)
+        XCTAssertTrue(ticks.allSatisfy { $0.x <= MermaidLayout.compute(diagram).size.width })
+    }
+
+    func testGanttDayScaleRemainsContinuousAcrossDaylightSavingChange() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-03-09, 4d")!
+        let bar = MermaidLayout.ganttBars(diagram)[0]
+        XCTAssertEqual(bar.width, 48)
+        let monday = MermaidLayout.ganttTimelineTicks(diagram).first { $0.isWeek }
+        XCTAssertEqual(monday?.x, 204)
+        XCTAssertEqual(monday?.x, bar.minX + 24)
+    }
+
     func testKanbanFixtureYAMLMetadataWIPAndFallback() {
         let diagram = MermaidParser.parse("""
         ---

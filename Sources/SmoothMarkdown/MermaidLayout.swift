@@ -30,6 +30,13 @@ struct MermaidLayoutResult {
     }
 }
 
+struct GanttTimelineTick: Equatable {
+    let date: Date
+    let x: CGFloat
+    let isMonth: Bool
+    let isWeek: Bool
+}
+
 /// Deterministic layered placement for the native Mermaid subset.
 enum MermaidLayout {
     static func compute(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
@@ -57,22 +64,48 @@ enum MermaidLayout {
                                   height: CGFloat(200 + eventRows * 30)), nodes: [:], edges: [])
     }
 
+    private static var ganttCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
     private static func gantt(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
         guard let first = diagram.ganttTasks.map(\.startDate).min(),
               let last = diagram.ganttTasks.map(\.endDate).max() else { return .init(size: .zero, nodes: [:], edges: []) }
-        let days = max(1, Calendar(identifier: .gregorian).dateComponents([.day], from: first, to: last).day ?? 0)
+        let days = max(1, ganttCalendar.dateComponents([.day], from: first, to: last).day ?? 0)
         return .init(size: CGSize(width: max(460, CGFloat(days + 1) * 12 + 210),
                                   height: CGFloat(100 + diagram.ganttTasks.count * 48)), nodes: [:], edges: [])
     }
 
     static func ganttBars(_ diagram: MermaidDiagram) -> [CGRect] {
         guard let first = diagram.ganttTasks.map(\.startDate).min() else { return [] }
-        let calendar = Calendar(identifier: .gregorian)
+        let calendar = ganttCalendar
         return diagram.ganttTasks.enumerated().map { index, task in
             let offset = max(0, calendar.dateComponents([.day], from: first, to: task.startDate).day ?? 0)
             let duration = max(1, (calendar.dateComponents([.day], from: task.startDate, to: task.endDate).day ?? 0) + 1)
             return CGRect(x: 180 + CGFloat(offset) * 12, y: 82 + CGFloat(index) * 48,
                           width: task.status == .milestone ? 12 : CGFloat(duration) * 12, height: 22)
+        }
+    }
+
+    /// Calendar markers share the exact UTC day scale used by task bars.
+    /// The fixed 12 pt/day scale leaves enough room for weekly and month labels.
+    static func ganttTimelineTicks(_ diagram: MermaidDiagram) -> [GanttTimelineTick] {
+        guard let first = diagram.ganttTasks.map(\.startDate).min(),
+              let last = diagram.ganttTasks.map(\.endDate).max() else { return [] }
+        let calendar = ganttCalendar
+        let start = calendar.startOfDay(for: first)
+        let end = calendar.startOfDay(for: last)
+        let totalDays = max(0, calendar.dateComponents([.day], from: start, to: end).day ?? 0)
+        return (0...totalDays).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return nil }
+            let components = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
+            let month = offset == 0 || components.day == 1
+            let week = components.weekday == 2 // Gregorian Monday
+            guard month || week else { return nil }
+            return GanttTimelineTick(date: date, x: 180 + CGFloat(offset) * 12,
+                                     isMonth: month, isWeek: week)
         }
     }
 
@@ -84,8 +117,7 @@ enum MermaidLayout {
               let last = diagram.ganttTasks.map(\.endDate).max() else { return nil }
         var localCalendar = Calendar(identifier: .gregorian)
         localCalendar.timeZone = timeZone
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let calendar = ganttCalendar
         let parts = localCalendar.dateComponents([.year, .month, .day], from: today)
         guard let day = calendar.date(from: parts) else { return nil }
         guard day >= calendar.startOfDay(for: first),

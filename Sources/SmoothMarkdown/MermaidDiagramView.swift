@@ -192,14 +192,35 @@ public struct MermaidDiagramView: View {
                          at: CGPoint(x: min(size.width / 2, 210), y: 22))
         }
         let bars = MermaidLayout.ganttBars(diagram)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        if let start = diagram.ganttTasks.map(\.startDate).min(), let end = diagram.ganttTasks.map(\.endDate).max() {
-            context.draw(Text(formatter.string(from: start)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
-                         at: CGPoint(x: 180, y: 60), anchor: .leading)
-            context.draw(Text(formatter.string(from: end)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
-                         at: CGPoint(x: size.width - 20, y: 60), anchor: .trailing)
+        let monthFormatter = DateFormatter()
+        monthFormatter.calendar = Calendar(identifier: .gregorian)
+        monthFormatter.locale = Locale(identifier: "en_US_POSIX")
+        monthFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        monthFormatter.dateFormat = "MMM yyyy"
+        let weekFormatter = DateFormatter()
+        weekFormatter.calendar = monthFormatter.calendar
+        weekFormatter.locale = monthFormatter.locale
+        weekFormatter.timeZone = monthFormatter.timeZone
+        weekFormatter.dateFormat = "M/d"
+        let gridBottom = max(104, bars.last?.maxY ?? 104)
+        var baseline = Path()
+        baseline.move(to: CGPoint(x: 180, y: 80))
+        baseline.addLine(to: CGPoint(x: size.width - 20, y: 80))
+        context.stroke(baseline, with: .color(ink.opacity(0.25)), lineWidth: 1)
+        for tick in MermaidLayout.ganttTimelineTicks(diagram) {
+            var grid = Path()
+            grid.move(to: CGPoint(x: tick.x, y: tick.isMonth ? 48 : 64))
+            grid.addLine(to: CGPoint(x: tick.x, y: gridBottom))
+            context.stroke(grid, with: .color(ink.opacity(tick.isMonth ? 0.25 : 0.12)),
+                           lineWidth: tick.isMonth ? 1.5 : 1)
+            if tick.isMonth {
+                context.draw(Text(monthFormatter.string(from: tick.date)).font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(ink.opacity(0.85)), at: CGPoint(x: tick.x + 4, y: 52), anchor: .leading)
+            }
+            if tick.isWeek {
+                context.draw(Text(weekFormatter.string(from: tick.date)).font(.system(size: 10))
+                    .foregroundColor(ink.opacity(0.7)), at: CGPoint(x: tick.x + 4, y: 68), anchor: .leading)
+            }
         }
         for (index, task) in diagram.ganttTasks.enumerated() {
             guard index < bars.count else { continue }

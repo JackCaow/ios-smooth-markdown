@@ -55,7 +55,8 @@ enum MermaidExtendedParser {
         var todayMarker = true
         var section: String?
         var tasks: [MermaidGanttTask] = []
-        let calendar = Calendar(identifier: .gregorian)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let baseline = calendar.startOfDay(for: Date())
         var nextStart = baseline
         for source in lines.dropFirst() {
