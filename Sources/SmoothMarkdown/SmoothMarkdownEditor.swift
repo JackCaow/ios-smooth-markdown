@@ -81,7 +81,7 @@ public struct SmoothMarkdownEditor: View {
 
             if !focusMode {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 2) {
+                    HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 12 : 8) {
                         Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
                         Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
                         if controller.mode != .formatted {
@@ -92,6 +92,7 @@ public struct SmoothMarkdownEditor: View {
                     }
                     .buttonStyle(.borderless)
                     .padding(.horizontal)
+                    .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
                 }
                 .frame(minHeight: 44)
             }
