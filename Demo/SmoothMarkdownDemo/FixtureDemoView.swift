@@ -1,5 +1,6 @@
 import SmoothMarkdown
 import SwiftUI
+import UIKit
 
 struct FixtureDemoView: View {
     @StateObject private var controller = MarkdownEditorController(text: editorFixtureText())
@@ -17,6 +18,7 @@ struct FixtureDemoView: View {
     @State private var themeIndex = 0
     @State private var imageTapCount = 0
     @State private var lastImageTap = ""
+    @State private var clipboardPreview = ""
     @State private var hostIOStatus = "idle"
     @State private var exportedMarkdown = ""
     private let plugins = ParserPluginRegistry.builtIns()
@@ -27,7 +29,16 @@ struct FixtureDemoView: View {
     ]
 
     var body: some View {
-        if ProcessInfo.processInfo.arguments.contains("--accessibility-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--reader-image-range-fixture") {
+            VStack(spacing: 0) {
+                Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("image-range-clipboard")
+                SmoothMarkdownView(markdown: "Before image.\n\n![Bundled vector](native-vector.svg \"Vector title\")\n\nAfter image.",
+                                   onImageTapWithMetadata: { _, _, _ in imageTapCount += 1 },
+                                   styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--accessibility-fixture") {
             VStack(spacing: 0) {
                 Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
                 Text(lastImageTap).accessibilityIdentifier("image-tap-metadata")
