@@ -1,4 +1,4 @@
-import SmoothMarkdown
+@testable import SmoothMarkdown
 import XCTest
 
 final class StreamMarkdownBufferTests: XCTestCase {
@@ -52,5 +52,28 @@ final class StreamMarkdownBufferTests: XCTestCase {
         buffer.finish(nowMillis: 101)
         buffer.setHTML(false)
         XCTAssertEqual(buffer.visibleText, buffer.fullText)
+    }
+
+    @MainActor
+    func testOldStreamCallbacksCannotChangeNewStream() {
+        let accumulator = StreamMarkdownAccumulator(throttleMillis: 0)
+        accumulator.reset()
+        let oldGeneration = accumulator.generation
+        accumulator.append("old", for: oldGeneration)
+        XCTAssertEqual(accumulator.visibleText, "old")
+
+        accumulator.reset()
+        let newGeneration = accumulator.generation
+        XCTAssertNotEqual(oldGeneration, newGeneration)
+        XCTAssertEqual(accumulator.visibleText, "")
+
+        accumulator.append(" late", for: oldGeneration)
+        accumulator.finish(for: oldGeneration)
+        accumulator.cancel(for: oldGeneration)
+        XCTAssertEqual(accumulator.visibleText, "")
+
+        accumulator.append("new", for: newGeneration)
+        accumulator.finish(for: newGeneration)
+        XCTAssertEqual(accumulator.visibleText, "new")
     }
 }

@@ -60,6 +60,8 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     private var pending: Task<Void, Never>?
     private var throttleMillis: Int64
     private var enableHTML: Bool
+    /// Invalidates callbacks from a previous stream when a view starts another one.
+    var generation: UInt64 = 0
 
     public init(throttleMillis: Int64 = 50, enableHTML: Bool = false) {
         self.throttleMillis = max(0, throttleMillis)
@@ -68,6 +70,7 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     }
 
     public func reset(throttleMillis: Int64? = nil, enableHTML: Bool? = nil) {
+        generation &+= 1
         pending?.cancel()
         pending = nil
         if let throttleMillis { self.throttleMillis = max(0, throttleMillis) }
@@ -93,11 +96,21 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         }
     }
 
+    func append(_ chunk: String, for generation: UInt64) {
+        guard self.generation == generation else { return }
+        append(chunk)
+    }
+
     public func finish() {
         pending?.cancel()
         pending = nil
         buffer.finish(nowMillis: Self.nowMillis())
         visibleText = buffer.visibleText
+    }
+
+    func finish(for generation: UInt64) {
+        guard self.generation == generation else { return }
+        finish()
     }
 
     public func setHTML(_ enabled: Bool) {
@@ -110,6 +123,13 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         pending?.cancel()
         pending = nil
     }
+
+    func cancel(for generation: UInt64) {
+        guard self.generation == generation else { return }
+        cancel()
+    }
+
+    func isCurrent(_ generation: UInt64) -> Bool { self.generation == generation }
 
     private static func nowMillis() -> Int64 {
         Int64(ProcessInfo.processInfo.systemUptime * 1000)
