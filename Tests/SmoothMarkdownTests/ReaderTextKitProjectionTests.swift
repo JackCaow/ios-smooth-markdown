@@ -4,6 +4,30 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderTextKitProjectionTests: XCTestCase {
+    func testImageFixtureSharesSourceBackedOffsetsAndSkipsAltOnCopy() throws {
+        let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
+            forResource: "ReaderImageHost", withExtension: "md")), encoding: .utf8)
+        let nodes = Array(MarkdownSyntax.parse(source, enableHTML: false).children)
+        let styled = try XCTUnwrap(ReaderSelectionDocument.compose(
+            nodes, enableHTML: false, plugins: nil, visualBlockAnchors: true))
+        let projection = ReaderTextKitProjection(document: .init(markdown: source))
+        XCTAssertEqual(styled.selectionText, projection.attributedText.string)
+        XCTAssertEqual(projection.attachments.count, 2)
+        XCTAssertEqual(styled.copiedText,
+                       "Gallery\nBefore 🐈 image.\nText  after 😀.\nAfter image.")
+        XCTAssertEqual(projection.copiedText(in: NSRange(location: 0,
+                                                        length: projection.attributedText.length)),
+                       "Gallery\nBefore 🐈 image.\nText  after 😀.\nAfter image.")
+        let image = projection.attachments[1]
+        XCTAssertEqual(projection.copiedText(in: image.range), "")
+        if case let .image(spec) = image.content {
+            XCTAssertEqual(spec.alt, "Inline")
+            XCTAssertEqual(spec.source, "https://example.com/inline.png")
+        } else { XCTFail("Expected image attachment") }
+        XCTAssertNil(ReaderSelectionDocument.compose(nodes, enableHTML: false, plugins: nil),
+                     "An unhosted legacy text view must not expose image placeholder glyphs")
+    }
+
     func testCodeTableAndDisplayMathAreAtomicVisibleAttachmentsWithExactCopy() throws {
         let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
             forResource: "ReaderComplexSelection", withExtension: "md")), encoding: .utf8)

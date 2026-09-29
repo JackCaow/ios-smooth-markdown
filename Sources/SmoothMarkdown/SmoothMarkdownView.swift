@@ -110,11 +110,11 @@ public struct SmoothMarkdownView: View {
     private var renderedBlocks: some View {
         #if os(iOS)
         if let unified = wholeDocumentSelection {
-            ReaderWholeDocumentSelectionView(selectionDocument: unified.selection,
-                                             projection: unified.projection,
-                                             styleSheet: styleSheet, onLinkTap: onLinkTap,
-                                             sourceView: self,
-                                             selectionController: selectionController)
+            ReaderWholeDocumentSelectionContainer(selectionDocument: unified.selection,
+                                                  projection: unified.projection,
+                                                  styleSheet: styleSheet, onLinkTap: onLinkTap,
+                                                  sourceView: self,
+                                                  selectionController: selectionController)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(styleSheet.contentPadding)
         } else {
@@ -172,12 +172,22 @@ public struct SmoothMarkdownView: View {
         let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
             markdown: markdown, enableHTML: enableHTML, plugins: plugins,
             builderRegistry: builderRegistry))
+        let remoteImageCount = projection.attachments.filter { attachment in
+            guard case let .image(spec) = attachment.content,
+                  let source = ImageSource.parse(spec.source), case .remote = source else { return false }
+            return true
+        }.count
         guard projection.attachments.allSatisfy({ attachment in
             switch attachment.content {
-            case .code, .table, .formula: true
+            case .image, .code, .table, .formula: true
             default: false
             }
         }),
+              !(imageBuilder != nil && projection.attachments.contains(where: {
+                  if case .image = $0.content { return true }
+                  return false
+              })),
+              remoteImageCount <= ReaderRemoteImagePolicy.maxRemoteImages,
               projection.attributedText.string == selection.selectionText else { return nil }
         let styled = ReaderSelectionTextView(document: selection, styleSheet: styleSheet,
                                              onLinkTap: onLinkTap, onTextLongPress: nil,
@@ -187,8 +197,14 @@ public struct SmoothMarkdownView: View {
         return (selection, projection)
     }
 
-    func visualAttachmentView(for content: ReaderTextKitProjection.Attachment.Content) -> AnyView? {
+    func visualAttachmentView(for content: ReaderTextKitProjection.Attachment.Content,
+                              remoteResolution: ReaderRemoteImageResolution? = nil) -> AnyView? {
         switch content {
+        case let .image(image):
+            if let source = ImageSource.parse(image.source), case .remote = source {
+                return resolvedRemoteImageView(image, resolution: remoteResolution)
+            }
+            return imageView(image)
         case let .code(code, language):
             return AnyView(EnhancedCodeBlockView(code: code, language: language,
                                                  options: codeBlockOptions, onCopy: onCodeCopy,

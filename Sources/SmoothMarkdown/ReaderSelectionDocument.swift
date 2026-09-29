@@ -12,6 +12,7 @@ struct ReaderSelectionDocument {
         let text: String
         let style: InlineContent.Style
         let code: Bool
+        var image: SafeHTML.ImageSpec? = nil
         var keycap = false
         var htmlUnderline = false
         var highlighted = false
@@ -39,7 +40,14 @@ struct ReaderSelectionDocument {
     }
 
     var copiedText: String {
-        lines.map { $0.kind == .rule ? "" : $0.runs.map(\.text).joined() }.joined(separator: "\n")
+        lines.compactMap { line -> String? in
+            if line.kind == .rule { return "" }
+            if line.runs.contains(where: { $0.image != nil }),
+               line.runs.allSatisfy({ $0.image != nil || $0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                return nil
+            }
+            return line.runs.filter { $0.image == nil }.map(\.text).joined()
+        }.joined(separator: "\n")
     }
 
     var canMapNativeOffsets: Bool { !lines.contains { $0.kind == .rule } }
@@ -53,21 +61,26 @@ struct ReaderSelectionDocument {
                                                               upperUTF16: upperUTF16) else { return nil }
         let lower = lowerUTF16 ?? 0
         let upper = upperUTF16 ?? selectionText.utf16.count
-        var paddingOffsets: [Int] = []
+        var removedOffsets: [Int] = []
         var offset = 0
         for (index, line) in lines.enumerated() {
             if index > 0 { offset += 1 }
             for run in line.runs {
                 if run.keycap {
-                    if (lower..<upper).contains(offset) { paddingOffsets.append(offset - lower) }
+                    if (lower..<upper).contains(offset) { removedOffsets.append(offset - lower) }
                     offset += 1 + run.text.utf16.count
-                    if (lower..<upper).contains(offset) { paddingOffsets.append(offset - lower) }
+                    if (lower..<upper).contains(offset) { removedOffsets.append(offset - lower) }
                     offset += 1
-                } else { offset += run.text.utf16.count }
+                } else {
+                    if run.image != nil, (lower..<upper).contains(offset) {
+                        removedOffsets.append(offset - lower)
+                    }
+                    offset += run.text.utf16.count
+                }
             }
         }
         let copied = NSMutableString(string: slice)
-        for position in paddingOffsets.reversed() {
+        for position in removedOffsets.reversed() {
             copied.deleteCharacters(in: NSRange(location: position, length: 1))
         }
         return copied as String
@@ -104,8 +117,21 @@ struct ReaderSelectionDocument {
                                    indent: 0, quoteDepth: 0, quoteIDs: []))
                 continue
             }
+            if visualBlockAnchors, enableHTML, let html = node as? HTMLBlock,
+               let image = SafeHTML.imageTag(html.rawHTML) {
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false, image: image)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
             guard let part = linesForBlock(node, enableHTML: enableHTML, plugins: plugins,
                                            indent: 0, quoteIDs: [], nextQuoteID: &nextQuoteID) else { return nil }
+            // The legacy prose view has no image host. Only the measured
+            // whole-document TextKit path may consume image anchors.
+            if !visualBlockAnchors && part.contains(where: { $0.runs.contains { $0.image != nil } }) {
+                return nil
+            }
             lines.append(contentsOf: part)
         }
         return lines.isEmpty ? nil : .init(lines: lines)
@@ -196,7 +222,8 @@ struct ReaderSelectionDocument {
         return output.isEmpty ? nil : output
     }
 
-    static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
+    static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?,
+                                   allowImages: Bool = false) -> [Run]? {
         var output: [Run] = []
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
@@ -213,7 +240,11 @@ struct ReaderSelectionDocument {
             case let .footnote(label):
                 output.append(.init(text: "[\(label)]", style: .init(), code: false,
                                     footnoteReference: true))
-            case .image, .math, .plugin, .custom: return nil
+            case let .image(image):
+                guard allowImages, ImageSource.parse(image.source) != nil else { return nil }
+                output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
+                                    style: .init(), code: false, image: image))
+            case .math, .plugin, .custom: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count
@@ -235,7 +266,7 @@ struct ReaderSelectionDocument {
     }
 
     private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
-        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins)
+        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins, allowImages: true)
     }
 
     /// Table cells and other inline containers also need the same native keycap path.
