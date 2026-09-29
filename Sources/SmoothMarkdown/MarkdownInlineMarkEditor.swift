@@ -1,4 +1,5 @@
 import Foundation
+import Markdown
 
 /// Inline source edits supported by paragraph and ATX heading rows in Blocks mode.
 public enum MarkdownInlineMark: Equatable {
@@ -16,8 +17,8 @@ struct MarkdownInlineMarkEdit: Equatable {
 }
 
 enum MarkdownInlineMarkEditor {
-    /// Range commands operate on raw Markdown source. Refuse existing inline
-    /// syntax instead of wrapping its markers as if they were visible text.
+    /// Simple source can use raw offsets. Existing inline syntax needs the
+    /// full-body semantic validation in applyVerifiedRange instead.
     /// An escaped table pipe is the one source escape handled by this editor.
     static func isSimpleRangeSource(_ source: String) -> Bool {
         let characters = Array(source)
@@ -31,6 +32,78 @@ enum MarkdownInlineMarkEditor {
             }
             if "\r\n*~_`[]<>".contains(character) { return false }
             index += 1
+        }
+        return true
+    }
+
+    /// A full-body range can include existing emphasis or links when wrapping
+    /// its source produces exactly the intended visible style change. Partial
+    /// ranges still need a source-to-visible offset map, so remain conservative.
+    static func applyVerifiedRange(_ mark: MarkdownInlineMark, to markdown: String,
+                                   selection: NSRange) -> MarkdownInlineMarkEdit? {
+        if isSimpleRangeSource(markdown) {
+            return apply(mark, to: markdown, selection: selection)
+        }
+        guard selection == NSRange(location: 0, length: (markdown as NSString).length) else { return nil }
+        switch mark {
+        case .bold, .italic: break
+        default: return nil
+        }
+        guard let before = inlineSignature(markdown),
+              let edit = apply(mark, to: markdown, selection: selection),
+              let after = inlineSignature(edit.markdown), before.count == after.count else { return nil }
+        var gainedMark = false
+        for (old, new) in zip(before, after) {
+            guard old.unit == new.unit, old.strike == new.strike,
+                  old.link == new.link else { return nil }
+            switch mark {
+            case .bold:
+                guard old.italic == new.italic, new.bold else { return nil }
+                gainedMark = gainedMark || !old.bold
+            case .italic:
+                guard old.bold == new.bold, new.italic else { return nil }
+                gainedMark = gainedMark || !old.italic
+            default: return nil
+            }
+        }
+        return gainedMark ? edit : nil
+    }
+
+    private struct InlineUnit {
+        let unit: UInt16
+        let bold: Bool
+        let italic: Bool
+        let strike: Bool
+        let link: URL?
+    }
+
+    private static func inlineSignature(_ source: String) -> [InlineUnit]? {
+        let document = MarkdownSyntax.parse(source, useCache: false)
+        let blocks = Array(document.children)
+        guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
+              supportedInlineTree(paragraph) else { return nil }
+        var signature: [InlineUnit] = []
+        for run in InlineContent.runs(in: paragraph, enableHTML: false) {
+            guard case let .text(value, style, tags, code) = run, tags.isEmpty, !code else { return nil }
+            signature += value.utf16.map {
+                InlineUnit(unit: $0, bold: style.bold, italic: style.italic,
+                           strike: style.strike, link: style.link)
+            }
+        }
+        return signature.isEmpty ? nil : signature
+    }
+
+    private static func supportedInlineTree(_ node: Markup) -> Bool {
+        for child in node.children {
+            if child is Markdown.Text || child is Strong || child is Emphasis {
+                // Accepted below after recursively checking nested children.
+            } else if let link = child as? Markdown.Link {
+                guard let destination = link.destination, let url = URL(string: destination),
+                      MarkdownSyntax.isSafeLink(url) else { return false }
+            } else {
+                return false
+            }
+            guard supportedInlineTree(child) else { return false }
         }
         return true
     }

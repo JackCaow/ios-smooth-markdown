@@ -298,9 +298,8 @@ public final class MarkdownEditorController: ObservableObject {
                 let content = next.items[index].content
                 let length = (content as NSString).length
                 if length == 0 { continue }
-                guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else { return nil }
-                guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
-                                                                selection: NSRange(location: 0, length: length)),
+                guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: content,
+                                                                             selection: NSRange(location: 0, length: length)),
                       let replaced = next.replacingItemContent(at: index, with: edit.markdown) else { return nil }
                 next = replaced
                 changed = true
@@ -379,12 +378,8 @@ public final class MarkdownEditorController: ObservableObject {
                     let content = row == 0 ? next.headers[column] : next.rows[row - 1][column]
                     let length = (content as NSString).length
                     if length == 0 { continue }
-                    guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else {
-                        valid = false
-                        return table
-                    }
-                    guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
-                                                                    selection: NSRange(location: 0, length: length)) else {
+                    guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: content,
+                                                                                 selection: NSRange(location: 0, length: length)) else {
                         valid = false
                         return table
                     }
@@ -439,14 +434,11 @@ public final class MarkdownEditorController: ObservableObject {
         for index in resolved.firstIndex...resolved.lastIndex {
             let block = nextBlocks[index]
             let body = block.plainText
-            // Raw source markers inside a row cannot be mapped to visible text
-            // offsets safely by the current native range editor.
-            guard MarkdownInlineMarkEditor.isSimpleRangeSource(body) else { return false }
             let start = index == resolved.firstIndex ? resolved.startOffset : 0
             let end = index == resolved.lastIndex ? resolved.endOffset : (body as NSString).length
             if start == end { continue }
-            guard let edit = MarkdownInlineMarkEditor.apply(mark, to: body,
-                                                            selection: NSRange(location: start, length: end - start)),
+            guard let edit = MarkdownInlineMarkEditor.applyVerifiedRange(mark, to: body,
+                                                                         selection: NSRange(location: start, length: end - start)),
                   let replacement = block.replacingContent(edit.markdown) else { return false }
             nextBlocks[index] = replacement
             changed = true

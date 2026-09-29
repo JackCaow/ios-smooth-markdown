@@ -121,11 +121,11 @@ final class SemanticRangeEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, original)
     }
 
-    func testListAndTableRangeRefuseExistingInlineSyntaxWithoutPartialEdit() {
+    func testListAndTableRangeRefuseAlreadyBoldNestedSourceWithoutPartialEdit() {
         let listSource = "- plain\n- **existing**\n- tail"
         let list = MarkdownEditorController(text: listSource)
         let items = MarkdownSemanticListItemSelection(blockID: "block-0", anchorIndex: 0, focusIndex: 1)
-        XCTAssertFalse(list.applySemanticInlineMarkToListItemRange(items, mark: .italic))
+        XCTAssertFalse(list.applySemanticInlineMarkToListItemRange(items, mark: .bold))
         XCTAssertEqual(list.text, listSource)
         XCTAssertFalse(list.canUndo)
 
@@ -136,5 +136,44 @@ final class SemanticRangeEditorTests: XCTestCase {
         XCTAssertFalse(table.applySemanticInlineMarkToTableCells(cells, mark: .bold))
         XCTAssertEqual(table.text, tableSource)
         XCTAssertFalse(table.canUndo)
+    }
+
+    func testListRangeBoldPreservesExistingEmphasisAndLink() {
+        let original = "Before\n\n- one *italic* end\n- two [link](https://example.com) end\n- tail"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticListItemSelection(blockID: "block-1", anchorIndex: 0, focusIndex: 1)
+        XCTAssertTrue(controller.applySemanticInlineMarkToListItemRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text, "Before\n\n- **one *italic* end**\n"
+                       + "- **two [link](https://example.com) end**\n- tail")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testTableRangeBoldPreservesExistingEmphasisAndLink() {
+        let original = "| one *italic* end | two [link](https://example.com) end |\n"
+            + "| --- | --- |\n| untouched | value |"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticTableCellSelection(blockID: "block-0", anchorRow: 0,
+                                                           anchorColumn: 0, focusRow: 0, focusColumn: 1)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTableCells(selected, mark: .bold))
+        XCTAssertEqual(controller.text, "| **one *italic* end** | **two [link](https://example.com) end** |\n"
+                       + "| --- | --- |\n| untouched | value |")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testNestedRangeRejectsPartialOffsetsAndCodeAtomically() {
+        let nested = "one *italic* end"
+        XCTAssertNil(MarkdownInlineMarkEditor.applyVerifiedRange(
+            .bold, to: nested, selection: NSRange(location: 0, length: 3)))
+
+        let original = "- one *italic* end\n- two `code` end\n- tail"
+        let controller = MarkdownEditorController(text: original)
+        let selected = MarkdownSemanticListItemSelection(blockID: "block-0", anchorIndex: 0, focusIndex: 1)
+        XCTAssertFalse(controller.applySemanticInlineMarkToListItemRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
     }
 }

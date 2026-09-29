@@ -120,6 +120,20 @@ final class CrossBlockEditorTests: XCTestCase {
         XCTAssertEqual(plain.text, "First\n\nSecond")
         XCTAssertFalse(plain.canUndo)
     }
+
+    func testTextRangeItalicPreservesExistingBoldAcrossWholeHeadingAndParagraph() {
+        let original = "# First **bold** end\n\nSecond [link](https://example.com) end\n\nTail"
+        let controller = MarkdownEditorController(text: original)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTextRange(
+            range("block-0", 0, "block-1",
+                  ("Second [link](https://example.com) end" as NSString).length), mark: .italic))
+        XCTAssertEqual(controller.text, "# *First **bold** end*\n\n"
+                       + "*Second [link](https://example.com) end*\n\nTail")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
     func testCopiesExactMarkdownAndDeletesRangeWithOneUndoStep() {
         let original = "# One 😀\r\n\r\nSecond\r\n\r\nThird\r\n"
         let controller = MarkdownEditorController(text: original)
