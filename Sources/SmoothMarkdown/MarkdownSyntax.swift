@@ -2,8 +2,10 @@ import Foundation
 import Markdown
 
 enum MarkdownSyntax {
-    static func parse(_ source: String, useCache: Bool = true) -> Document {
-        useCache ? MarkdownParseCache.shared.parse(source) : Document(parsing: source)
+    static func parse(_ source: String, useCache: Bool = true, enableHTML: Bool = false) -> Document {
+        if useCache { return MarkdownParseCache.shared.parse(source, enableHTML: enableHTML) }
+        let document = Document(parsing: source)
+        return enableHTML ? HTMLCodeLiteralSyntax.restore(document, source: source) : document
     }
 
     static func isSafeLink(_ url: URL) -> Bool {
