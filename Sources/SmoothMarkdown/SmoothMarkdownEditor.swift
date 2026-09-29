@@ -983,6 +983,13 @@ private struct FormattedTableView: View {
             }
             if let selectedCells {
                 HStack(spacing: 8) {
+                    Menu("Format cells") {
+                        Button("Bold") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .bold) }
+                        Button("Italic") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .italic) }
+                        Button("Strikethrough") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .strikethrough) }
+                        Button("Inline code") { _ = controller.applySemanticInlineMarkToTableCells(selectedCells, mark: .code) }
+                    }
+                    .accessibilityIdentifier("table-range-format")
                     Button("Copy cells") {
                         if let copied = controller.copySemanticTableCellsAsTSV(selectedCells) {
                             UIPasteboard.general.string = copied
@@ -1151,6 +1158,8 @@ private struct FormattedListView: View {
     let list: MarkdownSourceList
     @State private var focusRequest: (index: Int, token: UUID)?
     @State private var selectedItems: MarkdownSemanticListItemSelection?
+    @State private var rangeLinkDestination = "https://"
+    @State private var showingRangeLinkEditor = false
 
     private func isSelected(_ index: Int) -> Bool {
         guard let selectedItems else { return false }
@@ -1164,6 +1173,14 @@ private struct FormattedListView: View {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
             if let selectedItems {
                 HStack(spacing: 8) {
+                    Menu("Format items") {
+                        Button("Bold") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .bold) }
+                        Button("Italic") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .italic) }
+                        Button("Strikethrough") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .strikethrough) }
+                        Button("Inline code") { _ = controller.applySemanticInlineMarkToListItemRange(selectedItems, mark: .code) }
+                        Button("Link") { showingRangeLinkEditor = true }
+                    }
+                    .accessibilityIdentifier("list-range-format")
                     Button("Copy items") {
                         if let copied = controller.copySemanticListItemRange(selectedItems) {
                             UIPasteboard.general.string = copied
@@ -1254,6 +1271,19 @@ private struct FormattedListView: View {
                 .background(isSelected(index) ? Color.accentColor.opacity(0.15) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
             }
+        }
+        .alert("Link URL", isPresented: $showingRangeLinkEditor) {
+            TextField("https://example.com", text: $rangeLinkDestination)
+                .textInputAutocapitalization(.never)
+            Button("Apply") {
+                if let selectedItems {
+                    _ = controller.applySemanticInlineMarkToListItemRange(
+                        selectedItems, mark: .link(destination: rangeLinkDestination))
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Only http, https, mailto, and tel links are accepted.")
         }
         .onChange(of: controller.text) { _, _ in selectedItems = nil }
     }

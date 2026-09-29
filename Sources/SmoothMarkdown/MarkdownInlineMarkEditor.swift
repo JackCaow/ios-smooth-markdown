@@ -4,6 +4,7 @@ import Foundation
 public enum MarkdownInlineMark: Equatable {
     case bold
     case italic
+    case strikethrough
     case code
     case link(destination: String)
 }
@@ -30,6 +31,7 @@ enum MarkdownInlineMarkEditor {
         switch mark {
         case .bold: prefix = "**"; suffix = "**"
         case .italic: prefix = "*"; suffix = "*"
+        case .strikethrough: prefix = "~~"; suffix = "~~"
         case .code:
             let delimiter = String(repeating: "`", count: longestBacktickRun(in: selected) + 1)
             let padding = selected.contains("`") ? " " : ""

@@ -284,6 +284,31 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Marks the primary text line of each selected sibling item. The list's
+    /// markers, continuation lines, and neighboring blocks retain their source.
+    @discardableResult
+    public func applySemanticInlineMarkToListItemRange(_ selection: MarkdownSemanticListItemSelection,
+                                                       mark: MarkdownInlineMark) -> Bool {
+        guard let (_, range) = resolvedListItems(selection) else { return false }
+        let document = semanticDocument
+        guard let updated = document.updatingList(selection.blockID, { list in
+            var next = list
+            var changed = false
+            for index in range {
+                let content = next.items[index].content
+                let length = (content as NSString).length
+                if length == 0 { continue }
+                guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
+                                                                selection: NSRange(location: 0, length: length)),
+                      let replaced = next.replacingItemContent(at: index, with: edit.markdown) else { return nil }
+                next = replaced
+                changed = true
+            }
+            return changed ? next : nil
+        })?.toMarkdown() else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     private func resolvedTableCells(_ selection: MarkdownSemanticTableCellSelection)
         -> (MarkdownSourceTable, ClosedRange<Int>, ClosedRange<Int>)? {
         guard let block = semanticDocument.blockById(selection.blockID),
@@ -333,6 +358,39 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func clearSemanticTableCells(_ selection: MarkdownSemanticTableCellSelection) -> Bool {
         guard let updated = clearedTableCellsMarkdown(selection) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    /// Applies Flutter's basic table range marks to each non-empty cell. A
+    /// source-preserving table edit must succeed for the entire rectangle.
+    @discardableResult
+    public func applySemanticInlineMarkToTableCells(_ selection: MarkdownSemanticTableCellSelection,
+                                                     mark: MarkdownInlineMark) -> Bool {
+        if case .link = mark { return false }
+        guard let (_, rows, columns) = resolvedTableCells(selection) else { return false }
+        let document = semanticDocument
+        var valid = true
+        var changed = false
+        let updated = document.updatingTable(selection.blockID, preservingSource: true) { table in
+            var next = table
+            for row in rows {
+                for column in columns {
+                    let content = row == 0 ? next.headers[column] : next.rows[row - 1][column]
+                    let length = (content as NSString).length
+                    if length == 0 { continue }
+                    guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
+                                                                    selection: NSRange(location: 0, length: length)) else {
+                        valid = false
+                        return table
+                    }
+                    if row == 0 { next.headers[column] = edit.markdown }
+                    else { next.rows[row - 1][column] = edit.markdown }
+                    changed = true
+                }
+            }
+            return next
+        }?.toMarkdown()
+        guard valid, changed, let updated else { return false }
         return replaceSemanticMarkdown(updated)
     }
 
