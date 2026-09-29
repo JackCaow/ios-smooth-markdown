@@ -40,6 +40,26 @@ final class CrossBlockEditorTests: XCTestCase {
         XCTAssertEqual(controller.text, original)
     }
 
+    func testNativeDragHighlightsExactUTF16FragmentsInBothDirections() {
+        let controller = MarkdownEditorController(text: "First 😀\n\n# Middle\n\nLast line")
+        let selected = range("block-2", 4, "block-0", 6)
+        let expected: [String: NSRange] = [
+            "block-0": NSRange(location: 6, length: 2),
+            "block-1": NSRange(location: 0, length: 6),
+            "block-2": NSRange(location: 0, length: 4),
+        ]
+        XCTAssertEqual(controller.semanticTextHighlightRanges(selected), expected)
+        XCTAssertEqual(controller.copySemanticTextRange(selected), "😀\n\n# Middle\n\nLast")
+        XCTAssertEqual(controller.semanticTextHighlightRanges(range("block-0", 6, "block-2", 4)), expected)
+        XCTAssertNil(controller.semanticTextHighlightRanges(range("block-0", 7, "block-1", 1)),
+                     "A drag endpoint must never split an emoji surrogate pair")
+    }
+
+    func testNativeDragDoesNotHighlightUnsupportedBlocks() {
+        let controller = MarkdownEditorController(text: "Before\n\n- item\n\nAfter")
+        XCTAssertNil(controller.semanticTextHighlightRanges(range("block-0", 2, "block-2", 2)))
+    }
+
     func testCharacterCopyIncludesOnlySelectedHeadingMarkers() {
         let controller = MarkdownEditorController(text: "# Start\n\n# End\n\nTail")
         XCTAssertEqual(controller.copySemanticTextRange(range("block-0", 0, "block-1", 2)),
