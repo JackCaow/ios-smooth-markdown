@@ -44,6 +44,45 @@ public final class MarkdownEditorController: ObservableObject {
     /// A source-preserving semantic snapshot for supported top-level blocks.
     public var semanticDocument: MarkdownDocument { MarkdownDocumentCodec().parse(text) }
 
+    /// Replaces one host-recognized block only while the source snapshot that
+    /// produced its editor context is still current. The replacement must
+    /// remain one top-level block without changing its neighbors.
+    @discardableResult
+    func replaceCustomBlockMarkdown(id: String, expectedText: String, with markdown: String) -> Bool {
+        guard text == expectedText else { return false }
+        let document = semanticDocument
+        guard let original = document.blockById(id) else { return false }
+        let parsed = MarkdownDocumentCodec().parse(markdown)
+        guard parsed.blocks.count == 1, parsed.trailingTrivia.isEmpty,
+              parsed.blocks[0].leadingTrivia.isEmpty, parsed.blocks[0].source == markdown else { return false }
+        let replacement = MarkdownDocumentBlock(id: id, kind: parsed.blocks[0].kind,
+                                                source: markdown, leadingTrivia: original.leadingTrivia)
+        let next = document.replacingBlock(replacement)
+        guard isValidCustomBlockDocument(next, matching: next.blocks) else { return false }
+        return replaceSemanticMarkdown(next.toMarkdown())
+    }
+
+    /// Deletes one block with the same stale-context and source-boundary checks.
+    @discardableResult
+    func deleteCustomBlock(id: String, expectedText: String) -> Bool {
+        guard text == expectedText else { return false }
+        let document = semanticDocument
+        guard document.blockById(id) != nil else { return false }
+        let next = document.removingBlock(id)
+        guard isValidCustomBlockDocument(next, matching: next.blocks) else { return false }
+        return replaceSemanticMarkdown(next.toMarkdown())
+    }
+
+    private func isValidCustomBlockDocument(_ document: MarkdownDocument,
+                                            matching expectedBlocks: [MarkdownDocumentBlock]) -> Bool {
+        let source = document.toMarkdown()
+        let reparsed = MarkdownDocumentCodec().parse(source)
+        return reparsed.toMarkdown() == source && reparsed.blocks.count == expectedBlocks.count &&
+            zip(reparsed.blocks, expectedBlocks).allSatisfy { parsed, expected in
+                parsed.kind == expected.kind && parsed.source == expected.source
+            }
+    }
+
     /// Copies complete top-level Blocks rows, including the exact source trivia between them.
     /// Endpoints may be tapped in either order. The first row's preceding trivia is omitted.
     public func copySemanticBlockRange(from startID: String, to endID: String) -> String? {

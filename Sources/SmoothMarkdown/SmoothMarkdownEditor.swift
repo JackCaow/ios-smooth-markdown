@@ -24,6 +24,9 @@ public struct SmoothMarkdownEditor: View {
     private let toolbarCommands: [MarkdownEditorCommand]?
     private let customSlashCommands: [MarkdownEditorSlashCommand]
     private let enableSlashCommands: Bool
+    private let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
+    private let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
+    private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
@@ -38,7 +41,10 @@ public struct SmoothMarkdownEditor: View {
                 capabilities: MarkdownEditorCapabilities = .all,
                 toolbarCommands: [MarkdownEditorCommand]? = nil,
                 enableSlashCommands: Bool = true,
-                customSlashCommands: [MarkdownEditorSlashCommand] = []) {
+                customSlashCommands: [MarkdownEditorSlashCommand] = [],
+                customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)? = nil,
+                customBlockBuilder: MarkdownEditorCustomBlockBuilder? = nil,
+                customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
         self.controller = controller
         self.onSave = onSave
         self.hasImagePicker = onPickImage != nil
@@ -50,6 +56,9 @@ public struct SmoothMarkdownEditor: View {
         self.toolbarCommands = toolbarCommands
         self.enableSlashCommands = enableSlashCommands
         self.customSlashCommands = customSlashCommands
+        self.customBlockMatcher = customBlockMatcher
+        self.customBlockBuilder = customBlockBuilder
+        self.customBlockEditorBuilder = customBlockEditorBuilder
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onExportPDF: onExportPDF,
@@ -160,7 +169,10 @@ public struct SmoothMarkdownEditor: View {
                                             wikilinkSuggestions: wikilinkSuggestions,
                                             capabilities: capabilities,
                                             enableSlashCommands: enableSlashCommands,
-                                            customSlashCommands: customSlashCommands)
+                                            customSlashCommands: customSlashCommands,
+                                            customBlockMatcher: customBlockMatcher,
+                                            customBlockBuilder: customBlockBuilder,
+                                            customBlockEditorBuilder: customBlockEditorBuilder)
                     case .preview:
                         SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
                     case .split:
@@ -299,6 +311,9 @@ private struct FormattedBlocksView: View {
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
+    let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
+    let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
+    let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     @State private var rangeStartID: String?
     @State private var rangeEndID: String?
     @State private var copiedRange = false
@@ -398,7 +413,10 @@ private struct FormattedBlocksView: View {
                                               wikilinkSuggestions: wikilinkSuggestions,
                                               capabilities: capabilities,
                                               enableSlashCommands: enableSlashCommands,
-                                              customSlashCommands: customSlashCommands)
+                                              customSlashCommands: customSlashCommands,
+                                              customBlockMatcher: customBlockMatcher,
+                                              customBlockBuilder: customBlockBuilder,
+                                              customBlockEditorBuilder: customBlockEditorBuilder)
                         }
                         .padding(4)
                         .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
@@ -491,6 +509,11 @@ private struct FormattedBlockRow: View {
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
+    let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
+    let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
+    let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
+    @State private var customBlockEditing = false
+    @State private var customBlockExpectedText: String?
     @State private var inlineSelection = NSRange(location: 0, length: 0)
     @State private var wikilinkSelectedIndex = 0
     @State private var slashSelectedIndex = 0
@@ -499,6 +522,9 @@ private struct FormattedBlockRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let customBlockView {
+                customBlockView
+            } else {
             switch block.kind {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
@@ -542,6 +568,7 @@ private struct FormattedBlockRow: View {
                 }
                 .font(.caption)
             }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -558,6 +585,41 @@ private struct FormattedBlockRow: View {
             wikilinkSelectedIndex = 0
             slashSelectedIndex = 0
         }
+    }
+
+    private var customBlockView: AnyView? {
+        guard customBlockMatcher?(block) == true else { return nil }
+        let expectedText = customBlockEditing ? (customBlockExpectedText ?? "") : controller.text
+        let context = MarkdownEditorCustomBlockContext(
+            blockID: block.id, blockKind: block.kind, markdown: block.source,
+            plainText: block.plainText, isEditing: customBlockEditing,
+            edit: {
+                customBlockExpectedText = controller.text
+                customBlockEditing = true
+            },
+            replaceMarkdown: { markdown in
+                let changed = controller.replaceCustomBlockMarkdown(id: block.id, expectedText: expectedText,
+                                                                    with: markdown)
+                if changed {
+                    customBlockEditing = false
+                    customBlockExpectedText = nil
+                }
+                return changed
+            },
+            finishEditing: {
+                customBlockEditing = false
+                customBlockExpectedText = nil
+            },
+            delete: {
+                let changed = controller.deleteCustomBlock(id: block.id, expectedText: expectedText)
+                if changed {
+                    customBlockEditing = false
+                    customBlockExpectedText = nil
+                }
+                return changed
+            })
+        if customBlockEditing, let editor = customBlockEditorBuilder?(context) { return editor }
+        return customBlockBuilder?(context)
     }
 
     private var activeSlashMatch: MarkdownSlashCommandMatch? {
