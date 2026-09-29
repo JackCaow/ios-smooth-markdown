@@ -13,14 +13,18 @@ public struct MarkdownCacheStatistics: Equatable {
 /// Caches parsed documents by their exact source. Parsing and bookkeeping share
 /// a lock so concurrent readers cannot race or insert the same document twice.
 final class MarkdownParseCache {
-    // Flutter exposes two 100-entry caches (HTML on/off). Native parsing is
-    // configuration independent, so one 200-entry cache has the same total cap.
+    // HTML code tags require a source-preserving post-process, so HTML on/off
+    // parse results use distinct keys within the same bounded cache.
     static let shared = MarkdownParseCache(maxSize: 200)
 
     private let lock = NSLock()
     private let maxSize: Int
-    private var documents: [String: Document] = [:]
-    private var usage: [String] = [] // least recently used first
+    private struct Key: Hashable {
+        let source: String
+        let enableHTML: Bool
+    }
+    private var documents: [Key: Document] = [:]
+    private var usage: [Key] = [] // least recently used first
     private var hitCount = 0
     private var missCount = 0
 
@@ -29,22 +33,24 @@ final class MarkdownParseCache {
         self.maxSize = maxSize
     }
 
-    func parse(_ source: String) -> Document {
+    func parse(_ source: String, enableHTML: Bool = false) -> Document {
         lock.lock()
         defer { lock.unlock() }
-        if let document = documents[source] {
+        let key = Key(source: source, enableHTML: enableHTML)
+        if let document = documents[key] {
             hitCount += 1
-            usage.removeAll { $0 == source }
-            usage.append(source)
+            usage.removeAll { $0 == key }
+            usage.append(key)
             return document
         }
-        let document = Document(parsing: source)
+        let parsed = Document(parsing: source)
+        let document = enableHTML ? HTMLCodeLiteralSyntax.restore(parsed, source: source) : parsed
         missCount += 1
         if usage.count == maxSize {
             documents.removeValue(forKey: usage.removeFirst())
         }
-        documents[source] = document
-        usage.append(source)
+        documents[key] = document
+        usage.append(key)
         return document
     }
 

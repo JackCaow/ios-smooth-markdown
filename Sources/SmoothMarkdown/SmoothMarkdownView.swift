@@ -112,7 +112,7 @@ public struct SmoothMarkdownView: View {
 
     private func parse(_ source: String) -> Document {
         // Plugin registries may change behavior without changing the source key.
-        MarkdownSyntax.parse(source, useCache: usesParseCache)
+        MarkdownSyntax.parse(source, useCache: usesParseCache, enableHTML: enableHTML)
     }
 
     private func block(_ node: Markup, alignment: TextAlignment? = nil,
@@ -613,9 +613,13 @@ public struct SmoothMarkdownView: View {
         var link: URL?
     }
 
-    private func inline(_ node: Markup) -> SwiftUI.Text {
-        var tags: [SafeHTML.Tag] = []
-        return inlineChildren(node, style: InlineStyle(), tags: &tags)
+    private func inline(_ runs: [InlineContent.Run]) -> SwiftUI.Text {
+        runs.reduce(SwiftUI.Text("")) { output, run in
+            if case let .text(value, sourceStyle, tags, code) = run {
+                return output + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
+            }
+            return output
+        }
     }
 
     private enum FlowPiece {
@@ -633,7 +637,7 @@ public struct SmoothMarkdownView: View {
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }
         let hasPlugin = runs.contains { if case .plugin = $0 { return true }; return false }
         if !hasImage && !hasFootnote && !hasMath && !hasPlugin {
-            return AnyView(inline(node))
+            return AnyView(inline(runs))
         }
         if !hasImage && !hasMath && !hasPlugin {
             var result = SwiftUI.Text("")
@@ -719,45 +723,6 @@ public struct SmoothMarkdownView: View {
         .defaultScrollAnchor(.center)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-    }
-
-    private func inlineChildren(_ node: Markup, style: InlineStyle, tags: inout [SafeHTML.Tag]) -> SwiftUI.Text {
-        var output = SwiftUI.Text("")
-        for child in node.children {
-            if let html = child as? InlineHTML {
-                if enableHTML, let tag = SafeHTML.lexTag(html.rawHTML), tag.end == (html.rawHTML as NSString).length {
-                    if tag.isClosing {
-                        if let match = tags.lastIndex(where: { $0.name == tag.name }) { tags.removeSubrange(match...) }
-                    } else if SafeHTML.voidTags.contains(tag.name) {
-                        if tag.name == "br" { output = output + segment("\n", style: style, tags: tags) }
-                        if tag.name == "img" { output = output + segment(tag.attributes["alt"] ?? "", style: style, tags: tags) }
-                    } else if !tag.isSelfClosing {
-                        tags.append(tag)
-                    }
-                } else {
-                    output = output + segment(html.rawHTML, style: style, tags: tags)
-                }
-                continue
-            }
-            if let text = child as? Markdown.Text {
-                output = output + segment(text.string, style: style, tags: tags)
-            } else if let code = child as? InlineCode {
-                output = output + segment(code.code, style: style, tags: tags, code: true)
-            } else if child is SoftBreak || child is LineBreak {
-                output = output + segment("\n", style: style, tags: tags)
-            } else if let image = child as? Markdown.Image {
-                output = output + segment(plainText(image), style: style, tags: tags)
-            } else {
-                var nested = style
-                if child is Strong { nested.bold = true }
-                if child is Emphasis { nested.italic = true }
-                if child is Strikethrough { nested.strike = true }
-                if let link = child as? Markdown.Link, let destination = link.destination,
-                   let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) { nested.link = url }
-                output = output + inlineChildren(child, style: nested, tags: &tags)
-            }
-        }
-        return output
     }
 
     private func segment(_ value: String, style: InlineStyle, tags: [SafeHTML.Tag], code: Bool = false) -> SwiftUI.Text {
