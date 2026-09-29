@@ -95,6 +95,63 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidParser.parse("pie\ntitle Empty"))
     }
 
+    func testFlutterFlowchartPolygonShapesHaveDistinctNativeModelsAndLayoutSpace() throws {
+        let source = #"""
+        flowchart LR
+        A{{Hexagon}} --> B[/Input/]
+        B --> C[\Output\]
+        C --> D[/Wider bottom\]
+        D --> E[\Wider top/]
+        """#
+        let diagram = try XCTUnwrap(MermaidParser.parse(source))
+        XCTAssertEqual(diagram.nodes.map(\.shape),
+                       [.hexagon, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt])
+        XCTAssertEqual(diagram.edges.count, 4)
+        let layout = MermaidLayout.compute(diagram)
+        XCTAssertEqual(layout.nodes.count, 5)
+        XCTAssertEqual(layout.edges.count, 4)
+        for node in diagram.nodes {
+            XCTAssertGreaterThan(layout.nodes[node.id]?.width ?? 0, CGFloat(node.label.utf16.count * 8 + 28))
+        }
+    }
+
+    func testFlutterInlineCommentsAndUnsupportedFlowchartStatementsDoNotDropContent() {
+        let diagram = MermaidParser.parse("graph LR\nA{{Hex}} --> B[/Input/] %% comment\nB --> C")
+        XCTAssertEqual(diagram?.nodes.map(\.id), ["A", "B", "C"])
+        XCTAssertEqual(diagram?.edges.count, 2)
+        XCTAssertNil(MermaidParser.parse("graph LR\nA --> B\nclassDef highlight fill:#f9f"))
+        XCTAssertNil(MermaidParser.parse("graph LR\nA --> B\nC[unfinished"))
+    }
+
+    func testFlutterFlowchartLineOperatorsKeepStrokeArrowAndLabels() throws {
+        let source = """
+        flowchart LR
+        A -->|solid arrow| B
+        B ---|solid line| C
+        C -.->|dotted arrow| D
+        D ...|dotted line| E
+        E ==>|thick arrow| F
+        F ===|thick line| G
+        G ---->|long arrow| H
+        H ====|long thick line| I
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source))
+        XCTAssertEqual(diagram.nodes.map(\.id), ["A", "B", "C", "D", "E", "F", "G", "H", "I"])
+        XCTAssertEqual(diagram.edges.map(\.line),
+                       [.solid, .solid, .dotted, .dotted, .thick, .thick, .solid, .thick])
+        XCTAssertEqual(diagram.edges.map(\.arrow),
+                       [.arrow, .none, .arrow, .none, .arrow, .none, .arrow, .none])
+        XCTAssertEqual(diagram.edges.map(\.label), ["solid arrow", "solid line", "dotted arrow",
+                                                  "dotted line", "thick arrow", "thick line",
+                                                  "long arrow", "long thick line"])
+        XCTAssertEqual(MermaidLayout.compute(diagram).edges.count, diagram.edges.count)
+        XCTAssertNil(MermaidParser.parse("flowchart LR\nA -..-> B"))
+        let loops = try XCTUnwrap(MermaidParser.parse("flowchart LR\nA ...|quiet| A\nA ===|heavy| A"))
+        XCTAssertEqual(loops.edges.map(\.arrow), [.none, .none])
+        XCTAssertEqual(loops.edges.map(\.line), [.dotted, .thick])
+        XCTAssertEqual(MermaidLayout.compute(loops).edges.compactMap(\.selfLoop).count, 2)
+    }
+
     func testFlowchartChainAndLayoutAreDeterministic() {
         let diagram = MermaidParser.parse("graph TD\nA[Start] --> B{Choose} --> C[Done]")!
         XCTAssertEqual(diagram.edges.count, 2)

@@ -296,6 +296,9 @@ enum MermaidLayout {
         let base = min(max(CGFloat(node.label.utf16.count) * 8 + 28, 88), 280)
         switch node.shape {
         case .diamond: return base + 30
+        case .hexagon: return base + 40
+        case .parallelogram, .parallelogramAlt: return base + 36
+        case .trapezoid, .trapezoidAlt: return base + 32
         case .circle: return max(base, 80)
         default: return base
         }

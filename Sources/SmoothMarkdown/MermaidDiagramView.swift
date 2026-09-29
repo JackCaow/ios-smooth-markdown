@@ -434,15 +434,7 @@ public struct MermaidDiagramView: View {
         if placed.edge.arrow == .arrow {
             drawArrow(at: end, angle: angle, in: context, ink: ink)
         } else if placed.edge.arrow == .cross {
-            var cross = Path()
-            for sign in [-1.0, 1.0] {
-                let offset = CGFloat(sign) * 5
-                cross.move(to: CGPoint(x: end.x + offset * cos(angle + .pi / 2) - 5 * cos(angle),
-                                       y: end.y + offset * sin(angle + .pi / 2) - 5 * sin(angle)))
-                cross.addLine(to: CGPoint(x: end.x - offset * cos(angle + .pi / 2) - 5 * cos(angle),
-                                          y: end.y - offset * sin(angle + .pi / 2) - 5 * sin(angle)))
-            }
-            context.stroke(cross, with: .color(ink), lineWidth: 1.5)
+            drawCross(at: end, angle: angle, in: context, ink: ink)
         }
         if let label = placed.edge.label, !label.isEmpty {
             let middle = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 11)
@@ -484,6 +476,18 @@ public struct MermaidDiagramView: View {
         head.move(to: point)
         head.addLine(to: CGPoint(x: point.x - length * cos(angle + .pi / 6), y: point.y - length * sin(angle + .pi / 6)))
         context.stroke(head, with: .color(ink), lineWidth: 1.5)
+    }
+
+    private func drawCross(at point: CGPoint, angle: CGFloat, in context: GraphicsContext, ink: Color) {
+        var cross = Path()
+        for sign in [-1.0, 1.0] {
+            let offset = CGFloat(sign) * 5
+            cross.move(to: CGPoint(x: point.x + offset * cos(angle + .pi / 2) - 5 * cos(angle),
+                                   y: point.y + offset * sin(angle + .pi / 2) - 5 * sin(angle)))
+            cross.addLine(to: CGPoint(x: point.x - offset * cos(angle + .pi / 2) - 5 * cos(angle),
+                                      y: point.y - offset * sin(angle + .pi / 2) - 5 * sin(angle)))
+        }
+        context.stroke(cross, with: .color(ink), lineWidth: 1.5)
     }
 
     private func drawMarker(_ marker: MermaidMarker, at point: CGPoint, toward other: CGPoint,
@@ -531,11 +535,14 @@ public struct MermaidDiagramView: View {
         var path = Path()
         path.move(to: placed.start)
         path.addCurve(to: placed.end, control1: loop.control1, control2: loop.control2)
-        context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: 1.5,
+        context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: placed.edge.line == .thick ? 2.5 : 1.5,
                                                                   dash: placed.edge.line == .dotted ? [5, 4] : []))
-        drawArrow(at: placed.end,
-                  angle: atan2(placed.end.y - loop.control2.y, placed.end.x - loop.control2.x),
-                  in: context, ink: ink)
+        let angle = atan2(placed.end.y - loop.control2.y, placed.end.x - loop.control2.x)
+        if placed.edge.arrow == .arrow {
+            drawArrow(at: placed.end, angle: angle, in: context, ink: ink)
+        } else if placed.edge.arrow == .cross {
+            drawCross(at: placed.end, angle: angle, in: context, ink: ink)
+        }
         if let label = placed.edge.label, let frame = loop.labelFrame {
             context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(background))
             context.draw(Text(label).font(.system(size: 11)).foregroundColor(ink),
@@ -555,6 +562,49 @@ public struct MermaidDiagramView: View {
             path.addLine(to: CGPoint(x: frame.maxX, y: frame.midY))
             path.addLine(to: CGPoint(x: frame.midX, y: frame.maxY))
             path.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
+            path.closeSubpath()
+            return path
+        case .hexagon:
+            let inset = frame.width * 0.15
+            var path = Path()
+            path.move(to: CGPoint(x: frame.minX + inset, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.midY))
+            path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX + inset, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
+            path.closeSubpath()
+            return path
+        case .parallelogram, .parallelogramAlt:
+            let skew = frame.width * 0.15
+            var path = Path()
+            if shape == .parallelogram {
+                path.move(to: CGPoint(x: frame.minX + skew, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - skew, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            } else {
+                path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - skew, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX + skew, y: frame.maxY))
+            }
+            path.closeSubpath()
+            return path
+        case .trapezoid, .trapezoidAlt:
+            let inset = frame.width * 0.10
+            var path = Path()
+            if shape == .trapezoid {
+                path.move(to: CGPoint(x: frame.minX + inset, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            } else {
+                path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX + inset, y: frame.maxY))
+            }
             path.closeSubpath()
             return path
         case .asymmetric:
