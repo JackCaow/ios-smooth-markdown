@@ -461,6 +461,26 @@ private struct EditorSlashCommand {
 
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
+    private struct BlockTransformOption: Identifiable {
+        let title: String
+        let command: MarkdownEditorCommand
+        var id: String { title }
+    }
+
+    private static let blockTransformOptions: [BlockTransformOption] = [
+        .init(title: "Paragraph", command: .paragraph),
+        .init(title: "Heading 1", command: .heading1),
+        .init(title: "Heading 2", command: .heading2),
+        .init(title: "Heading 3", command: .heading3),
+        .init(title: "Heading 4", command: .heading4),
+        .init(title: "Heading 5", command: .heading5),
+        .init(title: "Heading 6", command: .heading6),
+        .init(title: "Bullet list", command: .unorderedList),
+        .init(title: "Numbered list", command: .orderedList),
+        .init(title: "Task list", command: .taskList),
+        .init(title: "Blockquote", command: .blockquote),
+    ]
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
@@ -489,6 +509,20 @@ private struct FormattedBlocksView: View {
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
         return .init(anchor: textRangeStart, focus: textRangeEnd, source: textRangeSource)
+    }
+
+    private func blockRangeTransforms(from startID: String, to endID: String) -> [BlockTransformOption] {
+        Self.blockTransformOptions.filter {
+            capabilities.supports($0.command) && controller.canApplySemanticBlockCommandToBlockRange(
+                from: startID, to: endID, command: $0.command)
+        }
+    }
+
+    private func textRangeTransforms(_ range: MarkdownSemanticTextSelection) -> [BlockTransformOption] {
+        Self.blockTransformOptions.filter {
+            capabilities.supports($0.command) && controller.canApplySemanticBlockCommandToTextRange(
+                range, command: $0.command)
+        }
     }
 
     private var textHighlights: [String: NSRange] {
@@ -598,6 +632,20 @@ private struct FormattedBlocksView: View {
                     }
                     HStack(spacing: 8) {
                         if let rangeStartID, let rangeEndID {
+                            let transforms = blockRangeTransforms(from: rangeStartID, to: rangeEndID)
+                            if !transforms.isEmpty {
+                                Menu("Transform blocks") {
+                                    ForEach(transforms) { option in
+                                        Button(option.title) {
+                                            if controller.applySemanticBlockCommandToBlockRange(
+                                                from: rangeStartID, to: rangeEndID, command: option.command) {
+                                                clearRange()
+                                            }
+                                        }
+                                    }
+                                }
+                                .accessibilityIdentifier("block-range-transform")
+                            }
                             Button("Copy Markdown") {
                                 if let copied = controller.copySemanticBlockRange(from: rangeStartID, to: rangeEndID) {
                                     UIPasteboard.general.string = copied
@@ -629,6 +677,18 @@ private struct FormattedBlocksView: View {
                     }
                     HStack(spacing: 8) {
                         if let textRange {
+                            let transforms = textRangeTransforms(textRange)
+                            if !transforms.isEmpty {
+                                Menu("Transform blocks") {
+                                    ForEach(transforms) { option in
+                                        Button(option.title) {
+                                            if controller.applySemanticBlockCommandToTextRange(
+                                                textRange, command: option.command) { clearRange() }
+                                        }
+                                    }
+                                }
+                                .accessibilityIdentifier("text-range-transform")
+                            }
                             Menu("Format text range") {
                                 if capabilities.supports(.bold) {
                                     Button("Bold") { _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .bold) }

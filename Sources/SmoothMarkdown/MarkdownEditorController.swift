@@ -218,6 +218,46 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Converts every top-level prose block touched by a formatted text range.
+    /// Partial character endpoints still transform their whole paragraph or heading,
+    /// matching Flutter's block-range command. Structured boundaries fail closed.
+    public func canApplySemanticBlockCommandToTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                        command: MarkdownEditorCommand) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection),
+              resolved.start != resolved.end else { return false }
+        return MarkdownBlockRangeTransform.render(document: semanticDocument,
+                                                  range: resolved.firstIndex...resolved.lastIndex,
+                                                  command: command, codec: codec) != nil
+    }
+
+    @discardableResult
+    public func applySemanticBlockCommandToTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                     command: MarkdownEditorCommand) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection),
+              resolved.start != resolved.end,
+              let updated = MarkdownBlockRangeTransform.render(document: semanticDocument,
+                  range: resolved.firstIndex...resolved.lastIndex, command: command, codec: codec) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    public func canApplySemanticBlockCommandToBlockRange(from startID: String, to endID: String,
+                                                         command: MarkdownEditorCommand) -> Bool {
+        let document = semanticDocument
+        guard let range = semanticBlockRange(in: document, from: startID, to: endID) else { return false }
+        return MarkdownBlockRangeTransform.render(document: document, range: range,
+                                                  command: command, codec: codec) != nil
+    }
+
+    @discardableResult
+    public func applySemanticBlockCommandToBlockRange(from startID: String, to endID: String,
+                                                      command: MarkdownEditorCommand) -> Bool {
+        let document = semanticDocument
+        guard let range = semanticBlockRange(in: document, from: startID, to: endID),
+              let updated = MarkdownBlockRangeTransform.render(document: document, range: range,
+                                                                 command: command, codec: codec) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
     private func semanticBlockRange(in document: MarkdownDocument, from startID: String,
                                     to endID: String) -> ClosedRange<Int>? {
         guard let first = document.blocks.firstIndex(where: { $0.id == startID }),
