@@ -388,13 +388,14 @@ public final class MarkdownEditorController: ObservableObject {
     }
 
     /// Newline-only prose is ambiguous in one focused cell and stays in Source
-    /// mode. A tab is an explicit grid delimiter; a partial in-cell selection
-    /// also stays on the exact source-selection path.
+    /// mode. A tab is an explicit grid delimiter, but replacing a whole cell
+    /// is safe only when all its visible text is selected (including an empty
+    /// cell at caret zero). Any partial caret/selection uses exact source paste.
     static func shouldRouteFocusedTablePasteAsGrid(_ clipboard: String,
                                                    visibleText: String,
                                                    selection: NSRange) -> Bool {
         let wholeCell = selection.location == 0 && selection.length == (visibleText as NSString).length
-        return clipboard.contains("\t") && (selection.length == 0 || wholeCell)
+        return clipboard.contains("\t") && wholeCell
     }
 
     /// Preserves the exact pasted bytes when a focused-cell paste is not a

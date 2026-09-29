@@ -37,7 +37,7 @@ final class TableGridPasteTests: XCTestCase {
 
     func testFocusedCellClassifiesOnlyTabularPasteAsGrid() {
         let caret = NSRange(location: 2, length: 0)
-        XCTAssertTrue(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+        XCTAssertFalse(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
             "a\tb\nc\td", visibleText: "old", selection: caret))
         XCTAssertFalse(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
             "plain\nprose", visibleText: "old", selection: caret))
@@ -45,6 +45,8 @@ final class TableGridPasteTests: XCTestCase {
             "a\tb", visibleText: "old", selection: NSRange(location: 1, length: 1)))
         XCTAssertTrue(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
             "a\tb", visibleText: "old", selection: NSRange(location: 0, length: 3)))
+        XCTAssertTrue(MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+            "a\tb", visibleText: "", selection: NSRange(location: 0, length: 0)))
     }
 
     func testHeaderPasteKeepsInlineMarkdownAndEscapesLiteralPipes() {
