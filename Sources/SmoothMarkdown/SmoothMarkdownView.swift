@@ -549,9 +549,8 @@ public struct SmoothMarkdownView: View {
 
     private func imageView(_ image: SafeHTML.ImageSpec, inline: Bool = false) -> AnyView {
         let label = image.alt.isEmpty ? (image.title ?? "Image") : image.alt
-        let width: CGFloat? = image.width.map { CGFloat($0) } ?? (inline ? 24 : nil)
-        let height: CGFloat? = image.height.map { CGFloat($0) } ?? (inline ? 24 : nil)
-        let resizableSVG = width != nil || height != nil
+        let width: CGFloat? = image.width.map { CGFloat($0) }
+        let height: CGFloat? = image.height.map { CGFloat($0) }
         guard let source = ImageSource.parse(image.source) else { return AnyView(SwiftUI.Text(label)) }
         let tapURL: URL? = switch source {
         case let .remote(url, _): url
@@ -567,31 +566,28 @@ public struct SmoothMarkdownView: View {
             return accessibleImage(
                 AsyncSVGView(url: url) { phase in
                     switch phase {
-                    case .success(let svg): svgContent(svg, resizable: resizableSVG)
+                    case .success(let svg):
+                        NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
+                            SVGView(svg: svg).resizable().scaledToFit()
+                        }
                     case .failure: SwiftUI.Text(label)
                     case .empty: ProgressView()
                     }
-                }
-                .frame(width: width, height: height), url: url, image: image, label: label, inline: inline)
+                }, url: url, image: image, label: label, inline: inline)
         case let .remote(url, svg: false):
             return accessibleImage(
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let loaded): loaded.resizable().scaledToFit()
-                    case .failure: SwiftUI.Text(label)
-                    case .empty: ProgressView()
-                    @unknown default: SwiftUI.Text(label)
-                    }
-                }
-                .frame(width: width, height: height), url: url, image: image, label: label, inline: inline)
+                RemoteBitmapView(url: url, width: width, height: height, fallback: label),
+                url: url, image: image, label: label, inline: inline)
         case let .bundled(name, svg: true):
             guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
-            return accessibleImage(svgContent(svg, resizable: resizableSVG)
-                .frame(width: width, height: height), url: URL(string: name), image: image, label: label, inline: inline)
+            return accessibleImage(
+                NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
+                    SVGView(svg: svg).resizable().scaledToFit()
+                }, url: URL(string: name), image: image, label: label, inline: inline)
         case let .bundled(name, svg: false):
-            return accessibleImage(SwiftUI.Image(name)
-                .resizable().scaledToFit()
-                .frame(width: width, height: height), url: URL(string: name), image: image, label: label, inline: inline)
+            return accessibleImage(
+                BundledBitmapView(name: name, width: width, height: height, fallback: label),
+                url: URL(string: name), image: image, label: label, inline: inline)
         }
     }
 
@@ -608,11 +604,6 @@ public struct SmoothMarkdownView: View {
                 .accessibilityLabel(label))
         }
         return AnyView(content.accessibilityLabel(label))
-    }
-
-    private func svgContent(_ svg: SVG, resizable: Bool) -> AnyView {
-        if resizable { return AnyView(SVGView(svg: svg).resizable().scaledToFit()) }
-        return AnyView(SVGView(svg: svg))
     }
 
     private struct InlineStyle {
@@ -691,6 +682,7 @@ public struct SmoothMarkdownView: View {
                 case let .text(text): text.fixedSize()
                 case let .image(image):
                     imageView(image, inline: true)
+                        .layoutValue(key: InlineImageKey.self, value: true)
                 case let .math(latex):
                     SwiftUIMath.Math(latex)
                         .mathTypesettingStyle(.text)
