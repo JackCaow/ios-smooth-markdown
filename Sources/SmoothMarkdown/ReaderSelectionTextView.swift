@@ -426,7 +426,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
 }
 
 @available(iOS 17.0, *)
-final class QuoteTextView: UITextView {
+class QuoteTextView: UITextView {
     struct Region {
         let range: NSRange
         let depth: Int

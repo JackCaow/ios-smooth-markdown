@@ -78,5 +78,47 @@ final class ReaderDocumentSelectionHostTests: XCTestCase {
         XCTAssertEqual(view.selectedRange.length, 0)
         XCTAssertNil(replacementHost.superview)
     }
+
+    func testStyledTextUpdateKeepsSelectionButRejectsMismatchedProjection() {
+        let projection = ReaderTextKitProjection(document: .init(markdown: "First.\n\nSecond."))
+        let view = ReaderDocumentSelectionTextView()
+        let small = NSAttributedString(string: projection.attributedText.string,
+                                       attributes: [.font: UIFont.systemFont(ofSize: 14)])
+        let large = NSAttributedString(string: projection.attributedText.string,
+                                       attributes: [.font: UIFont.systemFont(ofSize: 24)])
+        XCTAssertTrue(view.apply(projection, availableWidth: 300,
+                                 measuredAttachments: [:], hostedViews: [:], styledText: small))
+        view.selectedRange = NSRange(location: 0, length: 5)
+        XCTAssertTrue(view.apply(projection, availableWidth: 300,
+                                 measuredAttachments: [:], hostedViews: [:], styledText: large))
+        XCTAssertEqual(view.selectedRange, NSRange(location: 0, length: 5))
+        XCTAssertEqual((view.textStorage.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.pointSize,
+                       24)
+        XCTAssertFalse(view.apply(projection, availableWidth: 300,
+                                  measuredAttachments: [:], hostedViews: [:],
+                                  styledText: NSAttributedString(string: "Wrong")))
+        XCTAssertEqual(view.attributedText.string, projection.attributedText.string)
+    }
+
+    func testWholeReaderUsesOneHostOnlyForCompleteTextProjection() {
+        let plain = SmoothMarkdownView(markdown: "# Heading\n\nFirst paragraph.\n\nSecond paragraph.",
+                                       selectable: true)
+        let candidate = try! XCTUnwrap(plain.wholeDocumentSelection)
+        XCTAssertEqual(candidate.selection.selectionText, candidate.projection.attributedText.string)
+        XCTAssertEqual(candidate.projection.document.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)),
+            "Heading\nFirst paragraph.\nSecond paragraph.")
+        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n```swift\nprint(1)\n```\n\nB",
+                                        selectable: true).wholeDocumentSelection)
+        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n$$\nx+y\n$$\n\nB",
+                                        selectable: true).wholeDocumentSelection)
+        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n![image](https://example.com/a.png)\n\nB",
+                                        selectable: true).wholeDocumentSelection)
+        XCTAssertNil(SmoothMarkdownView(markdown: "A `two words`.\n\nB",
+                                        selectable: true).wholeDocumentSelection)
+        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\nB", selectable: true,
+                                        enableCrossBlockSelection: false).wholeDocumentSelection)
+        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\nB", selectable: false).wholeDocumentSelection)
+    }
 }
 #endif

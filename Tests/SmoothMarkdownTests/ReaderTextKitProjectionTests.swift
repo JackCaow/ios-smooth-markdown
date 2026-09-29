@@ -1,8 +1,28 @@
 import Foundation
+import Markdown
 import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderTextKitProjectionTests: XCTestCase {
+    func testCompleteProseDocumentMatchesExistingSelectableTextOffsets() {
+        let cases = [
+            ("# Heading\n\nFirst paragraph.\n\nSecond paragraph.",
+             "Heading\nFirst paragraph.\nSecond paragraph."),
+            ("## Tasks\n\n- One\n- Two\n\n> Quoted line.\n\nAfter [link](https://example.com).",
+             "Tasks\n• One\n• Two\nQuoted line.\nAfter link."),
+        ]
+        for (markdown, copied) in cases {
+            let nodes = Array(MarkdownSyntax.parse(markdown, enableHTML: false).children)
+            let native = ReaderSelectionDocument.compose(nodes, enableHTML: false, plugins: nil)
+            let projected = ReaderTextKitProjection(document: .init(markdown: markdown))
+            XCTAssertNotNil(native)
+            XCTAssertTrue(projected.attachments.isEmpty)
+            XCTAssertEqual(native?.selectionText, projected.attributedText.string)
+            XCTAssertEqual(projected.copiedText(in: NSRange(location: 0,
+                                                           length: projected.attributedText.length)), copied)
+        }
+    }
+
     func testOneAttributedStringMapsEveryVisibleSegmentAndAttachment() {
         let source = """
         # Heading

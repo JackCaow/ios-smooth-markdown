@@ -102,7 +102,24 @@ public struct SmoothMarkdownView: View {
         })
     }
 
+    @ViewBuilder
     private var renderedBlocks: some View {
+        #if os(iOS)
+        if let unified = wholeDocumentSelection {
+            ReaderWholeDocumentSelectionView(selectionDocument: unified.selection,
+                                             projection: unified.projection,
+                                             styleSheet: styleSheet, onLinkTap: onLinkTap)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(styleSheet.contentPadding)
+        } else {
+            legacyRenderedBlocks
+        }
+        #else
+        legacyRenderedBlocks
+        #endif
+    }
+
+    private var legacyRenderedBlocks: some View {
         LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
             ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
                 detailsSection(section)
@@ -111,6 +128,41 @@ public struct SmoothMarkdownView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(styleSheet.contentPadding)
     }
+
+    #if os(iOS)
+    /// A complete native surface is safe when every source section and glyph
+    /// maps to the existing styled prose renderer. Complex visual blocks keep
+    /// their established reader until they have measured attachment hosts.
+    var wholeDocumentSelection: (selection: ReaderSelectionDocument,
+                                 projection: ReaderTextKitProjection)? {
+        guard selectable, enableCrossBlockSelection, onTextLongPress == nil, !voiceOverEnabled else { return nil }
+        let details = DetailsSyntax.sections(markdown)
+        guard details.count == 1, case let .markdown(detailsSource) = details[0] else { return nil }
+        let pluginSections = PluginBlockSyntax.sections(detailsSource, registry: plugins)
+        guard pluginSections.count == 1,
+              case let .markdown(pluginSource) = pluginSections[0] else { return nil }
+        let footnoteSections = FootnoteSyntax.sections(pluginSource)
+        guard footnoteSections.count == 1,
+              case let .markdown(footnoteSource) = footnoteSections[0] else { return nil }
+        let mathSections = MathSyntax.sections(footnoteSource)
+        guard mathSections.count == 1, case let .markdown(mathSource) = mathSections[0] else { return nil }
+        let nodes = Array(parse(mathSource).children)
+        guard nodes.count > 1, !nodes.contains(where: containsCustomBlockBuilder),
+              let selection = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML,
+                                                               plugins: plugins) else { return nil }
+        let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
+            markdown: markdown, enableHTML: enableHTML, plugins: plugins,
+            builderRegistry: builderRegistry))
+        guard projection.attachments.isEmpty,
+              projection.attributedText.string == selection.selectionText else { return nil }
+        let styled = ReaderSelectionTextView(document: selection, styleSheet: styleSheet,
+                                             onLinkTap: onLinkTap, onTextLongPress: nil,
+                                             selectable: true, onCharacterTap: nil)
+            .attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize)).text
+        guard styled.string == projection.attributedText.string else { return nil }
+        return (selection, projection)
+    }
+    #endif
 
     var usesParseCache: Bool { enableCache && plugins == nil }
 
