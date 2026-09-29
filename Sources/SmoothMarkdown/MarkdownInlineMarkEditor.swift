@@ -17,6 +17,216 @@ struct MarkdownInlineMarkEdit: Equatable {
 }
 
 enum MarkdownInlineMarkEditor {
+    private enum MappedKind: Equatable {
+        case bold, italic, link(URL)
+    }
+
+    private struct MappedMark {
+        let kind: MappedKind
+        let visibleStart: Int
+        let visibleEnd: Int
+        let sourceStart: Int
+        let sourceEnd: Int
+        let opening: String
+        let closing: String
+    }
+
+    private struct SourceBoundary {
+        let offset: Int
+        let closeTokens: String
+        let openTokens: String
+    }
+
+    private struct InlineMap {
+        let units: [UInt16]
+        let starts: [Int]
+        let ends: [Int]
+        let marks: [MappedMark]
+        let sourceLength: Int
+
+        func boundary(at visibleOffset: Int) -> SourceBoundary? {
+            guard visibleOffset >= 0, visibleOffset <= units.count else { return nil }
+            let fallback = visibleOffset == 0 ? 0 : visibleOffset == units.count ? sourceLength : ends[visibleOffset - 1]
+            let ending = marks.filter { $0.visibleEnd == visibleOffset && $0.visibleStart < visibleOffset }
+            let starting = marks.filter { $0.visibleStart == visibleOffset && $0.visibleEnd > visibleOffset }
+            let offset = ending.map(\.sourceEnd).max() ?? starting.map(\.sourceStart).min() ?? fallback
+            let active = marks.filter { $0.visibleStart < visibleOffset && visibleOffset < $0.visibleEnd }
+                .sorted { $0.sourceStart == $1.sourceStart ? $0.sourceEnd > $1.sourceEnd : $0.sourceStart < $1.sourceStart }
+            return SourceBoundary(offset: offset,
+                                  closeTokens: active.reversed().map(\.closing).joined(),
+                                  openTokens: active.map(\.opening).joined())
+        }
+
+        func coverage() -> [(bold: Int, italic: Int, links: [URL])] {
+            var result = Array(repeating: (bold: 0, italic: 0, links: [URL]()), count: units.count)
+            for mark in marks {
+                for index in mark.visibleStart..<mark.visibleEnd {
+                    switch mark.kind {
+                    case .bold: result[index].bold += 1
+                    case .italic: result[index].italic += 1
+                    case let .link(url): result[index].links.append(url)
+                    }
+                }
+            }
+            return result
+        }
+    }
+
+    static func visibleUTF16Length(of markdown: String) -> Int? { inlineMap(markdown)?.units.count }
+
+    /// Wraps visible UTF-16 text inside existing emphasis and links only when
+    /// reparsing preserves every original text unit and existing mark.
+    static func applyVerifiedVisibleRange(_ mark: MarkdownInlineMark, to markdown: String,
+                                          selection: NSRange) -> String? {
+        guard let before = inlineMap(markdown), selection.location != NSNotFound,
+              selection.location >= 0, selection.length > 0,
+              NSMaxRange(selection) <= before.units.count,
+              scalarBoundary(selection.location, in: before.units),
+              scalarBoundary(NSMaxRange(selection), in: before.units),
+              let start = before.boundary(at: selection.location),
+              let end = before.boundary(at: NSMaxRange(selection)), start.offset <= end.offset else { return nil }
+
+        let addition: MappedKind
+        let delimiters: [(String, String)]
+        switch mark {
+        case .bold:
+            addition = .bold
+            delimiters = [("**", "**"), ("__", "__")]
+        case .italic:
+            addition = .italic
+            delimiters = [("*", "*"), ("_", "_")]
+        case let .link(destination):
+            guard let url = safeDestination(destination),
+                  !before.marks.contains(where: {
+                      if case .link = $0.kind {
+                          return $0.visibleStart < NSMaxRange(selection) && selection.location < $0.visibleEnd
+                      }
+                      return false
+                  }) else { return nil }
+            addition = .link(url)
+            let escaped = url.absoluteString.replacingOccurrences(of: "(", with: "%28")
+                .replacingOccurrences(of: ")", with: "%29")
+            delimiters = [("[", "](" + escaped + ")")]
+        case .strikethrough, .code: return nil
+        }
+
+        let oldCoverage = before.coverage()
+        let source = markdown as NSString
+        for split in [false, true] {
+            for (opening, closing) in delimiters {
+                let candidate = source.substring(to: start.offset)
+                    + (split ? start.closeTokens : "") + opening + (split ? start.openTokens : "")
+                    + source.substring(with: NSRange(location: start.offset, length: end.offset - start.offset))
+                    + (split ? end.closeTokens : "") + closing + (split ? end.openTokens : "")
+                    + source.substring(from: end.offset)
+                guard let after = inlineMap(candidate), after.units == before.units else { continue }
+                let newCoverage = after.coverage()
+                let valid = oldCoverage.indices.allSatisfy { index in
+                    let old = oldCoverage[index]
+                    let new = newCoverage[index]
+                    let selected = selection.location <= index && index < NSMaxRange(selection)
+                    switch addition {
+                    case .bold:
+                        return new.bold == old.bold + (selected ? 1 : 0) &&
+                            new.italic == old.italic && new.links == old.links
+                    case .italic:
+                        return new.bold == old.bold &&
+                            new.italic == old.italic + (selected ? 1 : 0) && new.links == old.links
+                    case let .link(url):
+                        return new.bold == old.bold && new.italic == old.italic &&
+                            new.links == (selected ? old.links + [url] : old.links)
+                    }
+                }
+                if valid { return candidate }
+            }
+        }
+        return nil
+    }
+
+    private static func safeDestination(_ value: String) -> URL? {
+        guard !value.isEmpty,
+              !value.contains(where: { $0.isWhitespace || $0.isNewline || "<>[]\\".contains($0) }),
+              let url = URL(string: value), MarkdownSyntax.isSafeLink(url) else { return nil }
+        return url
+    }
+
+    private static func scalarBoundary(_ offset: Int, in units: [UInt16]) -> Bool {
+        guard offset > 0, offset < units.count else { return true }
+        return !(0xD800...0xDBFF).contains(units[offset - 1]) || !(0xDC00...0xDFFF).contains(units[offset])
+    }
+
+    private static func inlineMap(_ source: String) -> InlineMap? {
+        let document = MarkdownSyntax.parse(source, useCache: false)
+        let blocks = Array(document.children)
+        guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
+              supportedInlineTree(paragraph), inlineSignature(source) != nil else { return nil }
+        let nsSource = source as NSString
+        let utf8 = Array(source.utf8)
+        func offset(_ location: SourceLocation) -> Int? {
+            guard location.line == 1, location.column >= 1, location.column - 1 <= utf8.count,
+                  let prefix = String(bytes: utf8.prefix(location.column - 1), encoding: .utf8) else { return nil }
+            return prefix.utf16.count
+        }
+        func sourceRange(_ node: Markup) -> NSRange? {
+            guard let range = node.range, let start = offset(range.lowerBound),
+                  let end = offset(range.upperBound), end >= start else { return nil }
+            return NSRange(location: start, length: end - start)
+        }
+        var units: [UInt16] = []
+        var starts: [Int] = []
+        var ends: [Int] = []
+        var marks: [MappedMark] = []
+        func visit(_ node: Markup) -> Bool {
+            for child in node.children {
+                if let text = child as? Markdown.Text {
+                    guard let range = sourceRange(text),
+                          range.length == (text.string as NSString).length,
+                          nsSource.substring(with: range) == text.string else { return false }
+                    for (index, unit) in text.string.utf16.enumerated() {
+                        units.append(unit)
+                        starts.append(range.location + index)
+                        ends.append(range.location + index + 1)
+                    }
+                    continue
+                }
+                let kind: MappedKind
+                if child is Strong { kind = .bold }
+                else if child is Emphasis { kind = .italic }
+                else if let link = child as? Markdown.Link,
+                        let destination = link.destination,
+                        let url = safeDestination(destination), link.title == nil { kind = .link(url) }
+                else { return false }
+                guard let range = sourceRange(child), range.length > 1 else { return false }
+                let raw = nsSource.substring(with: range)
+                let opening: String
+                let closing: String
+                switch kind {
+                case .bold:
+                    guard raw.hasPrefix("**") && raw.hasSuffix("**") ||
+                          raw.hasPrefix("__") && raw.hasSuffix("__") else { return false }
+                    opening = String(raw.prefix(2)); closing = String(raw.suffix(2))
+                case .italic:
+                    guard raw.hasPrefix("*") && raw.hasSuffix("*") ||
+                          raw.hasPrefix("_") && raw.hasSuffix("_") else { return false }
+                    opening = String(raw.prefix(1)); closing = String(raw.suffix(1))
+                case .link:
+                    guard raw.hasPrefix("["), raw.hasSuffix(")"),
+                          let suffix = raw.range(of: "](", options: .backwards) else { return false }
+                    opening = "["; closing = String(raw[suffix.lowerBound...])
+                }
+                let visibleStart = units.count
+                guard visit(child), units.count > visibleStart else { return false }
+                marks.append(MappedMark(kind: kind, visibleStart: visibleStart, visibleEnd: units.count,
+                                        sourceStart: range.location, sourceEnd: NSMaxRange(range),
+                                        opening: opening, closing: closing))
+            }
+            return true
+        }
+        guard visit(paragraph), !units.isEmpty,
+              inlineSignature(source)?.map(\.unit) == units else { return nil }
+        return InlineMap(units: units, starts: starts, ends: ends, marks: marks, sourceLength: nsSource.length)
+    }
+
     /// Simple source can use raw offsets. Existing inline syntax needs the
     /// full-body semantic validation in applyVerifiedRange instead.
     /// An escaped table pipe is the one source escape handled by this editor.
