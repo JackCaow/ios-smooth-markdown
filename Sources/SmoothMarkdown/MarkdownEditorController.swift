@@ -612,6 +612,133 @@ public final class MarkdownEditorController: ObservableObject {
         return replaceSemanticMarkdown(updated)
     }
 
+    /// Multi-line keyboard replacement is usually a paste. Keep ordinary prose
+    /// and active IME composition on the text view's normal editing path.
+    static func isStructuredBlockPaste(_ replacement: String, hasMarkedText: Bool) -> Bool {
+        guard !hasMarkedText, replacement.contains("\n") || replacement.contains("\r") else { return false }
+        let document = MarkdownDocumentCodec().parse(replacement)
+        return document.blocks.contains { block in
+            if case .paragraph = block.kind {
+                return block.plainText.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("![")
+            }
+            return true
+        }
+    }
+
+    /// Inserts parsed Markdown blocks into a UTF-16 range of a formatted
+    /// paragraph or heading. The text on either side becomes separate sibling
+    /// blocks, while every untouched source block stays byte-for-byte intact.
+    /// Invalid ranges or a paste that would merge with a neighbor are rejected
+    /// before entering the source undo history.
+    @discardableResult
+    public func replaceSemanticTextRangeWithMarkdownBlocks(id: String, range: NSRange,
+                                                            markdown: String, ifTextIs expectedText: String? = nil) -> Bool {
+        if let expectedText, expectedText != text { return false }
+        let document = semanticDocument
+        guard let index = document.blocks.firstIndex(where: { $0.id == id }),
+              let sourceRange = document.sourceRange(of: id),
+              !markdown.isEmpty else { return false }
+        let block = document.blocks[index]
+        switch block.kind {
+        case .paragraph, .heading: break
+        case .fencedCode, .table, .list, .horizontalRule, .plugin, .raw: return false
+        }
+        let body = block.plainText as NSString
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= body.length,
+              Range(range, in: block.plainText) != nil,
+              Self.isUTF16ScalarBoundary(range.location, in: block.plainText),
+              Self.isUTF16ScalarBoundary(NSMaxRange(range), in: block.plainText),
+              MarkdownInlineMarkEditor.canSplitForBlockPaste(block.plainText, range: range) else { return false }
+        let inserted = codec.parse(markdown)
+        guard !inserted.blocks.isEmpty, inserted.toMarkdown() == markdown else { return false }
+
+        let before = body.substring(to: range.location)
+        let after = body.substring(from: NSMaxRange(range))
+        let hasBefore = !before.isEmpty
+        let hasAfter = !after.isEmpty
+        let ending = block.source.hasSuffix("\r\n") ? "\r\n" : block.source.hasSuffix("\n") ? "\n" : ""
+        let lineEnding = block.source.contains("\r\n") ? "\r\n" : "\n"
+        let prefixLength = (block.source as NSString).length - body.length - (ending as NSString).length
+        guard prefixLength >= 0,
+              (block.source as NSString).substring(with: NSRange(location: prefixLength, length: body.length))
+                == block.plainText else { return false }
+        let prefix = (block.source as NSString).substring(to: prefixLength)
+        var replacement = ""
+        if hasBefore { replacement = Self.joinPastedBlocks(prefix + before, markdown, lineEnding: lineEnding) }
+        else { replacement = markdown }
+        let pastedEnd = (replacement as NSString).length
+        if hasAfter { replacement = Self.joinPastedBlocks(replacement, after, lineEnding: lineEnding) }
+        if !ending.isEmpty && !replacement.hasSuffix("\n") { replacement += ending }
+
+        let updated = (text as NSString).replacingCharacters(in: sourceRange, with: replacement)
+        let reparsed = codec.parse(updated)
+        let replacementCount = (hasBefore ? 1 : 0) + inserted.blocks.count + (hasAfter ? 1 : 0)
+        guard reparsed.toMarkdown() == updated,
+              reparsed.blocks.count == document.blocks.count - 1 + replacementCount,
+              reparsed.trailingTrivia == document.trailingTrivia else { return false }
+        for oldIndex in 0..<index {
+            guard Self.sameSourceBlock(reparsed.blocks[oldIndex], document.blocks[oldIndex]) else { return false }
+        }
+        let insertedIndex = index + (hasBefore ? 1 : 0)
+        if hasBefore {
+            let first = reparsed.blocks[index]
+            guard first.kind == block.replacingContent(before)?.kind,
+                  first.leadingTrivia == block.leadingTrivia,
+                  first.plainText == before else { return false }
+        }
+        for offset in inserted.blocks.indices {
+            let actual = reparsed.blocks[insertedIndex + offset]
+            let expected = inserted.blocks[offset]
+            guard Self.sameInsertedBlock(actual, expected) else { return false }
+        }
+        if hasAfter {
+            let last = reparsed.blocks[insertedIndex + inserted.blocks.count]
+            guard case .paragraph = last.kind, last.plainText == after else { return false }
+        }
+        for oldIndex in (index + 1)..<document.blocks.count {
+            let nextIndex = oldIndex - 1 + replacementCount
+            guard Self.sameSourceBlock(reparsed.blocks[nextIndex], document.blocks[oldIndex]) else { return false }
+        }
+        guard replaceSemanticMarkdown(updated) else { return false }
+        setSelection(NSRange(location: sourceRange.location + pastedEnd, length: 0))
+        return true
+    }
+
+    private static func sameSourceBlock(_ left: MarkdownDocumentBlock, _ right: MarkdownDocumentBlock) -> Bool {
+        left.kind == right.kind && left.source == right.source && left.leadingTrivia == right.leadingTrivia
+    }
+
+    private static func sameInsertedBlock(_ left: MarkdownDocumentBlock, _ right: MarkdownDocumentBlock) -> Bool {
+        guard left.plainText == right.plainText,
+              left.source.trimmingCharacters(in: .newlines) == right.source.trimmingCharacters(in: .newlines)
+        else { return false }
+        switch (left.kind, right.kind) {
+        case (.paragraph, .paragraph), (.fencedCode, .fencedCode), (.table, .table), (.list, .list),
+             (.horizontalRule, .horizontalRule), (.raw, .raw), (.plugin, .plugin): return true
+        case let (.heading(leftLevel, _), .heading(rightLevel, _)): return leftLevel == rightLevel
+        default: return false
+        }
+    }
+
+    private static func isUTF16ScalarBoundary(_ offset: Int, in text: String) -> Bool {
+        let units = Array(text.utf16)
+        guard offset > 0 && offset < units.count else { return true }
+        return !(0xD800...0xDBFF).contains(units[offset - 1]) ||
+            !(0xDC00...0xDFFF).contains(units[offset])
+    }
+
+    private static func joinPastedBlocks(_ first: String, _ second: String, lineEnding: String) -> String {
+        var tail = first[...]
+        var breaks = 0
+        while tail.last == "\n" {
+            tail = tail.dropLast()
+            if tail.last == "\r" { tail = tail.dropLast() }
+            breaks += 1
+        }
+        return first + String(repeating: lineEnding, count: max(0, 2 - breaks)) + second
+    }
+
     /// Applies one inline mark to a UTF-16 selection within an editable Blocks row.
     /// Returns the selection in the new block body, or nil for an unsupported edit.
     @discardableResult

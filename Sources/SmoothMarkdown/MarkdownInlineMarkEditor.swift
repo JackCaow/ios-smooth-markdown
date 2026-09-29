@@ -83,6 +83,21 @@ enum MarkdownInlineMarkEditor {
         return String(decoding: mapped.units, as: UTF16.self)
     }
 
+    /// A block paste may split raw Markdown only outside an existing inline
+    /// mark. Splitting inside emphasis, code, or a link would leave unmatched
+    /// delimiters in the before/after sibling blocks.
+    static func canSplitForBlockPaste(_ markdown: String, range: NSRange) -> Bool {
+        let length = (markdown as NSString).length
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= length else { return false }
+        if isSimpleRangeSource(markdown) { return true }
+        guard let mapped = inlineMap(markdown, allowCode: true) else { return false }
+        return mapped.marks.allSatisfy { mark in
+            !(mark.sourceStart < range.location && range.location < mark.sourceEnd) &&
+                !(mark.sourceStart < NSMaxRange(range) && NSMaxRange(range) < mark.sourceEnd)
+        }
+    }
+
     /// Wraps visible UTF-16 text only when reparsing preserves every original
     /// text unit and existing mark, including code spans outside the selection.
     static func applyVerifiedVisibleRange(_ mark: MarkdownInlineMark, to markdown: String,

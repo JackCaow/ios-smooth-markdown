@@ -78,6 +78,35 @@ final class DemoExamplesUITests: XCTestCase {
         add(featureScreenshot)
     }
 
+    func testReaderLayoutInPhysicalLandscape() {
+        let device = XCUIDevice.shared
+        device.orientation = .portrait
+        defer { device.orientation = .portrait }
+
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons["open-examples"].waitForExistence(timeout: 10))
+        device.orientation = .landscapeLeft
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10))
+        for _ in 0..<20 where window.frame.width <= window.frame.height {
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        XCTAssertGreaterThan(window.frame.width, window.frame.height,
+                             "The Demo must actually rotate before assessing landscape layout")
+
+        let heading = app.staticTexts["Basic Text Formatting"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(heading.frame.minY,
+                                    app.buttons["open-examples"].frame.maxY,
+                                    "Reader heading must not overlap the navigation bar")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Physical iPhone reader in actual landscape orientation"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testDrawerEditorEntryOpensEditor() {
         let app = XCUIApplication()
         app.launch()
