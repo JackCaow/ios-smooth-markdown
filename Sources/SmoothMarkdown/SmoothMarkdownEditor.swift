@@ -14,12 +14,17 @@ public struct SmoothMarkdownEditor: View {
     @State private var searchIndex = 0
     @State private var searchHasNavigated = false
     @State private var focusMode = false
+    @State private var sourceIsComposing = false
+    @State private var sourceFocusTracker = MarkdownEditorSourceFocusTracker()
+    @State private var performanceReporter = MarkdownEditorPerformanceReporter()
     @FocusState private var searchFieldFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let onSave: ((String) -> Void)?
     private let onChanged: ((String) -> Void)?
     private let onModeChanged: ((MarkdownEditorMode) -> Void)?
     private let onSelectionChanged: ((NSRange) -> Void)?
+    private let onFocusChanged: ((Bool) -> Void)?
+    private let onPerformanceSnapshot: ((MarkdownEditorPerformanceSnapshot) -> Void)?
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
     private let hasMarkdownImporter: Bool
@@ -38,6 +43,8 @@ public struct SmoothMarkdownEditor: View {
                 onChanged: ((String) -> Void)? = nil,
                 onModeChanged: ((MarkdownEditorMode) -> Void)? = nil,
                 onSelectionChanged: ((NSRange) -> Void)? = nil,
+                onFocusChanged: ((Bool) -> Void)? = nil,
+                onPerformanceSnapshot: ((MarkdownEditorPerformanceSnapshot) -> Void)? = nil,
                 onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
                 onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil,
                 onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil,
@@ -59,6 +66,8 @@ public struct SmoothMarkdownEditor: View {
         self.onChanged = onChanged
         self.onModeChanged = onModeChanged
         self.onSelectionChanged = onSelectionChanged
+        self.onFocusChanged = onFocusChanged
+        self.onPerformanceSnapshot = onPerformanceSnapshot
         self.hasImagePicker = onPickImage != nil
         self.hasMarkdownImporter = onImportMarkdown != nil
         self.enableWikilinks = enableWikilinks
@@ -156,7 +165,7 @@ public struct SmoothMarkdownEditor: View {
                 Group {
                     switch controller.mode {
                     case .source:
-                        SourceTextView(controller: controller)
+                        sourceTextView
                     case .formatted:
                         FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
                                             wikilinkSuggestions: wikilinkSuggestions,
@@ -171,7 +180,7 @@ public struct SmoothMarkdownEditor: View {
                     case .split:
                         GeometryReader { geometry in
                             VStack(spacing: 0) {
-                                SourceTextView(controller: controller)
+                                sourceTextView
                                     .frame(height: geometry.size.height / 2)
                                 Divider()
                                 SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
@@ -189,7 +198,11 @@ public struct SmoothMarkdownEditor: View {
                 }
             }
         }
-        .onChange(of: searchQuery) { _, _ in searchIndex = 0; searchHasNavigated = false }
+        .onChange(of: searchQuery) { _, _ in
+            searchIndex = 0
+            searchHasNavigated = false
+            schedulePerformanceSnapshot()
+        }
         .onReceive(controller.committedTextChanges) { next in
             searchIndex = 0
             searchHasNavigated = false
@@ -197,6 +210,35 @@ public struct SmoothMarkdownEditor: View {
         }
         .onReceive(controller.$mode.dropFirst().removeDuplicates()) { next in onModeChanged?(next) }
         .onReceive(controller.$selection.dropFirst().removeDuplicates()) { next in onSelectionChanged?(next) }
+        .onReceive(controller.$text.dropFirst()) { _ in schedulePerformanceSnapshot() }
+        .onReceive(controller.$mode.dropFirst()) { _ in schedulePerformanceSnapshot() }
+        .onReceive(controller.$selection.dropFirst()) { _ in schedulePerformanceSnapshot() }
+        .onDisappear {
+            sourceFocusTracker.setFocused(false, callback: onFocusChanged)
+            performanceReporter.cancel()
+        }
+    }
+
+    private var sourceTextView: some View {
+        SourceTextView(controller: controller,
+                       onFocusChanged: { focused in
+                           sourceFocusTracker.setFocused(focused, callback: onFocusChanged)
+                       },
+                       onCompositionChanged: { composing in
+                           guard sourceIsComposing != composing else { return }
+                           sourceIsComposing = composing
+                           schedulePerformanceSnapshot()
+                       })
+    }
+
+    private func schedulePerformanceSnapshot() {
+        guard let onPerformanceSnapshot else { return }
+        let query = searchQuery
+        let composing = sourceIsComposing
+        performanceReporter.schedule(snapshot: {
+            performanceReporter.capture(controller: controller, searchQuery: query,
+                                        isComposing: composing)
+        }, callback: onPerformanceSnapshot)
     }
 
     @ViewBuilder
@@ -1935,6 +1977,8 @@ private struct VisibleInlineTextView: UIViewRepresentable {
 @available(iOS 17.0, *)
 private struct SourceTextView: UIViewRepresentable {
     @ObservedObject var controller: MarkdownEditorController
+    let onFocusChanged: ((Bool) -> Void)?
+    let onCompositionChanged: ((Bool) -> Void)?
 
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView()
@@ -1962,13 +2006,28 @@ private struct SourceTextView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    static func dismantleUIView(_ view: UITextView, coordinator: Coordinator) {
+        if view.isFirstResponder { view.resignFirstResponder() }
+        coordinator.parent.onFocusChanged?(false)
+        coordinator.parent.onCompositionChanged?(false)
+    }
+
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: SourceTextView
         init(parent: SourceTextView) { self.parent = parent }
 
+        func textViewDidBeginEditing(_ textView: UITextView) { parent.onFocusChanged?(true) }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            parent.onFocusChanged?(false)
+            parent.onCompositionChanged?(false)
+        }
+
         func textViewDidChange(_ textView: UITextView) {
+            let composing = textView.markedTextRange != nil
+            parent.onCompositionChanged?(composing)
             parent.controller.updateFromInput(text: textView.text, selection: textView.selectedRange,
-                                              isComposing: textView.markedTextRange != nil)
+                                              isComposing: composing)
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
