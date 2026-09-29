@@ -1,11 +1,13 @@
 #if os(iOS)
+import SwiftUI
 import UIKit
 
-/// The UIKit half of a future document-wide reader. Callers must measure and
-/// supply every attachment before presenting it. SmoothMarkdownView keeps its
-/// established SwiftUI renderer until all visual blocks have a host contract.
+/// A document-wide native selection surface. Callers must measure and supply
+/// every attachment before presenting it. SmoothMarkdownView currently uses
+/// this for complete prose projections and keeps the existing visual renderer
+/// for attachments until those blocks have matching host contracts.
 @available(iOS 17.0, *)
-final class ReaderDocumentSelectionTextView: UITextView {
+final class ReaderDocumentSelectionTextView: QuoteTextView {
     private(set) var projection: ReaderTextKitProjection?
     private var attachmentViews: [String: UIView] = [:]
     private var attachmentSizes: [String: CGSize] = [:]
@@ -38,8 +40,10 @@ final class ReaderDocumentSelectionTextView: UITextView {
     /// attachment. Width must be the same width used by the hosting SwiftUI row.
     @discardableResult
     func apply(_ newProjection: ReaderTextKitProjection, availableWidth: CGFloat,
-               measuredAttachments: [String: CGSize], hostedViews: [String: UIView]) -> Bool {
+               measuredAttachments: [String: CGSize], hostedViews: [String: UIView],
+               styledText: NSAttributedString? = nil) -> Bool {
         guard availableWidth.isFinite, availableWidth > 0,
+              styledText == nil || styledText?.string == newProjection.attributedText.string,
               newProjection.attachments.allSatisfy({ attachment in
                   guard let size = measuredAttachments[attachment.id],
                         hostedViews[attachment.id] != nil else { return false }
@@ -47,7 +51,7 @@ final class ReaderDocumentSelectionTextView: UITextView {
                       size.width > 0 && size.height > 0 && size.width <= availableWidth
               }) else { return false }
 
-        let rendered = NSMutableAttributedString(attributedString: newProjection.attributedText)
+        let rendered = NSMutableAttributedString(attributedString: styledText ?? newProjection.attributedText)
         for attachment in newProjection.attachments {
             let glyph = NSTextAttachment()
             let size = measuredAttachments[attachment.id]!
@@ -101,6 +105,69 @@ final class ReaderDocumentSelectionTextView: UITextView {
         guard selectedRange.length > 0,
               let copied = projection?.copiedText(in: selectedRange), !copied.isEmpty else { return }
         UIPasteboard.general.string = copied
+    }
+}
+
+/// Actual on-screen unified selection for documents whose complete styled
+/// projection matches the semantic document. Visual attachments remain on the
+/// established renderer until each has a measured host and interaction policy.
+@available(iOS 17.0, *)
+struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
+    let selectionDocument: ReaderSelectionDocument
+    let projection: ReaderTextKitProjection
+    let styleSheet: MarkdownStyleSheet
+    let onLinkTap: ((URL) -> Void)?
+
+    func makeUIView(context: Context) -> ReaderDocumentSelectionTextView {
+        let view = ReaderDocumentSelectionTextView()
+        view.delegate = context.coordinator
+        context.coordinator.textView = view
+        view.accessibilityIdentifier = "reader-whole-document-selection"
+        view.accessibilityCustomActions = [UIAccessibilityCustomAction(
+            name: "Select all reader text", target: view,
+            selector: #selector(QuoteTextView.selectAllReaderText))]
+        return view
+    }
+
+    func updateUIView(_ view: ReaderDocumentSelectionTextView, context: Context) {
+        context.coordinator.onLinkTap = onLinkTap
+        context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
+        configure(view, width: max(1, view.bounds.width))
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: ReaderDocumentSelectionTextView,
+                      context: Context) -> CGSize? {
+        let width = proposal.width ?? 300
+        configure(uiView, width: width)
+        let measured = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: ceil(measured.height))
+    }
+
+    func makeCoordinator() -> ReaderSelectionTextView.Coordinator {
+        ReaderSelectionTextView.Coordinator(onLinkTap: onLinkTap, onTextLongPress: nil,
+                                            onCharacterTap: nil)
+    }
+
+    private func configure(_ view: ReaderDocumentSelectionTextView, width: CGFloat) {
+        let renderer = ReaderSelectionTextView(document: selectionDocument, styleSheet: styleSheet,
+                                               onLinkTap: onLinkTap, onTextLongPress: nil,
+                                               selectable: true, onCharacterTap: nil)
+        let built = renderer.attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize))
+        guard view.apply(projection, availableWidth: width, measuredAttachments: [:], hostedViews: [:],
+                         styledText: built.text) else { return }
+        let decoration = styleSheet.resolvedBlockquoteDecoration
+        view.quoteRegions = built.quoteRegions
+        view.ruleRegions = built.ruleRegions
+        view.headingRegions = built.headingRegions
+        view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.ruleThickness = styleSheet.horizontalRuleThickness
+        view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
+        view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
+        view.quoteBorderWidth = decoration.borderWidth
+        view.quotePadding = styleSheet.blockquotePadding
     }
 }
 #endif
