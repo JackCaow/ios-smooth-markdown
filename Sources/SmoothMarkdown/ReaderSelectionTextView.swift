@@ -11,6 +11,8 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     let onLinkTap: ((URL) -> Void)?
     let onTextLongPress: ((@escaping () -> Void) -> Void)?
     let selectable: Bool
+    /// Used by a range spanning a visual block to place a UTF-16 text endpoint.
+    let onCharacterTap: ((Int) -> Void)?
 
     func makeUIView(context: Context) -> QuoteTextView {
         let view = QuoteTextView()
@@ -18,7 +20,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         view.isEditable = false
         // Conversation bubbles own the first long press. Enabling UITextView's
         // selection at this point lets its private recognizers win first.
-        view.isSelectable = selectable && onTextLongPress == nil
+        view.isSelectable = selectable && onTextLongPress == nil && onCharacterTap == nil
         view.isScrollEnabled = false
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
@@ -30,6 +32,12 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                              action: #selector(Coordinator.didTapLink(_:)))
         linkTap.delegate = context.coordinator
         view.addGestureRecognizer(linkTap)
+        let characterTap = UITapGestureRecognizer(target: context.coordinator,
+                                                  action: #selector(Coordinator.didTapCharacter(_:)))
+        characterTap.delegate = context.coordinator
+        characterTap.isEnabled = onCharacterTap != nil
+        view.addGestureRecognizer(characterTap)
+        context.coordinator.characterTap = characterTap
         let longPress = UILongPressGestureRecognizer(target: context.coordinator,
                                                     action: #selector(Coordinator.didLongPress(_:)))
         longPress.minimumPressDuration = 0.35
@@ -55,13 +63,17 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     func updateUIView(_ view: QuoteTextView, context: Context) {
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.onTextLongPress = onTextLongPress
+        context.coordinator.onCharacterTap = onCharacterTap
         context.coordinator.longPress?.isEnabled = onTextLongPress != nil
-        if onTextLongPress == nil { view.isSelectable = selectable }
+        context.coordinator.characterTap?.isEnabled = onCharacterTap != nil
+        view.accessibilityIdentifier = onCharacterTap == nil ? nil : "reader-character-endpoint-text"
+        if onCharacterTap != nil { view.isSelectable = false }
+        else if onTextLongPress == nil { view.isSelectable = selectable }
         view.accessibilityCustomActions = selectionAccessibilityActions(for: view)
         let built = attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize))
         if !view.attributedText.isEqual(to: built.text) {
             view.attributedText = built.text
-            view.isSelectable = selectable && onTextLongPress == nil
+            view.isSelectable = selectable && onTextLongPress == nil && onCharacterTap == nil
             view.invalidateIntrinsicContentSize()
         }
         let decoration = styleSheet.resolvedBlockquoteDecoration
@@ -83,7 +95,8 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onLinkTap: onLinkTap, onTextLongPress: onTextLongPress)
+        Coordinator(onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                    onCharacterTap: onCharacterTap)
     }
 
     private func selectionAccessibilityActions(for view: QuoteTextView) -> [UIAccessibilityCustomAction] {
@@ -96,17 +109,30 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate, UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
         var onLinkTap: ((URL) -> Void)?
         var onTextLongPress: ((@escaping () -> Void) -> Void)?
+        var onCharacterTap: ((Int) -> Void)?
         weak var textView: QuoteTextView?
         weak var longPress: UILongPressGestureRecognizer?
+        weak var characterTap: UITapGestureRecognizer?
         weak var editMenu: UIEditMenuInteraction?
-        init(onLinkTap: ((URL) -> Void)?, onTextLongPress: ((@escaping () -> Void) -> Void)?) {
+        init(onLinkTap: ((URL) -> Void)?, onTextLongPress: ((@escaping () -> Void) -> Void)?,
+             onCharacterTap: ((Int) -> Void)?) {
             self.onLinkTap = onLinkTap
             self.onTextLongPress = onTextLongPress
+            self.onCharacterTap = onCharacterTap
         }
 
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            if gestureRecognizer === characterTap { return onCharacterTap != nil }
+            if onCharacterTap != nil { return false }
             guard let textView, !textView.isSelectable else { return false }
             return link(at: touch.location(in: textView), in: textView) != nil
+        }
+
+        @objc func didTapCharacter(_ recognizer: UITapGestureRecognizer) {
+            guard recognizer.state == .ended, let textView, let onCharacterTap,
+                  let position = textView.closestPosition(to: recognizer.location(in: textView)) else { return }
+            let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+            onCharacterTap(min(max(0, offset), textView.textStorage.length))
         }
 
         @objc func didTapLink(_ recognizer: UITapGestureRecognizer) {

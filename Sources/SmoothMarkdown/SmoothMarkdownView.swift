@@ -182,9 +182,10 @@ public struct SmoothMarkdownView: View {
             case let .bridge(items):
                 if let document = ReaderBlockRangeDocument(items, enableHTML: enableHTML, plugins: plugins) {
                     ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
-                                         spacing: styleSheet.blockSpacing) { segment, beginSelection in
+                                         spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
                         if case let .displayMath(latex) = segment.kind { return AnyView(blockMath(latex)) }
-                        return renderReaderBlockSegment(segment, beginSelection: beginSelection)
+                        return renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                                        onCharacterTap: onCharacterTap)
                     }
                 }
             }
@@ -225,19 +226,22 @@ public struct SmoothMarkdownView: View {
             if let document = ReaderSelectionDocument.compose(nodes, enableHTML: enableHTML, plugins: plugins) {
                 ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                         onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                        selectable: selectable)
+                                        selectable: selectable, onCharacterTap: nil)
             }
         case let .blockBridge(nodes):
             if let bridge = ReaderBlockRangeDocument(nodes, enableHTML: enableHTML, plugins: plugins) {
                 ReaderBlockRangeView(document: bridge, enableHTML: enableHTML, plugins: plugins,
-                                     spacing: styleSheet.blockSpacing, renderSegment: renderReaderBlockSegment)
+                                     spacing: styleSheet.blockSpacing) { segment, beginSelection, onCharacterTap in
+                    renderReaderBlockSegment(segment, beginSelection: beginSelection,
+                                             onCharacterTap: onCharacterTap)
+                }
             }
         case let .individual(node):
             if let onTextLongPress,
                let document = ReaderSelectionDocument.compose([node], enableHTML: enableHTML, plugins: plugins) {
                 ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                         onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                        selectable: selectable)
+                                        selectable: selectable, onCharacterTap: nil)
             } else {
                 block(node)
             }
@@ -245,7 +249,8 @@ public struct SmoothMarkdownView: View {
     }
 
     private func renderReaderBlockSegment(_ segment: ReaderBlockRangeDocument.Segment,
-                                          beginSelection: @escaping () -> Void) -> AnyView {
+                                          beginSelection: @escaping () -> Void,
+                                          onCharacterTap: ((Int) -> Void)?) -> AnyView {
         if segment.isCode, let node = segment.nodes.first {
             return block(node, onSelectSurroundingContent: beginSelection)
         }
@@ -253,10 +258,13 @@ public struct SmoothMarkdownView: View {
         guard let node = segment.nodes.first else { return AnyView(EmptyView()) }
         if let document = ReaderSelectionDocument.compose(segment.nodes,
                                                            enableHTML: enableHTML, plugins: plugins),
-           (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil) {
+           (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil || onCharacterTap != nil) {
+            // Only use native offsets when the UIKit text and clipboard text
+            // have identical projections. Visual anchors can differ.
+            let preciseTap = document.selectionText == document.copiedText ? onCharacterTap : nil
             return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                    onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
-                                                   selectable: selectable))
+                                                   selectable: selectable, onCharacterTap: preciseTap))
         }
         return block(node)
     }

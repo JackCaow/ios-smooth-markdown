@@ -41,7 +41,8 @@ final class MarkdownTypographyTests: XCTestCase {
         let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
                                                        enableHTML: false, plugins: nil)!
         let text = ReaderSelectionTextView(document: document, styleSheet: style,
-                                           onLinkTap: nil, onTextLongPress: nil, selectable: true)
+                                           onLinkTap: nil, onTextLongPress: nil, selectable: true,
+                                           onCharacterTap: nil)
             .attributedContent(traits: MarkdownTypography.traits(for: .large)).text
         let messageRange = (text.string as NSString).range(of: "Message body")
         let titleRange = (text.string as NSString).range(of: "Title")
@@ -57,7 +58,8 @@ final class MarkdownTypographyTests: XCTestCase {
                                                        enableHTML: false, plugins: nil)!
         let style = MarkdownStyleSheet.light()
         let built = ReaderSelectionTextView(document: document, styleSheet: style,
-                                            onLinkTap: nil, onTextLongPress: nil, selectable: true)
+                                            onLinkTap: nil, onTextLongPress: nil, selectable: true,
+                                            onCharacterTap: nil)
             .attributedContent(traits: MarkdownTypography.traits(for: .large))
         XCTAssertEqual(built.headingRegions.count, 2)
         XCTAssertEqual(built.headingRegions.map {
