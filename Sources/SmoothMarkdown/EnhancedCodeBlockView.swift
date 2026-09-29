@@ -55,7 +55,7 @@ struct EnhancedCodeBlockView: View {
                     .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
                     .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
                     .fixedSize(horizontal: true, vertical: false)
-                    .textSelection(selectable ? .enabled : .disabled)
+                    .markdownTextSelection(selectable)
                     .padding(styleSheet.resolvedCodeBlockPadding)
             }
         }

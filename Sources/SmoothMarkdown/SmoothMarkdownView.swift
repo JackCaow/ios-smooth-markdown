@@ -215,7 +215,7 @@ public struct SmoothMarkdownView: View {
                 .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
                 .multilineTextAlignment(alignment ?? .leading)
                 .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
-                .textSelection(selectable ? .enabled : .disabled)
+                .markdownTextSelection(selectable)
                 .accessibilityAddTraits(.isHeader)
         } else if let paragraph = node as? Paragraph {
             let meaningful = Array(paragraph.children).filter { child in
@@ -230,7 +230,7 @@ public struct SmoothMarkdownView: View {
             } else {
                 inlineView(paragraph).font(styleSheet.paragraphFont ?? .body).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
-                    .textSelection(selectable ? .enabled : .disabled)
+                    .markdownTextSelection(selectable)
             }
         } else if let code = node as? CodeBlock {
             if let codeBuilder {
@@ -257,7 +257,7 @@ public struct SmoothMarkdownView: View {
         } else if let html = node as? HTMLBlock {
             htmlBlock(html, alignment: alignment)
         } else {
-            SwiftUI.Text(plainText(node)).textSelection(selectable ? .enabled : .disabled)
+            SwiftUI.Text(plainText(node)).markdownTextSelection(selectable)
         }
     }
 
@@ -271,7 +271,7 @@ public struct SmoothMarkdownView: View {
         if enableHTML, let image = SafeHTML.imageTag(html.rawHTML) {
             imageView(image)
         } else if enableHTML, let alt = SafeHTML.imageAlt(html.rawHTML) {
-            SwiftUI.Text(alt).textSelection(selectable ? .enabled : .disabled)
+            SwiftUI.Text(alt).markdownTextSelection(selectable)
         } else if enableHTML, let parsed = SafeHTML.parseBlock(html.rawHTML) {
             switch parsed {
             case .rule:
@@ -303,7 +303,7 @@ public struct SmoothMarkdownView: View {
                 }
             }
         } else {
-            SwiftUI.Text(html.rawHTML).textSelection(selectable ? .enabled : .disabled)
+            SwiftUI.Text(html.rawHTML).markdownTextSelection(selectable)
         }
     }
 
@@ -366,7 +366,7 @@ public struct SmoothMarkdownView: View {
                                         .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
                                               : (styleSheet.tableCellFont ?? .body))
                                         .fontWeight(rowIndex == 0 ? .bold : .regular)
-                                        .textSelection(selectable ? .enabled : .disabled)
+                                        .markdownTextSelection(selectable)
                                 } else {
                                     SwiftUI.Text("")
                                 }
