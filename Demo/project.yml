@@ -37,6 +37,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.uitests
         SWIFT_VERSION: '5.9'
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: SmoothMarkdownDemo
   SmoothMarkdownDemoTests:
@@ -48,6 +49,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.tests
         SWIFT_VERSION: '5.9'
+        GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/SmoothMarkdownDemo.app/SmoothMarkdownDemo"
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
@@ -57,5 +59,8 @@ targets:
     platform: iOS
     sources:
       - Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: SmoothMarkdownDemo

@@ -61,9 +61,15 @@ final class DemoExamplesUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
         choose("language-en", in: app)
-        app.buttons["open-examples"].tap()
+        let openExamples = app.buttons["open-examples"]
+        XCTAssertTrue(openExamples.waitForExistence(timeout: 30))
+        openExamples.tap()
         let editor = app.buttons["navigation-editor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 5))
+        let drawerScreenshot = XCTAttachment(screenshot: app.screenshot())
+        drawerScreenshot.name = "Flutter-style iOS Demo drawer"
+        drawerScreenshot.lifetime = .keepAlways
+        add(drawerScreenshot)
         editor.tap()
         XCTAssertTrue(app.navigationBars["Markdown Editor"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["editor-find-open"].exists)
@@ -142,7 +148,9 @@ final class DemoExamplesUITests: XCTestCase {
     }
 
     private func choose(_ identifier: String, in app: XCUIApplication) {
-        app.buttons["open-examples"].tap()
+        let openExamples = app.buttons["open-examples"]
+        XCTAssertTrue(openExamples.waitForExistence(timeout: 30))
+        openExamples.tap()
         let entry = app.buttons[identifier]
         for _ in 0..<15 where !entry.isHittable { app.swipeUp() }
         XCTAssertTrue(entry.exists, "Missing navigation entry: \(identifier)")
