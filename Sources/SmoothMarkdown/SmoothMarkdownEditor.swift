@@ -426,7 +426,7 @@ private struct FormattedBlocksView: View {
                 if dynamicTypeSize.isAccessibilitySize {
                     DisclosureGroup("Editing tips", isExpanded: $showingEditingTips) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                            Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                             Text("Tap Start range on a block, then End range on another block.")
                             Text("Long press and drag between paragraphs or headings to select text. Start and End at selection also work with VoiceOver.")
                         }
@@ -434,7 +434,7 @@ private struct FormattedBlocksView: View {
                         .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                    Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
