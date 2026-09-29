@@ -569,7 +569,7 @@ private struct FormattedBlocksView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                             Text("Tap Start range on a block, then End range on another block.")
-                            Text("Long press and drag between paragraphs or headings to select text. Start and End at selection also work with VoiceOver.")
+                            Text("Long press and drag between text or code blocks to select text. Start and End at selection also work with VoiceOver.")
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -613,7 +613,7 @@ private struct FormattedBlocksView: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        Text("Long press and drag between paragraphs or headings to select text.")
+                        Text("Long press and drag between text and code blocks to select text.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -963,7 +963,8 @@ private struct FormattedBlockRow: View {
         switch block.kind {
         case .paragraph, .heading: return false
         case .list: return listItemHighlights == nil
-        case .fencedCode, .table, .horizontalRule, .plugin, .raw: return true
+        case .fencedCode: return false
+        case .table, .horizontalRule, .plugin, .raw: return true
         }
     }
 
@@ -989,12 +990,31 @@ private struct FormattedBlockRow: View {
                     Spacer(minLength: 8)
                     codeLanguageMenu(info: info)
                 }
-                TextEditor(text: contentBinding)
-                    .font(.system(.body, design: .monospaced))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                HStack(spacing: 8) {
+                    Button("Start at code selection") {
+                        onCaptureTextPosition(.init(blockID: block.id, offset: inlineSelection.location), true)
+                    }
+                    .accessibilityIdentifier("code-range-start-\(block.id)")
+                    Button("End at code selection") {
+                        onCaptureTextPosition(.init(blockID: block.id, offset: NSMaxRange(inlineSelection)), false)
+                    }
+                    .accessibilityIdentifier("code-range-end-\(block.id)")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                SemanticInlineTextView(
+                    text: controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText,
+                    selectedRange: inlineSelection,
+                    font: .preferredFont(forTextStyle: .body),
+                    identifier: "code-\(block.id)", blockID: block.id,
+                    crossBlockHighlight: crossBlockHighlight,
+                    onEdit: { controller.replaceSemanticBlockContent(id: block.id, with: $0) },
+                    onStructuredPaste: { _, _ in false },
+                    onSelection: { inlineSelection = $0 },
+                    onCrossBlockDrag: onCrossBlockDrag,
+                    suggestionsVisible: false,
+                    onSuggestionKey: { _ in }, isCode: true)
                     .frame(minHeight: 120)
-                    .accessibilityIdentifier("code-\(block.id)")
             case let .table(table):
                 FormattedTableView(controller: controller, blockID: block.id, table: table)
             case let .list(list):
@@ -2204,6 +2224,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let suggestionsVisible: Bool
     let onSuggestionKey: (WikilinkSuggestionKey) -> Void
+    var isCode = false
 
     func makeUIView(context: Context) -> UITextView {
         let view = SemanticRangeTextView()
@@ -2221,10 +2242,11 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
         view.textContainer.lineFragmentPadding = 0
-        view.font = font
+        view.font = isCode ? UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular) : font
         view.adjustsFontForContentSizeCategory = true
         view.text = text
-        view.autocorrectionType = .default
+        view.autocorrectionType = isCode ? .no : .default
+        view.autocapitalizationType = isCode ? .none : .sentences
         view.accessibilityIdentifier = identifier
         view.suggestionsVisible = suggestionsVisible
         view.onSuggestionKey = onSuggestionKey
@@ -2235,7 +2257,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.isUpdating = true
         defer { context.coordinator.isUpdating = false }
-        view.font = font
+        view.font = isCode ? UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular) : font
         if let view = view as? SemanticRangeTextView {
             view.semanticBlockID = blockID
             view.crossBlockHighlight = crossBlockHighlight

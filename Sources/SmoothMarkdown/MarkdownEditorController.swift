@@ -9,8 +9,8 @@ struct PendingListParagraph: Equatable {
     let insertedTerminator: String
 }
 
-/// A UTF-16 offset in a formatted paragraph, heading, or root list item's
-/// primary text line. Markdown markers inside that text are visible in Blocks.
+/// A UTF-16 offset in formatted prose, a root list item's primary line, or
+/// a fenced code block's body. Code offsets exclude the opening and closing fences.
 public struct MarkdownSemanticTextPosition: Equatable {
     public let blockID: String
     public let offset: Int
@@ -239,8 +239,9 @@ public final class MarkdownEditorController: ObservableObject {
         let endSourceOffset: Int
     }
 
-    /// Copies the selected text fragments as Markdown, preserving their exact
-    /// source markers and intervening whitespace without normalizing them.
+    /// Copies the selected text fragments as Markdown, preserving source trivia.
+    /// A code endpoint crossing a block boundary gains its original fence so
+    /// the copied fragment remains a valid fenced block.
     public func copySemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> String? {
         guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
         let document = semanticDocument
@@ -260,11 +261,24 @@ public final class MarkdownEditorController: ObservableObject {
         guard start <= end else { return nil }
         let range = NSRange(location: start, length: end - start)
         let copied = (text as NSString).substring(with: range)
+        let listPrefix: String
         if let index = resolved.start.listItemIndex, case let .list(list) = first.kind {
             let item = list.items[index]
-            return item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing + copied
+            listPrefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
+        } else { listPrefix = "" }
+        if resolved.firstIndex != resolved.lastIndex {
+            let opener: String
+            if case .fencedCode = first.kind, let bodyStart = Self.codeBodyStart(in: first) {
+                opener = (first.source as NSString).substring(to: bodyStart)
+            } else { opener = "" }
+            let closer: String
+            if case .fencedCode = last.kind, let bodyStart = Self.codeBodyStart(in: last) {
+                let codeEnd = bodyStart + (last.plainText as NSString).length
+                closer = (last.source as NSString).substring(from: codeEnd)
+            } else { closer = "" }
+            if !opener.isEmpty || !closer.isEmpty { return opener + listPrefix + copied + closer }
         }
-        return copied
+        return listPrefix + copied
     }
 
     /// Text-coordinate highlights for prose endpoints and complete intervening rows.
@@ -881,7 +895,12 @@ public final class MarkdownEditorController: ObservableObject {
                       let line = list.sourceLine(at: index) else { return nil }
                 body = line.content
                 bodyStart = line.offset
-            case .fencedCode, .table, .horizontalRule, .plugin, .raw: return nil
+            case .fencedCode:
+                guard position.listItemIndex == nil,
+                      let codeStart = Self.codeBodyStart(in: block) else { return nil }
+                body = block.plainText
+                bodyStart = codeStart
+            case .table, .horizontalRule, .plugin, .raw: return nil
             }
             guard position.offset >= 0, position.offset <= (body as NSString).length,
                   Range(NSRange(location: position.offset, length: 0), in: body) != nil,
@@ -900,7 +919,11 @@ public final class MarkdownEditorController: ObservableObject {
         let end = forward ? selection.focus : selection.anchor
         let startSourceOffset = forward ? anchorSourceOffset : focusSourceOffset
         let endSourceOffset = forward ? focusSourceOffset : anchorSourceOffset
-        guard (firstIndex != lastIndex || start.listItemIndex != nil),
+        let sameCodeBlock: Bool
+        if firstIndex == lastIndex, case .fencedCode = document.blocks[firstIndex].kind {
+            sameCodeBlock = true
+        } else { sameCodeBlock = false }
+        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock),
               startSourceOffset < endSourceOffset else { return nil }
         return .init(firstIndex: firstIndex, lastIndex: lastIndex,
                      start: start, end: end,
@@ -914,6 +937,12 @@ public final class MarkdownEditorController: ObservableObject {
         let original = semanticDocument
         let first = original.blocks[resolved.firstIndex]
         let last = original.blocks[resolved.lastIndex]
+        if case .fencedCode = first.kind {
+            return replacementForCodeEndpointRange(resolved, with: replacement, document: original)
+        }
+        if case .fencedCode = last.kind {
+            return replacementForCodeEndpointRange(resolved, with: replacement, document: original)
+        }
         if resolved.start.listItemIndex != nil || resolved.end.listItemIndex != nil {
             guard !replacement.contains("\n"), !replacement.contains("\r") else { return nil }
         }
@@ -980,6 +1009,121 @@ public final class MarkdownEditorController: ObservableObject {
         }
         guard parsed.trailingTrivia == original.trailingTrivia else { return nil }
         return (next, resolved.startSourceOffset + (replacement as NSString).length)
+    }
+
+    /// The parsed code body must occupy the bytes immediately after the opening
+    /// fence. This also rejects unusual fences whose body cannot be mapped exactly.
+    private static func codeBodyStart(in block: MarkdownDocumentBlock) -> Int? {
+        guard case let .fencedCode(_, _, code) = block.kind else { return nil }
+        let source = block.source as NSString
+        let firstBreak = source.range(of: "\n")
+        guard firstBreak.location != NSNotFound else { return nil }
+        let start = NSMaxRange(firstBreak)
+        let length = (code as NSString).length
+        guard start + length <= source.length,
+              source.substring(with: NSRange(location: start, length: length)) == code else { return nil }
+        return start
+    }
+
+    private func replacementForCodeEndpointRange(_ resolved: ResolvedSemanticTextSelection,
+                                                 with replacement: String,
+                                                 document: MarkdownDocument) -> (markdown: String, caret: Int)? {
+        guard !replacement.contains("\n"), !replacement.contains("\r") else { return nil }
+        let first = document.blocks[resolved.firstIndex]
+        let last = document.blocks[resolved.lastIndex]
+        let source = text as NSString
+        let firstIsCode: Bool = { if case .fencedCode = first.kind { return true }; return false }()
+        let lastIsCode: Bool = { if case .fencedCode = last.kind { return true }; return false }()
+        // A single code block can use the ordinary, exact source replacement.
+        if resolved.firstIndex == resolved.lastIndex {
+            guard firstIsCode else { return nil }
+            let range = NSRange(location: resolved.startSourceOffset,
+                                length: resolved.endSourceOffset - resolved.startSourceOffset)
+            let next = source.replacingCharacters(in: range, with: replacement)
+            guard next != text else { return nil }
+            let parsed = codec.parse(next)
+            guard parsed.blocks.count == document.blocks.count,
+                  parsed.trailingTrivia == document.trailingTrivia,
+                  zip(parsed.blocks, document.blocks).enumerated().allSatisfy({ index, pair in
+                      if index == resolved.firstIndex {
+                          guard case .fencedCode = pair.0.kind else { return false }
+                          return pair.0.leadingTrivia == pair.1.leadingTrivia
+                      }
+                      return Self.sameSourceBlock(pair.0, pair.1)
+                  }) else { return nil }
+            return (next, resolved.startSourceOffset + (replacement as NSString).length)
+        }
+        guard firstIsCode != lastIsCode,
+              let firstRange = document.sourceRange(of: first.id),
+              let lastRange = document.sourceRange(of: last.id) else { return nil }
+        if firstIsCode {
+            let lastPrefix: String
+            switch last.kind {
+            case .paragraph: lastPrefix = ""
+            case .heading:
+                guard let start = Self.editableBodyStart(in: last) else { return nil }
+                lastPrefix = (last.source as NSString).substring(to: start)
+            default: return nil
+            }
+            guard let bodyStart = Self.codeBodyStart(in: first) else { return nil }
+            let bodyEnd = firstRange.location + bodyStart + (first.plainText as NSString).length
+            let tail = source.substring(with: NSRange(location: bodyEnd,
+                length: NSMaxRange(firstRange) - bodyEnd))
+            let next = source.substring(to: resolved.startSourceOffset) + replacement + tail
+                + last.leadingTrivia + lastPrefix + source.substring(from: resolved.endSourceOffset)
+            return validateCodeEndpointReplacement(next, caret: resolved.startSourceOffset + (replacement as NSString).length,
+                                                   document: document, resolved: resolved)
+        }
+        switch first.kind {
+        case .paragraph, .heading: break
+        default: return nil
+        }
+        guard let bodyStart = Self.codeBodyStart(in: last) else { return nil }
+        guard let proseBodyStart = Self.editableBodyStart(in: first) else { return nil }
+        let firstBodyEnd = firstRange.location + proseBodyStart + (first.plainText as NSString).length
+        let firstTail = source.substring(with: NSRange(location: firstBodyEnd,
+            length: NSMaxRange(firstRange) - firstBodyEnd))
+        let codeOpener = source.substring(with: NSRange(location: lastRange.location, length: bodyStart))
+        let next = source.substring(to: resolved.startSourceOffset) + replacement + firstTail
+            + last.leadingTrivia + codeOpener + source.substring(from: resolved.endSourceOffset)
+        return validateCodeEndpointReplacement(next, caret: resolved.startSourceOffset + (replacement as NSString).length,
+                                               document: document, resolved: resolved)
+    }
+
+    private func validateCodeEndpointReplacement(_ next: String, caret: Int,
+                                                 document: MarkdownDocument,
+                                                 resolved: ResolvedSemanticTextSelection)
+        -> (markdown: String, caret: Int)? {
+        guard next != text else { return nil }
+        let parsed = codec.parse(next)
+        let expectedCount = document.blocks.count - (resolved.lastIndex - resolved.firstIndex - 1)
+        guard parsed.toMarkdown() == next, parsed.blocks.count == expectedCount,
+              parsed.trailingTrivia == document.trailingTrivia else { return nil }
+        for index in 0..<resolved.firstIndex {
+            guard Self.sameSourceBlock(parsed.blocks[index], document.blocks[index]) else { return nil }
+        }
+        let first = document.blocks[resolved.firstIndex]
+        let last = document.blocks[resolved.lastIndex]
+        let parsedFirst = parsed.blocks[resolved.firstIndex]
+        let parsedLast = parsed.blocks[resolved.firstIndex + 1]
+        guard parsedFirst.leadingTrivia == first.leadingTrivia,
+              parsedLast.leadingTrivia == last.leadingTrivia else { return nil }
+        guard Self.sameEndpointKind(first.kind, parsedFirst.kind),
+              Self.sameEndpointKind(last.kind, parsedLast.kind) else { return nil }
+        for oldIndex in (resolved.lastIndex + 1)..<document.blocks.count {
+            let newIndex = oldIndex - (resolved.lastIndex - resolved.firstIndex - 1)
+            guard Self.sameSourceBlock(parsed.blocks[newIndex], document.blocks[oldIndex]) else { return nil }
+        }
+        return (next, caret)
+    }
+
+    private static func sameEndpointKind(_ original: MarkdownSemanticBlock,
+                                         _ parsed: MarkdownSemanticBlock) -> Bool {
+        switch (original, parsed) {
+        case (.paragraph, .paragraph), (.fencedCode, .fencedCode): return true
+        case let (.heading(oldLevel, _), .heading(newLevel, _)): return oldLevel == newLevel
+        default: return false
+        }
     }
 
     /// Applies one semantic body edit through the existing source undo history.
