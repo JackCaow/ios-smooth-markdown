@@ -173,7 +173,8 @@ public struct SmoothMarkdownView: View {
         guard selectable, enableCrossBlockSelection, onTextLongPress == nil, !voiceOverEnabled else { return nil }
         let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
             markdown: markdown, enableHTML: enableHTML, plugins: plugins,
-            builderRegistry: builderRegistry, expansion: expansion))
+            builderRegistry: builderRegistry, expansion: expansion,
+            hostBuiltInPlugins: true, hostBuiltInArtifacts: useEnhancedComponents))
         let details = DetailsSyntax.sections(markdown)
         let summaryIDs = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
         var summaryIndex = 0
@@ -195,8 +196,7 @@ public struct SmoothMarkdownView: View {
                     let node = MarkdownExtensionNode.footnoteDefinition(label: definition.label,
                                                                          content: definition.content)
                     let parsed = parse(definition.content)
-                    if extensionBuilder(node) != nil || Array(parsed.children).count != 1 ||
-                        !(parsed.child(at: 0) is Paragraph) { return false }
+                    if extensionBuilder(node) != nil || !(parsed.child(at: 0) is Paragraph) { return false }
                     items.append(.footnoteDefinition(definition))
                 }
             }
@@ -207,7 +207,12 @@ public struct SmoothMarkdownView: View {
                 switch section {
                 case let .markdown(markdown):
                     if !appendFootnotes(markdown) { return false }
-                case .plugin: return false
+                case let .plugin(plugin, match):
+                    guard plugin is AdmonitionPlugin || plugin is MermaidPlugin ||
+                          (useEnhancedComponents && plugin is ArtifactPlugin),
+                          builderRegistry?.findBuilder(MarkdownPluginNode(plugin: plugin, match: match)) == nil
+                    else { return false }
+                    items.append(.plugin(match))
                 }
             }
             return true
@@ -223,6 +228,7 @@ public struct SmoothMarkdownView: View {
             case let .footnoteDefinition(definition):
                 guard let content = parse(definition.content).child(at: 0) else { return false }
                 return containsCustomBlockBuilder(content)
+            case .plugin: return false
             }
         }
         for section in details {
@@ -264,7 +270,7 @@ public struct SmoothMarkdownView: View {
         }.count
         guard projection.attachments.allSatisfy({ attachment in
             switch attachment.content {
-            case .image, .code, .table, .formula: true
+            case .image, .code, .table, .formula, .plugin: true
             default: false
             }
         }),
@@ -316,6 +322,13 @@ public struct SmoothMarkdownView: View {
         case let .formula(latex):
             if inlineFormula { return AnyView(inlineMath(latex)) }
             return AnyView(blockMath(latex))
+        case let .plugin(id, match):
+            guard let plugin = plugins?.blockPlugins.first(where: { $0.id == id }),
+                  plugin is AdmonitionPlugin || plugin is MermaidPlugin ||
+                  (useEnhancedComponents && plugin is ArtifactPlugin),
+                  builderRegistry?.findBuilder(MarkdownPluginNode(plugin: plugin, match: match)) == nil
+            else { return nil }
+            return pluginView(plugin, match)
         default: return nil
         }
     }
@@ -376,6 +389,8 @@ public struct SmoothMarkdownView: View {
             case let .math(latex): return extensionBuilder(.inlineMath(latex)) != nil
             case let .footnote(label): return extensionBuilder(.footnoteReference(label)) != nil
             case let .text(value, _, tags, _): return htmlStyleNode(value, tags: tags) != nil
+            case let .plugin(plugin, match):
+                return builderRegistry?.findBuilder(MarkdownPluginNode(plugin: plugin, match: match)) != nil
             default: return false
             }
         }

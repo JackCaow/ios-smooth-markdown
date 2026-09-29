@@ -54,9 +54,97 @@ final class ReaderDocumentSelectionHostTests: XCTestCase {
         XCTAssertEqual(toggledID, summary.id)
     }
 
-    func testComplexFootnoteDefinitionKeepsLegacyRenderer() {
+    func testFootnoteOnlyCopiesItsRenderedFirstParagraph() throws {
         let source = "Before[^1].\n\n[^1]: First paragraph.\n    # Second block\n\nAfter."
-        XCTAssertNil(SmoothMarkdownView(markdown: source, selectable: true).wholeDocumentSelection)
+        let candidate = try XCTUnwrap(SmoothMarkdownView(markdown: source, selectable: true).wholeDocumentSelection)
+        XCTAssertEqual(candidate.selection.selectionText, candidate.projection.attributedText.string)
+        XCTAssertEqual(candidate.projection.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)),
+            "Before[1].\n[1]: First paragraph.\nAfter.")
+    }
+
+    func testAdmonitionAndMermaidKeepRenderedCardsInOneNativeRange() throws {
+        let source = """
+        Before.
+
+        ::: warning Heads up
+        Careful.
+        :::
+
+        ```mermaid
+        flowchart LR
+          A --> B
+        ```
+
+        After.
+        """
+        let reader = SmoothMarkdownView(markdown: source, plugins: .builtIns(),
+                                        selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        XCTAssertEqual(candidate.selection.selectionText, candidate.projection.attributedText.string)
+        XCTAssertEqual(candidate.projection.attachments.count, 2)
+        XCTAssertEqual(candidate.projection.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)),
+            "Before.\nHeads up\nCareful.\nAfter.")
+        for attachment in candidate.projection.attachments {
+            guard case .plugin = attachment.content else { return XCTFail("Expected hosted plugin") }
+            XCTAssertNotNil(reader.visualAttachmentView(for: attachment.content))
+        }
+        XCTAssertEqual(candidate.projection.copiedText(in: candidate.projection.attachments[0].range),
+                       "Heads up\nCareful.")
+        XCTAssertEqual(candidate.projection.copiedText(in: candidate.projection.attachments[1].range), "")
+    }
+
+    func testBuiltInInlinePluginsKeepProseInsideNativeSelection() throws {
+        let reader = SmoothMarkdownView(markdown: "Hello @alice :smile: #release.\n\nAfter.",
+                                        plugins: .builtIns(), selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        XCTAssertEqual(candidate.projection.attachments.count, 0)
+        XCTAssertEqual(candidate.selection.selectionText, candidate.projection.attributedText.string)
+        XCTAssertEqual(candidate.projection.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)),
+            "Hello @alice 😄 #release.\nAfter.")
+    }
+
+    func testEnhancedArtifactKeepsCardAndExactCopy() throws {
+        let source = "Before.\n\n<artifact id='x' type='code' lang='swift' title='Example'>\nprint(1)\n</artifact>\n\nAfter."
+        let reader = SmoothMarkdownView(markdown: source, useEnhancedComponents: true,
+                                        plugins: .builtIns(), selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        let artifact = try XCTUnwrap(candidate.projection.attachments.first)
+        guard case .plugin("artifact", _) = artifact.content else { return XCTFail("Expected artifact card") }
+        XCTAssertNotNil(reader.visualAttachmentView(for: artifact.content))
+        XCTAssertEqual(candidate.projection.copiedText(in: artifact.range),
+                       "Example\nSWIFT\nprint(1)")
+        XCTAssertNil(SmoothMarkdownView(markdown: source, useEnhancedComponents: false,
+                                        plugins: .builtIns(), selectable: true).wholeDocumentSelection)
+    }
+
+    func testClosedDetailsCanExpandIntoHostedAdmonition() throws {
+        let source = """
+        Before.
+
+        <details>
+        <summary>More</summary>
+        ::: tip Helpful
+        Body.
+        :::
+        </details>
+
+        After.
+        """
+        let reader = SmoothMarkdownView(markdown: source, enableHTML: true,
+                                        plugins: .builtIns(), selectable: true)
+        let closed = try XCTUnwrap(reader.wholeDocumentSelection)
+        let summary = try XCTUnwrap(closed.projection.document.segments.first { $0.kind == .detailsSummary })
+        XCTAssertEqual(closed.projection.copiedText(in: NSRange(
+            location: 0, length: closed.projection.attributedText.length)),
+            "Before.\nMore\nAfter.")
+        let opened = try XCTUnwrap(reader.wholeDocumentSelection(expansion: [summary.id: true]))
+        XCTAssertEqual(opened.projection.attachments.count, 1)
+        XCTAssertEqual(opened.projection.copiedText(in: NSRange(
+            location: 0, length: opened.projection.attributedText.length)),
+            "Before.\nMore\nHelpful\nBody.\nAfter.")
     }
 
     func testMultipleDetailsKeepIndependentExpansionAndStableSummaryIDs() throws {
