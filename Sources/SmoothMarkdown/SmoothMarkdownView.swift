@@ -639,7 +639,7 @@ public struct SmoothMarkdownView: View {
                                                  explicitWidth: width, explicitHeight: height) {
                 SwiftUI.Image(uiImage: bitmap).resizable().scaledToFit()
             })
-        case .failure:
+        case .failure, .rejected:
             if source.remoteFailurePresentation == .svgAltText {
                 content = AnyView(SwiftUI.Text(label))
             } else {

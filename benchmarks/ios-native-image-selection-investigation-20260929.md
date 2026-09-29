@@ -4,7 +4,7 @@ Status: **draft implementation, physical acceptance pending**. The earlier
 native TextKit drag failed on the iPhone. A revised selection gesture and
 multi-image text projection now build and pass model tests, but the iPhone was
 unavailable before the new gesture could be run. Keep this branch as a Draft PR.
-The branch includes `main` at `dfed3f9` (including natural image sizing,
+The branch includes `main` at `a617ea8` (including natural image sizing,
 editor state callbacks, and toolbar slots).
 
 ## Acceptance case
@@ -56,6 +56,15 @@ respond to taps, and offer its surrounding-content menu.
   decoded image data supplies both natural sizes and visible image views in the
   continuous native selection surface. The Flutter `Links & Images` shape is
   eligible even though it starts with headings and ends with an image.
+- The selection loader limits requests to two at a time and eight remote images
+  per native selection group. It streams responses with an 8 MiB bitmap or
+  2 MiB SVG cap, rejects oversized image dimensions before bitmap decode, and
+  caps retained decoded image pixels at 24 million (12 million per image).
+  Redirects must stay on safe HTTP(S) image URLs and cannot downgrade HTTPS to
+  HTTP. Transient request/decode failures can retry when the view reappears
+  after 15 seconds; rejected oversized resources retain the existing failure
+  presentation and explicit block selection. Accepted images keep the same
+  natural sizing and alt accessibility semantics.
 - Image slots use `NaturalImageLayout.resolvedSize` for the available width, so
   tall or wide local images follow the Reader's natural-size behavior rather
   than forcing a fixed 320-point cap.
@@ -67,7 +76,7 @@ respond to taps, and offer its surrounding-content menu.
   clears the previous range. The drag recognizer does not cancel UIKit touches
   and does not receive touches that begin on the hosted image, leaving its tap
   and context menu to the image view.
-- `swift test` passed 252 tests (1 skipped) after the remote-image extension,
+- `swift test` passed 259 tests (1 skipped) after the remote-image extension,
   including focused projection and eligibility tests. Generic iOS
   `build-for-testing` compiled the Demo, its UI tests, and the native-image
   XCTest source.

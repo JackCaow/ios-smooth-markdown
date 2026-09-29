@@ -9,7 +9,13 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         let svg = Data("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='32'></svg>".utf8)
         XCTAssertEqual(ReaderRemoteImageResolution.decode(svg, key: svgKey).naturalSize,
                        CGSize(width: 64, height: 32))
-        XCTAssertNil(ReaderRemoteImageResolution.decode(Data("broken".utf8), key: svgKey).naturalSize)
+        if case .failure = ReaderRemoteImageResolution.decode(Data("broken".utf8), key: svgKey) {
+            // Malformed bytes are retryable after the view reappears.
+        } else { XCTFail("Malformed SVG should be a retryable failure") }
+        if case .rejected = ReaderRemoteImageResolution.decode(
+            Data(count: ReaderRemoteImagePolicy.maxSVGBytes + 1), key: svgKey) {
+            // Oversized payloads are rejected before SVG parsing.
+        } else { XCTFail("Oversized SVG must be rejected") }
 
         let bitmapKey = ReaderRemoteImageKey(url: URL(string: "https://example.com/photo.png")!, svg: false)
         let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10)).pngData { context in

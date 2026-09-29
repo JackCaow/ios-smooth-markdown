@@ -4,39 +4,6 @@ import SwiftDraw
 import SwiftUI
 import UIKit
 
-struct ReaderRemoteImageKey: Hashable {
-    let url: URL
-    let svg: Bool
-}
-
-enum ReaderRemoteImageResolution {
-    case svg(SVG)
-    case bitmap(UIImage)
-    case failure
-
-    var naturalSize: CGSize? {
-        switch self {
-        case let .svg(image): image.size
-        case let .bitmap(image): image.size
-        case .failure: nil
-        }
-    }
-
-    static func decode(_ data: Data?, key: ReaderRemoteImageKey) -> Self {
-        guard let data else { return .failure }
-        if key.svg {
-            guard let image = SVG(data: data), valid(size: image.size) else { return .failure }
-            return .svg(image)
-        }
-        guard let image = UIImage(data: data), valid(size: image.size) else { return .failure }
-        return .bitmap(image)
-    }
-
-    private static func valid(size: CGSize) -> Bool {
-        size.width > 0 && size.height > 0 && size.width.isFinite && size.height.isFinite
-    }
-}
-
 struct ReaderNativeImageItem {
     let spec: SafeHTML.ImageSpec
     let source: ImageSource
@@ -63,6 +30,7 @@ struct ReaderNativeImageSelectionContainer: View {
 
     @State private var usingWholeBlockSelection = false
     @State private var remoteResults: [ReaderRemoteImageKey: ReaderRemoteImageResolution] = [:]
+    @State private var failedAt: [ReaderRemoteImageKey: Date] = [:]
 
     private var remoteKeys: [ReaderRemoteImageKey] {
         Array(Set(imageItems.compactMap(\.remoteKey))).sorted { $0.url.absoluteString < $1.url.absoluteString }
@@ -119,21 +87,39 @@ struct ReaderNativeImageSelectionContainer: View {
 
     private func loadRemoteImages() async {
         remoteResults = remoteResults.filter { remoteKeys.contains($0.key) }
-        let missing = remoteKeys.filter { remoteResults[$0] == nil }
-        await withTaskGroup(of: (ReaderRemoteImageKey, Data?).self) { group in
-            for key in missing {
+        failedAt = failedAt.filter { remoteKeys.contains($0.key) }
+        let now = Date()
+        let missing = remoteKeys.filter { key in
+            switch remoteResults[key] {
+            case nil: return true
+            case .failure?: return ReaderRemoteImagePolicy.shouldRetry(failedAt: failedAt[key], now: now)
+            case .svg?, .bitmap?, .rejected?: return false
+            }
+        }
+        var remaining = missing.makeIterator()
+        await withTaskGroup(of: (ReaderRemoteImageKey, ReaderRemoteImageResolution).self) { group in
+            func enqueue(_ key: ReaderRemoteImageKey) {
                 group.addTask {
-                    do {
-                        let (data, response) = try await URLSession.shared.data(from: key.url)
-                        guard let response = response as? HTTPURLResponse,
-                              (200..<300).contains(response.statusCode) else { return (key, nil) }
-                        return (key, data)
-                    } catch { return (key, nil) }
+                    let result = await ReaderRemoteImageLoader.fetch(key)
+                    switch result {
+                    case let .data(data): return (key, ReaderRemoteImageResolution.decode(data, key: key))
+                    case .failure: return (key, .failure)
+                    case .rejected: return (key, .rejected)
+                    }
                 }
             }
-            for await (key, data) in group {
-                guard !Task.isCancelled else { return }
-                remoteResults[key] = ReaderRemoteImageResolution.decode(data, key: key)
+            for _ in 0..<min(ReaderRemoteImagePolicy.maxConcurrentRequests, missing.count) {
+                if let key = remaining.next() { enqueue(key) }
+            }
+            while let (key, loaded) = await group.next() {
+                guard !Task.isCancelled else { group.cancelAll(); return }
+                let currentPixels = remoteResults.values.reduce(0) { $0 + $1.pixelCost }
+                let resolved = ReaderRemoteImagePolicy.canRetain(pixels: loaded.pixelCost,
+                                                                   after: currentPixels) ? loaded : .rejected
+                remoteResults[key] = resolved
+                if case .failure = resolved { failedAt[key] = Date() }
+                else { failedAt.removeValue(forKey: key) }
+                if let next = remaining.next() { enqueue(next) }
             }
         }
     }
@@ -184,6 +170,7 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
             }
             items.append(.init(spec: spec, source: parsed, localNaturalSize: size))
         }
+        guard items.compactMap(\.remoteKey).count <= ReaderRemoteImagePolicy.maxRemoteImages else { return nil }
         return items
     }
 
