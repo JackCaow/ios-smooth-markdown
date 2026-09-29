@@ -91,9 +91,19 @@ struct DemoHomeView: View {
                 }
             }
             .background(theme.isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
-            .navigationTitle("Markdown Demo")
+            .navigationTitle("Smooth Markdown Demo")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(theme.isDark ? Color(red: 22 / 255, green: 27 / 255, blue: 34 / 255) : .white,
+                               for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Smooth Markdown Demo")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button(DemoLocalizations.text("examples", in: language), systemImage: "line.3.horizontal") { showNavigation = true }
                         .accessibilityIdentifier("open-examples")
