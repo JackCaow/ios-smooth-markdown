@@ -120,4 +120,21 @@ final class SemanticRangeEditorTests: XCTestCase {
         XCTAssertFalse(controller.applySemanticInlineMarkToTableCells(invalid, mark: .bold))
         XCTAssertEqual(controller.text, original)
     }
+
+    func testListAndTableRangeRefuseExistingInlineSyntaxWithoutPartialEdit() {
+        let listSource = "- plain\n- **existing**\n- tail"
+        let list = MarkdownEditorController(text: listSource)
+        let items = MarkdownSemanticListItemSelection(blockID: "block-0", anchorIndex: 0, focusIndex: 1)
+        XCTAssertFalse(list.applySemanticInlineMarkToListItemRange(items, mark: .italic))
+        XCTAssertEqual(list.text, listSource)
+        XCTAssertFalse(list.canUndo)
+
+        let tableSource = "| plain | **existing** |\n| --- | --- |\n| one | two |"
+        let table = MarkdownEditorController(text: tableSource)
+        let cells = MarkdownSemanticTableCellSelection(blockID: "block-0", anchorRow: 0,
+                                                       anchorColumn: 0, focusRow: 0, focusColumn: 1)
+        XCTAssertFalse(table.applySemanticInlineMarkToTableCells(cells, mark: .bold))
+        XCTAssertEqual(table.text, tableSource)
+        XCTAssertFalse(table.canUndo)
+    }
 }

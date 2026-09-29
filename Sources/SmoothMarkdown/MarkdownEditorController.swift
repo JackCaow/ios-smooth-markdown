@@ -298,6 +298,7 @@ public final class MarkdownEditorController: ObservableObject {
                 let content = next.items[index].content
                 let length = (content as NSString).length
                 if length == 0 { continue }
+                guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else { return nil }
                 guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
                                                                 selection: NSRange(location: 0, length: length)),
                       let replaced = next.replacingItemContent(at: index, with: edit.markdown) else { return nil }
@@ -378,6 +379,10 @@ public final class MarkdownEditorController: ObservableObject {
                     let content = row == 0 ? next.headers[column] : next.rows[row - 1][column]
                     let length = (content as NSString).length
                     if length == 0 { continue }
+                    guard MarkdownInlineMarkEditor.isSimpleRangeSource(content) else {
+                        valid = false
+                        return table
+                    }
                     guard let edit = MarkdownInlineMarkEditor.apply(mark, to: content,
                                                                     selection: NSRange(location: 0, length: length)) else {
                         valid = false
@@ -420,6 +425,41 @@ public final class MarkdownEditorController: ObservableObject {
     @discardableResult
     public func deleteSemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool {
         replaceSemanticTextRange(selection, with: "")
+    }
+
+    /// Applies one mark to the selected character fragment in each adjacent
+    /// paragraph or heading. Each row retains its marker, trivia, and ending.
+    @discardableResult
+    public func applySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection,
+                                                    mark: MarkdownInlineMark) -> Bool {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return false }
+        let document = semanticDocument
+        var nextBlocks = document.blocks
+        var changed = false
+        for index in resolved.firstIndex...resolved.lastIndex {
+            let block = nextBlocks[index]
+            let body = block.plainText
+            // Raw source markers inside a row cannot be mapped to visible text
+            // offsets safely by the current native range editor.
+            guard MarkdownInlineMarkEditor.isSimpleRangeSource(body) else { return false }
+            let start = index == resolved.firstIndex ? resolved.startOffset : 0
+            let end = index == resolved.lastIndex ? resolved.endOffset : (body as NSString).length
+            if start == end { continue }
+            guard let edit = MarkdownInlineMarkEditor.apply(mark, to: body,
+                                                            selection: NSRange(location: start, length: end - start)),
+                  let replacement = block.replacingContent(edit.markdown) else { return false }
+            nextBlocks[index] = replacement
+            changed = true
+        }
+        guard changed else { return false }
+        let updated = MarkdownDocument(blocks: nextBlocks, trailingTrivia: document.trailingTrivia).toMarkdown()
+        let reparsed = codec.parse(updated)
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == nextBlocks.count,
+              zip(reparsed.blocks, nextBlocks).allSatisfy({ parsed, proposed in
+                  parsed.id == proposed.id && parsed.kind == proposed.kind &&
+                      parsed.source == proposed.source && parsed.leadingTrivia == proposed.leadingTrivia
+              }) else { return false }
+        return replaceSemanticMarkdown(updated)
     }
 
     private func resolveSemanticTextSelection(_ selection: MarkdownSemanticTextSelection)

@@ -82,6 +82,44 @@ final class CrossBlockEditorTests: XCTestCase {
         XCTAssertFalse(list.canUndo)
         XCTAssertNil(list.copySemanticTextRange(range("block-0", 2, "missing", 0)))
     }
+
+    func testTextRangeFormatsPartialHeadingAndParagraphWithoutChangingSourceTrivia() {
+        let original = "Lead\r\n\r\n# One 😀\r\n\r\nSecond text\r\n\r\nTail"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-2", 6, "block-1", 4)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTextRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text,
+                       "Lead\r\n\r\n# One **😀**\r\n\r\n**Second** text\r\n\r\nTail")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testTextRangeFormatsEveryTouchedPlainTextRowInOneUndoStep() {
+        let original = "Alpha one\n\n# Middle\n\nOmega last"
+        let controller = MarkdownEditorController(text: original)
+        XCTAssertTrue(controller.applySemanticInlineMarkToTextRange(
+            range("block-0", 6, "block-2", 5), mark: .italic))
+        XCTAssertEqual(controller.text, "Alpha *one*\n\n# *Middle*\n\n*Omega* last")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testTextRangeRejectsNestedSyntaxAndUnsafeLinkAtomically() {
+        let original = "Before\n\n# **nested**\n\nAfter"
+        let controller = MarkdownEditorController(text: original)
+        let selected = range("block-0", 2, "block-2", 3)
+        XCTAssertFalse(controller.applySemanticInlineMarkToTextRange(selected, mark: .bold))
+        XCTAssertEqual(controller.text, original)
+        XCTAssertFalse(controller.canUndo)
+
+        let plain = MarkdownEditorController(text: "First\n\nSecond")
+        XCTAssertFalse(plain.applySemanticInlineMarkToTextRange(
+            range("block-0", 0, "block-1", 6), mark: .link(destination: "javascript:alert(1)")))
+        XCTAssertEqual(plain.text, "First\n\nSecond")
+        XCTAssertFalse(plain.canUndo)
+    }
     func testCopiesExactMarkdownAndDeletesRangeWithOneUndoStep() {
         let original = "# One 😀\r\n\r\nSecond\r\n\r\nThird\r\n"
         let controller = MarkdownEditorController(text: original)

@@ -16,6 +16,25 @@ struct MarkdownInlineMarkEdit: Equatable {
 }
 
 enum MarkdownInlineMarkEditor {
+    /// Range commands operate on raw Markdown source. Refuse existing inline
+    /// syntax instead of wrapping its markers as if they were visible text.
+    /// An escaped table pipe is the one source escape handled by this editor.
+    static func isSimpleRangeSource(_ source: String) -> Bool {
+        let characters = Array(source)
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            if character == "\\" {
+                guard index + 1 < characters.count, characters[index + 1] == "|" else { return false }
+                index += 2
+                continue
+            }
+            if "\r\n*~_`[]<>".contains(character) { return false }
+            index += 1
+        }
+        return true
+    }
+
     static func apply(_ mark: MarkdownInlineMark, to markdown: String, selection: NSRange) -> MarkdownInlineMarkEdit? {
         let source = markdown as NSString
         guard selection.location != NSNotFound, selection.location >= 0, selection.length > 0,
