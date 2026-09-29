@@ -138,10 +138,9 @@ final class MarkdownTypographyTests: XCTestCase {
                        accuracy: 0.1)
         XCTAssertEqual(titleStyle?.lineBreakStrategy, .pushOut)
         XCTAssertEqual(codeFont?.pointSize ?? 0, 14, accuracy: 0.1)
-        let native = QuoteTextView(usingTextLayoutManager: false)
-        native.attributedText = text
-        XCTAssertEqual(native.transformedCopyText(in: codeRange), "var x = 42;")
-        XCTAssertNil(native.transformedCopyText(in: bodyRange))
+        XCTAssertEqual(QuoteTextView.transformedCopyText(in: text, ruleRegions: [], range: codeRange),
+                       "var x = 42;")
+        XCTAssertNil(QuoteTextView.transformedCopyText(in: text, ruleRegions: [], range: bodyRange))
     }
 }
 #endif

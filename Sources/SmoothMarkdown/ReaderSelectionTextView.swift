@@ -388,7 +388,8 @@ final class QuoteTextView: UITextView {
     override func copy(_ sender: Any?) {
         let range = selectedRange
         guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return }
-        guard let transformed = transformedCopyText(in: range) else {
+        guard let transformed = Self.transformedCopyText(in: textStorage,
+                                                        ruleRegions: ruleRegions, range: range) else {
             super.copy(sender)
             return
         }
@@ -397,16 +398,17 @@ final class QuoteTextView: UITextView {
 
     /// Returns plain text only when visual anchors or nonbreaking code spaces
     /// need to be restored. Otherwise UITextView keeps its native Copy behavior.
-    func transformedCopyText(in range: NSRange) -> String? {
+    static func transformedCopyText(in text: NSAttributedString, ruleRegions: [NSRange],
+                                    range: NSRange) -> String? {
         guard range.location >= 0, range.length > 0,
-              NSMaxRange(range) <= textStorage.length else { return nil }
+              NSMaxRange(range) <= text.length else { return nil }
         let selectedRules = ruleRegions.filter { NSIntersectionRange($0, range).length > 0 }
             .sorted { $0.location > $1.location }
-        let selected = NSMutableString(string: (textStorage.string as NSString).substring(with: range))
+        let selected = NSMutableString(string: (text.string as NSString).substring(with: range))
         var restoredCodeSpace = false
         for offset in 0..<range.length where selected.character(at: offset) == 160 {
-            if textStorage.attribute(codeSpaceAttribute, at: range.location + offset,
-                                     effectiveRange: nil) != nil {
+            if text.attribute(codeSpaceAttribute, at: range.location + offset,
+                              effectiveRange: nil) != nil {
                 selected.replaceCharacters(in: NSRange(location: offset, length: 1), with: " ")
                 restoredCodeSpace = true
             }
