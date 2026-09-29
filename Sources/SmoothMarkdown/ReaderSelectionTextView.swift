@@ -66,6 +66,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         }
         let decoration = styleSheet.resolvedBlockquoteDecoration
         view.quoteRegions = built.quoteRegions
+        view.ruleRegions = built.ruleRegions
+        view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.ruleThickness = styleSheet.horizontalRuleThickness
         view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
         view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
         view.quoteBorderWidth = decoration.borderWidth
@@ -176,8 +179,10 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         }
     }
 
-    func attributedContent(traits: UITraitCollection) -> (text: NSAttributedString, quoteRegions: [QuoteTextView.Region]) {
+    func attributedContent(traits: UITraitCollection) ->
+        (text: NSAttributedString, quoteRegions: [QuoteTextView.Region], ruleRegions: [NSRange]) {
         let output = NSMutableAttributedString(string: "")
+        var ruleRegions: [NSRange] = []
         var quoteBounds: [Int: (start: Int, end: Int, depth: Int)] = [:]
         var quoteOrder: [Int] = []
         var firstQuoteLine: [Int: Int] = [:]
@@ -196,7 +201,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let weight: UIFont.Weight
             switch line.kind {
             case let .heading(level): headingLevel = level; weight = .semibold
-            case .paragraph, .list, .quote: headingLevel = nil; weight = .regular
+            case .paragraph, .list, .quote, .rule: headingLevel = nil; weight = .regular
             }
             let paragraph = NSMutableParagraphStyle()
             paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
@@ -240,6 +245,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     }(),
                     .paragraphStyle: paragraph,
                 ]
+                if line.kind == .rule {
+                    // The anchor supplies a native selection position; UIKit draws the rule over its line.
+                    attributes[.foregroundColor] = UIColor.clear
+                    attributes[.font] = UIFont.systemFont(ofSize: 14)
+                }
                 if inlineStyle.italic == true { attributes[.obliqueness] = 0.18 }
                 if inlineStyle.strikethrough == true {
                     attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
@@ -254,6 +264,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     attributes[.link] = link
                 }
                 output.append(NSAttributedString(string: run.text, attributes: attributes))
+            }
+            if line.kind == .rule {
+                ruleRegions.append(NSRange(location: start, length: output.length - start))
             }
             for (depth, id) in line.quoteIDs.enumerated() {
                 if quoteBounds[id] == nil {
@@ -270,7 +283,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             return .init(range: NSRange(location: bounds.start, length: max(1, bounds.end - bounds.start)),
                          depth: bounds.depth)
         }
-        return (output, quoteRegions)
+        return (output, quoteRegions, ruleRegions)
     }
 }
 
@@ -282,6 +295,9 @@ final class QuoteTextView: UITextView {
     }
 
     var quoteRegions: [Region] = [] { didSet { setNeedsDisplay() } }
+    var ruleRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
+    var ruleColor: UIColor = .secondaryLabel { didSet { setNeedsDisplay() } }
+    var ruleThickness: CGFloat = 1 { didSet { setNeedsDisplay() } }
     var quoteBarColor: UIColor = .tintColor { didSet { setNeedsDisplay() } }
     var quoteBackgroundColor: UIColor? { didSet { setNeedsDisplay() } }
     var quoteBorderWidth: CGFloat = 4 { didSet { setNeedsDisplay() } }
@@ -293,6 +309,22 @@ final class QuoteTextView: UITextView {
         becomeFirstResponder()
         selectedRange = NSRange(location: 0, length: textStorage.length)
         return true
+    }
+
+    override func copy(_ sender: Any?) {
+        let range = selectedRange
+        guard range.length > 0, NSMaxRange(range) <= textStorage.length else { return }
+        let selectedRules = ruleRegions.filter { NSIntersectionRange($0, range).length > 0 }
+            .sorted { $0.location > $1.location }
+        guard !selectedRules.isEmpty else {
+            super.copy(sender)
+            return
+        }
+        let selected = NSMutableString(string: (textStorage.string as NSString).substring(with: range))
+        for rule in selectedRules {
+            selected.deleteCharacters(in: NSRange(location: rule.location - range.location, length: rule.length))
+        }
+        UIPasteboard.general.string = selected as String
     }
 
     func quoteFrames() -> [(CGRect, Int)] {
@@ -314,6 +346,17 @@ final class QuoteTextView: UITextView {
             quoteBackgroundColor.setFill()
             for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
                 UIRectFill(frame)
+            }
+        }
+        if ruleThickness > 0 {
+            ruleColor.setFill()
+            for range in ruleRegions where range.location < textStorage.length {
+                let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                let glyphFrame = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+                let y = textContainerInset.top + glyphFrame.midY - ruleThickness / 2
+                UIRectFill(CGRect(x: textContainerInset.left, y: y,
+                                  width: max(0, bounds.width - textContainerInset.left - textContainerInset.right),
+                                  height: ruleThickness))
             }
         }
         super.draw(rect)

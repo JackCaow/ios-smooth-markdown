@@ -1,8 +1,10 @@
 import Foundation
 import Markdown
 
-/// Text-only Markdown blocks that can share one native selection surface.
+/// Markdown blocks that can share one native selection surface.
 struct ReaderSelectionDocument {
+    /// A selectable anchor for a visually drawn thematic break. Removed on copy.
+    static let ruleAnchor = "\u{FFFC}"
     struct Run: Equatable {
         let text: String
         let style: InlineContent.Style
@@ -10,7 +12,7 @@ struct ReaderSelectionDocument {
     }
 
     struct Line: Equatable {
-        enum Kind: Equatable { case paragraph, heading(Int), list, quote }
+        enum Kind: Equatable { case paragraph, heading(Int), list, quote, rule }
         let kind: Kind
         let runs: [Run]
         let indent: Int
@@ -21,7 +23,9 @@ struct ReaderSelectionDocument {
 
     let lines: [Line]
 
-    var copiedText: String { lines.map { $0.runs.map(\.text).joined() }.joined(separator: "\n") }
+    var copiedText: String {
+        lines.map { $0.kind == .rule ? "" : $0.runs.map(\.text).joined() }.joined(separator: "\n")
+    }
 
     static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
         var lines: [Line] = []
@@ -40,6 +44,12 @@ struct ReaderSelectionDocument {
 
     private static func linesForBlock(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?,
                                       indent: Int, quoteIDs: [Int], nextQuoteID: inout Int) -> [Line]? {
+        if node is ThematicBreak {
+            // Nested rules need their enclosing list or quote layout; keep those in SwiftUI.
+            guard indent == 0, quoteIDs.isEmpty else { return nil }
+            return [.init(kind: .rule, runs: [.init(text: ruleAnchor, style: .init(), code: false)],
+                          indent: indent, quoteDepth: quoteIDs.count, quoteIDs: quoteIDs)]
+        }
         if let heading = node as? Heading {
             guard let runs = inlineRuns(heading, enableHTML: enableHTML, plugins: plugins) else { return nil }
             return [.init(kind: .heading(heading.level), runs: runs, indent: indent,
