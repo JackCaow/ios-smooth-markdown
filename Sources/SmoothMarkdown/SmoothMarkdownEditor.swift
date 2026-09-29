@@ -535,6 +535,12 @@ private struct FormattedBlocksView: View {
                             if capabilities.supports(.italic) {
                                 Button("Italic") { applyVisibleMark(.italic, to: selected) }
                             }
+                            if capabilities.supports(.strikethrough) {
+                                Button("Strikethrough") { applyVisibleMark(.strikethrough, to: selected) }
+                            }
+                            if capabilities.supports(.inlineCode) {
+                                Button("Inline code") { applyVisibleMark(.code, to: selected) }
+                            }
                             if capabilities.supports(.link) {
                                 Button("Link") { showingVisibleLinkEditor = true }
                             }

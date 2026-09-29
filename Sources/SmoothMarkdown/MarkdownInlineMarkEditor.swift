@@ -18,7 +18,7 @@ struct MarkdownInlineMarkEdit: Equatable {
 
 enum MarkdownInlineMarkEditor {
     private enum MappedKind: Equatable {
-        case bold, italic, link(URL)
+        case bold, italic, strikethrough, code, link(URL)
     }
 
     private struct MappedMark {
@@ -57,13 +57,15 @@ enum MarkdownInlineMarkEditor {
                                   openTokens: active.map(\.opening).joined())
         }
 
-        func coverage() -> [(bold: Int, italic: Int, links: [URL])] {
-            var result = Array(repeating: (bold: 0, italic: 0, links: [URL]()), count: units.count)
+        func coverage() -> [(bold: Int, italic: Int, strike: Int, code: Int, links: [URL])] {
+            var result = Array(repeating: (bold: 0, italic: 0, strike: 0, code: 0, links: [URL]()), count: units.count)
             for mark in marks {
                 for index in mark.visibleStart..<mark.visibleEnd {
                     switch mark.kind {
                     case .bold: result[index].bold += 1
                     case .italic: result[index].italic += 1
+                    case .strikethrough: result[index].strike += 1
+                    case .code: result[index].code += 1
                     case let .link(url): result[index].links.append(url)
                     }
                 }
@@ -72,22 +74,25 @@ enum MarkdownInlineMarkEditor {
         }
     }
 
-    static func visibleUTF16Length(of markdown: String) -> Int? { inlineMap(markdown)?.units.count }
+    static func visibleUTF16Length(of markdown: String) -> Int? {
+        inlineMap(markdown, allowCode: true)?.units.count
+    }
 
     static func visibleText(of markdown: String) -> String? {
-        guard let mapped = inlineMap(markdown) else { return nil }
+        guard let mapped = inlineMap(markdown, allowCode: true) else { return nil }
         return String(decoding: mapped.units, as: UTF16.self)
     }
 
-    /// Wraps visible UTF-16 text inside existing emphasis and links only when
-    /// reparsing preserves every original text unit and existing mark.
+    /// Wraps visible UTF-16 text only when reparsing preserves every original
+    /// text unit and existing mark, including code spans outside the selection.
     static func applyVerifiedVisibleRange(_ mark: MarkdownInlineMark, to markdown: String,
                                           selection: NSRange) -> String? {
-        guard let before = inlineMap(markdown), selection.location != NSNotFound,
+        guard let before = inlineMap(markdown, allowCode: true), selection.location != NSNotFound,
               selection.location >= 0, selection.length > 0,
               NSMaxRange(selection) <= before.units.count,
               scalarBoundary(selection.location, in: before.units),
               scalarBoundary(NSMaxRange(selection), in: before.units),
+              before.coverage()[selection.location..<NSMaxRange(selection)].allSatisfy({ $0.code == 0 }),
               let start = before.boundary(at: selection.location),
               let end = before.boundary(at: NSMaxRange(selection)), start.offset <= end.offset else { return nil }
 
@@ -100,6 +105,15 @@ enum MarkdownInlineMarkEditor {
         case .italic:
             addition = .italic
             delimiters = [("*", "*"), ("_", "_")]
+        case .strikethrough:
+            addition = .strikethrough
+            delimiters = [("~~", "~~")]
+        case .code:
+            let selected = String(decoding: before.units[selection.location..<NSMaxRange(selection)], as: UTF16.self)
+            let delimiter = String(repeating: "`", count: longestBacktickRun(in: selected) + 1)
+            let padding = selected.contains("`") ? " " : ""
+            addition = .code
+            delimiters = [(delimiter + padding, padding + delimiter)]
         case let .link(destination):
             guard let url = safeDestination(destination),
                   !before.marks.contains(where: {
@@ -112,7 +126,6 @@ enum MarkdownInlineMarkEditor {
             let escaped = url.absoluteString.replacingOccurrences(of: "(", with: "%28")
                 .replacingOccurrences(of: ")", with: "%29")
             delimiters = [("[", "](" + escaped + ")")]
-        case .strikethrough, .code: return nil
         }
 
         let oldCoverage = before.coverage()
@@ -124,7 +137,8 @@ enum MarkdownInlineMarkEditor {
                     + source.substring(with: NSRange(location: start.offset, length: end.offset - start.offset))
                     + (split ? end.closeTokens : "") + closing + (split ? end.openTokens : "")
                     + source.substring(from: end.offset)
-                guard let after = inlineMap(candidate), after.units == before.units else { continue }
+                guard let after = inlineMap(candidate, allowCode: true),
+                      after.units == before.units else { continue }
                 let newCoverage = after.coverage()
                 let valid = oldCoverage.indices.allSatisfy { index in
                     let old = oldCoverage[index]
@@ -133,12 +147,23 @@ enum MarkdownInlineMarkEditor {
                     switch addition {
                     case .bold:
                         return new.bold == old.bold + (selected ? 1 : 0) &&
-                            new.italic == old.italic && new.links == old.links
+                            new.italic == old.italic && new.strike == old.strike &&
+                            new.code == old.code && new.links == old.links
                     case .italic:
                         return new.bold == old.bold &&
-                            new.italic == old.italic + (selected ? 1 : 0) && new.links == old.links
+                            new.italic == old.italic + (selected ? 1 : 0) &&
+                            new.strike == old.strike && new.code == old.code && new.links == old.links
+                    case .strikethrough:
+                        return new.bold == old.bold && new.italic == old.italic &&
+                            new.strike == old.strike + (selected ? 1 : 0) &&
+                            new.code == old.code && new.links == old.links
+                    case .code:
+                        return new.bold == old.bold && new.italic == old.italic &&
+                            new.strike == old.strike && new.code == old.code + (selected ? 1 : 0) &&
+                            new.links == old.links
                     case let .link(url):
                         return new.bold == old.bold && new.italic == old.italic &&
+                            new.strike == old.strike && new.code == old.code &&
                             new.links == (selected ? old.links + [url] : old.links)
                     }
                 }
@@ -160,11 +185,12 @@ enum MarkdownInlineMarkEditor {
         return !(0xD800...0xDBFF).contains(units[offset - 1]) || !(0xDC00...0xDFFF).contains(units[offset])
     }
 
-    private static func inlineMap(_ source: String) -> InlineMap? {
+    private static func inlineMap(_ source: String, allowCode: Bool = false) -> InlineMap? {
         let document = MarkdownSyntax.parse(source, useCache: false)
         let blocks = Array(document.children)
         guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
-              supportedInlineTree(paragraph), inlineSignature(source) != nil else { return nil }
+              supportedInlineTree(paragraph, allowCode: allowCode),
+              inlineSignature(source, allowCode: allowCode) != nil else { return nil }
         let nsSource = source as NSString
         let utf8 = Array(source.utf8)
         func offset(_ location: SourceLocation) -> Int? {
@@ -197,6 +223,8 @@ enum MarkdownInlineMarkEditor {
                 let kind: MappedKind
                 if child is Strong { kind = .bold }
                 else if child is Emphasis { kind = .italic }
+                else if child is Strikethrough { kind = .strikethrough }
+                else if allowCode, child is InlineCode { kind = .code }
                 else if let link = child as? Markdown.Link,
                         let destination = link.destination,
                         let url = safeDestination(destination), link.title == nil { kind = .link(url) }
@@ -214,13 +242,40 @@ enum MarkdownInlineMarkEditor {
                     guard raw.hasPrefix("*") && raw.hasSuffix("*") ||
                           raw.hasPrefix("_") && raw.hasSuffix("_") else { return false }
                     opening = String(raw.prefix(1)); closing = String(raw.suffix(1))
+                case .strikethrough:
+                    guard raw.hasPrefix("~~"), raw.hasSuffix("~~") else { return false }
+                    opening = "~~"; closing = "~~"
+                case .code:
+                    guard let code = child as? InlineCode, !code.code.isEmpty else { return false }
+                    let count = raw.prefix(while: { $0 == "`" }).count
+                    let delimiter = String(repeating: "`", count: count)
+                    guard count > 0, raw.hasSuffix(delimiter) else { return false }
+                    let inner = String(raw.dropFirst(count).dropLast(count))
+                    if inner == code.code {
+                        opening = delimiter; closing = delimiter
+                    } else if inner.hasPrefix(" "), inner.hasSuffix(" "),
+                              String(inner.dropFirst().dropLast()) == code.code {
+                        opening = delimiter + " "; closing = " " + delimiter
+                    } else { return false }
                 case .link:
                     guard raw.hasPrefix("["), raw.hasSuffix(")"),
                           let suffix = raw.range(of: "](", options: .backwards) else { return false }
                     opening = "["; closing = String(raw[suffix.lowerBound...])
                 }
                 let visibleStart = units.count
-                guard visit(child), units.count > visibleStart else { return false }
+                if let code = child as? InlineCode {
+                    // Map the exact code payload so later selections outside this span
+                    // still resolve to source offsets after rendering the new code mark.
+                    let payloadStart = range.location + (opening as NSString).length
+                    for (index, unit) in code.code.utf16.enumerated() {
+                        units.append(unit)
+                        starts.append(payloadStart + index)
+                        ends.append(payloadStart + index + 1)
+                    }
+                } else {
+                    guard visit(child) else { return false }
+                }
+                guard units.count > visibleStart else { return false }
                 marks.append(MappedMark(kind: kind, visibleStart: visibleStart, visibleEnd: units.count,
                                         sourceStart: range.location, sourceEnd: NSMaxRange(range),
                                         opening: opening, closing: closing))
@@ -228,7 +283,7 @@ enum MarkdownInlineMarkEditor {
             return true
         }
         guard visit(paragraph), !units.isEmpty,
-              inlineSignature(source)?.map(\.unit) == units else { return nil }
+              inlineSignature(source, allowCode: allowCode)?.map(\.unit) == units else { return nil }
         return InlineMap(units: units, starts: starts, ends: ends, marks: marks, sourceLength: nsSource.length)
     }
 
@@ -292,14 +347,15 @@ enum MarkdownInlineMarkEditor {
         let link: URL?
     }
 
-    private static func inlineSignature(_ source: String) -> [InlineUnit]? {
+    private static func inlineSignature(_ source: String, allowCode: Bool = false) -> [InlineUnit]? {
         let document = MarkdownSyntax.parse(source, useCache: false)
         let blocks = Array(document.children)
         guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
-              supportedInlineTree(paragraph) else { return nil }
+              supportedInlineTree(paragraph, allowCode: allowCode) else { return nil }
         var signature: [InlineUnit] = []
         for run in InlineContent.runs(in: paragraph, enableHTML: false) {
-            guard case let .text(value, style, tags, code) = run, tags.isEmpty, !code else { return nil }
+            guard case let .text(value, style, tags, code) = run, tags.isEmpty,
+                  allowCode || !code else { return nil }
             signature += value.utf16.map {
                 InlineUnit(unit: $0, bold: style.bold, italic: style.italic,
                            strike: style.strike, link: style.link)
@@ -308,9 +364,10 @@ enum MarkdownInlineMarkEditor {
         return signature.isEmpty ? nil : signature
     }
 
-    private static func supportedInlineTree(_ node: Markup) -> Bool {
+    private static func supportedInlineTree(_ node: Markup, allowCode: Bool = false) -> Bool {
         for child in node.children {
-            if child is Markdown.Text || child is Strong || child is Emphasis {
+            if child is Markdown.Text || child is Strong || child is Emphasis ||
+                child is Strikethrough || (allowCode && child is InlineCode) {
                 // Accepted below after recursively checking nested children.
             } else if let link = child as? Markdown.Link {
                 guard let destination = link.destination, let url = URL(string: destination),
@@ -318,7 +375,7 @@ enum MarkdownInlineMarkEditor {
             } else {
                 return false
             }
-            guard supportedInlineTree(child) else { return false }
+            guard supportedInlineTree(child, allowCode: allowCode) else { return false }
         }
         return true
     }
