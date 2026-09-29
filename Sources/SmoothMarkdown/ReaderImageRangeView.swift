@@ -25,45 +25,41 @@ struct ReaderImageRangeView: View {
         VStack(alignment: .leading, spacing: spacing) {
             ForEach(document.segments.indices, id: \.self) { index in
                 let segment = document.segments[index]
-                renderSegment(segment)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .overlay(alignment: .topTrailing) {
-                        if segment.isImage && !selecting {
-                            Button {
-                                selecting = true
-                                anchor = nil
+                Group {
+                    if segment.isImage && !selecting {
+                        renderSegment(segment)
+                            .contextMenu {
+                                Button("Select surrounding content") { beginSelection() }
+                            }
+                            .accessibilityAction(named: Text("Select surrounding content")) {
+                                beginSelection()
+                            }
+                    } else {
+                        renderSegment(segment)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay {
+                    if selecting {
+                        Button {
+                            if anchor == nil || focus != nil {
+                                anchor = index
                                 focus = nil
-                            } label: {
-                                Image(systemName: "text.badge.checkmark")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(7)
+                            } else {
+                                focus = index
                             }
-                            .buttonStyle(.bordered)
-                            .accessibilityLabel("Select range across image")
-                            .accessibilityIdentifier("reader-image-range-start")
+                        } label: {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color.accentColor.opacity(isSelected(index) ? 0.12 : 0.001))
+                                .overlay(RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.accentColor.opacity(isSelected(index) ? 0.55 : 0), lineWidth: 2))
+                                .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Select block \(index + 1)")
+                        .accessibilityIdentifier("reader-image-range-block-\(index)")
                     }
-                    .overlay {
-                        if selecting {
-                            Button {
-                                if anchor == nil || focus != nil {
-                                    anchor = index
-                                    focus = nil
-                                } else {
-                                    focus = index
-                                }
-                            } label: {
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.accentColor.opacity(isSelected(index) ? 0.12 : 0.001))
-                                    .overlay(RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.accentColor.opacity(isSelected(index) ? 0.55 : 0), lineWidth: 2))
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Select block \(index + 1)")
-                            .accessibilityIdentifier("reader-image-range-block-\(index)")
-                        }
-                    }
+                }
             }
             if selecting {
                 HStack(spacing: 12) {
@@ -93,6 +89,12 @@ struct ReaderImageRangeView: View {
     private func isSelected(_ index: Int) -> Bool {
         if let selectedRange { return selectedRange.contains(index) }
         return anchor == index
+    }
+
+    private func beginSelection() {
+        selecting = true
+        anchor = nil
+        focus = nil
     }
 
     private func reset() {
