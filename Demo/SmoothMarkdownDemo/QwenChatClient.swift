@@ -46,6 +46,7 @@ struct DeepSeekChatRequest {
 
     let apiKey: String
     let model: String
+    let enableThinking: Bool
 
     func urlRequest(prompt: String) throws -> URLRequest {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -61,6 +62,7 @@ struct DeepSeekChatRequest {
                 ["role": "user", "content": prompt],
             ],
             "stream": true,
+            "thinking": ["type": enableThinking ? "enabled" : "disabled"],
         ] as [String: Any])
         return request
     }

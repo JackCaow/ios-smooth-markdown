@@ -89,6 +89,11 @@ final class DemoAIChatUITests: XCTestCase {
         model.tap()
         XCTAssertTrue(app.buttons["DeepSeek Flash"].exists)
         XCTAssertTrue(app.buttons["DeepSeek V4 Pro"].exists)
+        app.buttons["DeepSeek Flash"].tap()
+        let settingsForm = app.descendants(matching: .any)["ai-chat-settings-form"]
+        let thinking = app.switches["ai-chat-deepseek-thinking"]
+        for _ in 0..<4 where !thinking.exists { settingsForm.swipeUp() }
+        XCTAssertTrue(thinking.exists)
     }
 
     func testQwenSettingsExposeRuntimeKeyModelAndMockSwitch() {

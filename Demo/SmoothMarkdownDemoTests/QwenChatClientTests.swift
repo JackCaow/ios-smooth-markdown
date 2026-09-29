@@ -4,7 +4,8 @@ import XCTest
 
 final class QwenChatClientTests: XCTestCase {
     func testDeepSeekRequestUsesSelectedModelAndRuntimeKey() throws {
-        let configuration = DeepSeekChatRequest(apiKey: "  sk-runtime  ", model: "deepseek-flash")
+        let configuration = DeepSeekChatRequest(apiKey: "  sk-runtime  ", model: "deepseek-flash",
+                                                enableThinking: true)
         let request = try configuration.urlRequest(prompt: "你好")
         XCTAssertEqual(request.url, DeepSeekChatRequest.endpoint)
         XCTAssertEqual(request.httpMethod, "POST")
@@ -14,15 +15,19 @@ final class QwenChatClientTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "deepseek-flash")
         XCTAssertEqual(body["stream"] as? Bool, true)
         XCTAssertNil(body["enable_thinking"])
+        XCTAssertEqual((body["thinking"] as? [String: String])?["type"], "enabled")
         let messages = try XCTUnwrap(body["messages"] as? [[String: String]])
         XCTAssertEqual(messages.map { $0["role"] }, ["system", "user"])
         XCTAssertEqual(messages[1]["content"], "你好")
 
-        let pro = try DeepSeekChatRequest(apiKey: "key", model: "deepseek-v4-pro")
+        let pro = try DeepSeekChatRequest(apiKey: "key", model: "deepseek-v4-pro",
+                                          enableThinking: false)
             .urlRequest(prompt: "Hi")
         let proBody = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(pro.httpBody)) as? [String: Any])
         XCTAssertEqual(proBody["model"] as? String, "deepseek-v4-pro")
-        XCTAssertThrowsError(try DeepSeekChatRequest(apiKey: "  ", model: "deepseek-flash")
+        XCTAssertEqual((proBody["thinking"] as? [String: String])?["type"], "disabled")
+        XCTAssertThrowsError(try DeepSeekChatRequest(apiKey: "  ", model: "deepseek-flash",
+                                                      enableThinking: true)
             .urlRequest(prompt: "Hi"))
     }
 
