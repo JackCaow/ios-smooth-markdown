@@ -63,6 +63,7 @@ private enum DemoConversationCatalog {
 
 /// Native version of Flutter's conversation_list_demo.dart, using its exact bundled messages.
 struct DemoConversationListView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var fixture = DemoConversationCatalog.load()
     @State private var isDark = false
     private let referenceTime = Date()
@@ -70,7 +71,7 @@ struct DemoConversationListView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("会话列表").font(.headline)
+                Text("会话列表").font(DemoTypography.barTitle)
                 Spacer()
                 Button {
                     isDark.toggle()
@@ -111,25 +112,28 @@ struct DemoConversationListView: View {
         HStack(alignment: .top, spacing: 12) {
             DemoConversationAvatar(conversation: conversation, size: 52)
             VStack(alignment: .leading, spacing: 4) {
-                HStack {
+                HStack(alignment: .firstTextBaseline) {
                     Text(conversation.name)
-                        .font(.system(size: 16, weight: conversation.unreadCount > 0 ? .bold : .medium))
-                        .lineLimit(1)
+                        .font(DemoTypography.body.weight(conversation.unreadCount > 0 ? .bold : .medium))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+                        .layoutPriority(1)
                     Spacer(minLength: 8)
                     Text(DemoConversationTime.relative(conversation.messages.last?.secondsAgo ?? 0,
                                                        referenceTime: referenceTime))
-                        .font(.system(size: 12))
+                        .font(DemoTypography.metadata)
                         .foregroundStyle(conversation.unreadCount > 0 ? Color.blue : Color.secondary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 HStack {
                     Text(DemoConversationPreview.plain(conversation.lastMessage))
-                        .font(.system(size: 14))
+                        .font(DemoTypography.secondary)
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 2)
                     Spacer(minLength: 8)
                     if conversation.unreadCount > 0 {
                         Text(conversation.unreadCount > 99 ? "99+" : "\(conversation.unreadCount)")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(DemoTypography.metadata.weight(.semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -143,6 +147,7 @@ struct DemoConversationListView: View {
 }
 
 private struct DemoConversationDetailView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let conversation: DemoConversation
     let isDark: Bool
     let referenceTime: Date
@@ -198,7 +203,7 @@ private struct DemoConversationDetailView: View {
 
     private func bubble(_ message: DemoChatMessage, index: Int) -> some View {
         HStack(alignment: .top, spacing: 8) {
-            if message.isMe { Spacer(minLength: 28) }
+            if message.isMe { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 28) }
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
             VStack(alignment: .leading, spacing: 4) {
                 SmoothMarkdownView(markdown: message.content,
@@ -213,14 +218,14 @@ private struct DemoConversationDetailView: View {
                     .accessibilityIdentifier("conversation-message-\(index)")
                 HStack(spacing: 8) {
                     Text(DemoConversationTime.clock(message.secondsAgo, referenceTime: referenceTime))
-                        .font(.system(size: 11))
+                        .font(DemoTypography.timestamp)
                         .foregroundStyle(message.isMe ? Color.white.opacity(0.7) : Color.secondary)
                     Spacer(minLength: 0)
                     Menu {
                         Button("复制", systemImage: "doc.on.doc") { copy(message.content) }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 13, weight: .semibold))
+                            .font(DemoTypography.metadata.weight(.semibold))
                             .foregroundStyle(message.isMe ? Color.white.opacity(0.7) : Color.secondary)
                             .frame(minWidth: 30, minHeight: 24)
                     }
@@ -230,11 +235,11 @@ private struct DemoConversationDetailView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
-            .frame(maxWidth: 300, alignment: .leading)
+            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? nil : 300, alignment: .leading)
             .background(message.isMe ? Color(red: 0, green: 0.48, blue: 1) :
                         (isDark ? Color(uiColor: .secondarySystemBackground) : .white),
                         in: RoundedRectangle(cornerRadius: 16))
-            if !message.isMe { Spacer(minLength: 28) }
+            if !message.isMe { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 28) }
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
         }
     }
@@ -244,6 +249,7 @@ private struct DemoConversationDetailView: View {
         style.backgroundColor = .clear
         style.contentPadding = 0
         style.blockSpacing = 8
+        DemoTypography.chatMarkdown(&style, compactHeading: true)
         if isMe {
             style.textColor = .white
             style.headingColor = .white

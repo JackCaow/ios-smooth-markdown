@@ -49,6 +49,7 @@ private enum DemoNavigationIcon {
 
 /// Native companion to the Flutter example's sample drawer and feature pages.
 struct DemoHomeView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var catalog = DemoExampleCatalog.load()
     private let pageCatalog = DemoPageCatalog.load()
     @State private var selected: DemoPage = .example("basic-formatting")
@@ -177,30 +178,22 @@ struct DemoHomeView: View {
     }
 
     private func header(title: String, icon: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 21))
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.title3.weight(.semibold))
-                .accessibilityIdentifier("demo-current-title")
-            Spacer(minLength: 4)
-            HStack(spacing: 6) {
-                Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
-                    .font(.system(size: 14))
-                    .accessibilityHidden(true)
-                Text(theme.localizedTitle(in: language))
-                    .font(.caption)
-                    .accessibilityLabel("\(theme.localizedTitle(in: language)) · \(language.nativeName)")
-                    .accessibilityIdentifier("demo-current-theme")
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 8) {
+                    headerIdentity(title: title, icon: icon)
+                    themeBadge
+                }
+            } else {
+                HStack(spacing: 12) {
+                    headerIdentity(title: title, icon: icon)
+                    Spacer(minLength: 4)
+                    themeBadge
+                }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(theme.isDark ? Color(red: 33 / 255, green: 38 / 255, blue: 45 / 255)
-                                     : Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 16)
+        .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 12 : 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .foregroundStyle(theme.isDark ? .white : Color.primary)
         .background(theme.isDark ? Color(red: 22 / 255, green: 27 / 255, blue: 34 / 255)
@@ -211,6 +204,34 @@ struct DemoHomeView: View {
                                    : Color.gray.opacity(0.3))
                 .frame(height: 1)
         }
+    }
+
+    private func headerIdentity(title: String, icon: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 21))
+                .accessibilityHidden(true)
+            Text(title)
+                .font(DemoTypography.pageTitle)
+                .accessibilityIdentifier("demo-current-title")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var themeBadge: some View {
+        HStack(spacing: 6) {
+            Image(systemName: theme.isDark ? "moon.fill" : "sun.max.fill")
+                .font(DemoTypography.metadata)
+                .accessibilityHidden(true)
+            Text(theme.localizedTitle(in: language))
+                .font(DemoTypography.metadata)
+                .accessibilityLabel("\(theme.localizedTitle(in: language)) · \(language.nativeName)")
+                .accessibilityIdentifier("demo-current-theme")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(theme.isDark ? Color(red: 33 / 255, green: 38 / 255, blue: 45 / 255)
+                                 : Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
@@ -325,7 +346,7 @@ private struct DemoNavigationSheet: View {
                         Image(systemName: "doc.text")
                             .font(.system(size: 48))
                         Text(DemoLocalizations.text("drawer_header_title", in: language))
-                            .font(.system(size: 24, weight: .bold))
+                            .font(.title2.bold())
                     }
                     Spacer()
                 }

@@ -77,6 +77,7 @@ private enum LiveChatConfiguration {
 
 /// Counterpart of Flutter's AI Chat demo, with mock and optional live streams.
 struct DemoAIChatView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let parentIsDark: Bool
 
     @State private var messages: [AIChatMessage] = []
@@ -173,21 +174,44 @@ struct DemoAIChatView: View {
     }
 
     private var titleBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                titleIdentity
+                Spacer(minLength: 0)
+                actionButtons
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                titleIdentity
+                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(surfaceColor)
+    }
+
+    private var titleIdentity: some View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
                             in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI Chat Demo").font(.headline)
+                Text("AI Chat Demo").font(DemoTypography.barTitle)
                 Text(modeStatus)
-                    .font(.caption)
+                    .font(DemoTypography.metadata)
                     .foregroundStyle(isStreaming ? .blue : liveAPIAvailable ? .green : .orange)
                     .accessibilityIdentifier("ai-chat-status")
             }
-            Spacer()
+            .layoutPriority(1)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
             Button {
                 newChat()
             } label: {
@@ -210,9 +234,7 @@ struct DemoAIChatView: View {
             .accessibilityLabel("API 设置")
             .accessibilityIdentifier("ai-chat-settings")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(surfaceColor)
+        .labelStyle(.iconOnly)
     }
 
     private func quickPrompts(_ fixture: AIChatFixture) -> some View {
@@ -221,7 +243,7 @@ struct DemoAIChatView: View {
                 ForEach(fixture.quickPrompts) { prompt in
                     Button(prompt.label) { send(prompt.prompt) }
                         .buttonStyle(.bordered)
-                        .font(.caption)
+                        .font(DemoTypography.metadata)
                         .disabled(isStreaming)
                         .accessibilityHint(prompt.description)
                         .accessibilityIdentifier("ai-chat-prompt-\(prompt.id)")
@@ -236,7 +258,7 @@ struct DemoAIChatView: View {
     private func bubble(_ message: AIChatMessage) -> some View {
         HStack(alignment: .top, spacing: 8) {
             if !message.isUser { avatar("sparkles", color: .indigo) }
-            if message.isUser { Spacer(minLength: 36) }
+            if message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             VStack(alignment: .leading, spacing: 4) {
                 if message.isStreaming, let stream = replyStreams.stream(for: message.id) {
                     DemoStreamingMarkdownBubble(stream: stream,
@@ -252,14 +274,14 @@ struct DemoAIChatView: View {
                 }
                 HStack(spacing: 10) {
                     Text(message.timestamp, style: .time)
-                        .font(.system(size: 11))
+                        .font(DemoTypography.timestamp)
                         .foregroundStyle(message.isUser ? Color.white.opacity(0.7) : .secondary)
                     if !message.isUser && !message.content.isEmpty {
                         Button {
                             source = .init(markdown: message.content)
                         } label: {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 11))
+                                .font(DemoTypography.timestamp)
                         }
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("查看 Markdown 源码")
@@ -271,8 +293,9 @@ struct DemoAIChatView: View {
             .padding(.vertical, 10)
             .background(message.isUser ? Color(red: 0, green: 0.478, blue: 1) : surfaceColor,
                         in: RoundedRectangle(cornerRadius: 20))
-            .frame(maxWidth: 310, alignment: message.isUser ? .trailing : .leading)
-            if !message.isUser { Spacer(minLength: 36) }
+            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? nil : 310,
+                   alignment: message.isUser ? .trailing : .leading)
+            if !message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             if message.isUser { avatar("person.fill", color: .gray) }
         }
         .frame(maxWidth: .infinity)
@@ -280,7 +303,7 @@ struct DemoAIChatView: View {
 
     private func avatar(_ symbol: String, color: Color) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 15))
+            .font(DemoTypography.message)
             .foregroundStyle(.white)
             .frame(width: 32, height: 32)
             .background(color, in: RoundedRectangle(cornerRadius: 10))
@@ -291,11 +314,11 @@ struct DemoAIChatView: View {
         style.backgroundColor = nil
         style.contentPadding = 0
         style.blockSpacing = 8
+        DemoTypography.chatMarkdown(&style)
         if isUser {
             style.textColor = .white
             style.headingColor = .white
             style.linkColor = .white
-            style.paragraphFont = .system(size: 15)
         }
         return style
     }
