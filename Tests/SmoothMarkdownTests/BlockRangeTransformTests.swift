@@ -54,6 +54,16 @@ final class BlockRangeTransformTests: XCTestCase {
         XCTAssertEqual(controller.text, source)
     }
 
+    func testTransformAfterFrontmatterRetainsEnvelopeAndFollowingMarkdown() {
+        let source = "\u{FEFF}---\r\ntitle: Demo\r\n---\r\n\r\nAlpha\r\n\r\nBeta\r\n"
+        let controller = MarkdownEditorController(text: source)
+        XCTAssertTrue(controller.applySemanticBlockCommandToBlockRange(
+            from: "block-1", to: "block-2", command: .unorderedList))
+        XCTAssertEqual(controller.text, "\u{FEFF}---\r\ntitle: Demo\r\n---\r\n\r\n- Alpha\r\n- Beta\r\n")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+    }
+
     func testRejectsStaleStructuredAndUnsafeReparseWithoutMutation() {
         let source = "First\n\n| A |\n|---|\n| B |\n\nLast"
         let controller = MarkdownEditorController(text: source)
