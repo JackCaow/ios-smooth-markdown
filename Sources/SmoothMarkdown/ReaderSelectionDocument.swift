@@ -354,7 +354,8 @@ enum ReaderMathSelectionGroup {
 
     static func group(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
                       plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false,
-                      hasCustomBuilder: (Markup) -> Bool = { _ in false }) -> [ReaderMathSelectionGroup] {
+                      hasCustomBuilder: (Markup) -> Bool = { _ in false },
+                      hasCustomDisplayMath: (String) -> Bool = { _ in false }) -> [ReaderMathSelectionGroup] {
         var output: [ReaderMathSelectionGroup] = []
         var pending: [ReaderBlockRangeDocument.Item] = []
         func flush() {
@@ -381,8 +382,13 @@ enum ReaderMathSelectionGroup {
         }
         for item in items {
             switch item {
-            case .displayMath:
-                pending.append(item)
+            case let .displayMath(latex):
+                if hasCustomDisplayMath(latex) {
+                    flush()
+                    output.append(.math(latex))
+                } else {
+                    pending.append(item)
+                }
             case let .markup(node):
                 if hasCustomBuilder(node) {
                     flush()

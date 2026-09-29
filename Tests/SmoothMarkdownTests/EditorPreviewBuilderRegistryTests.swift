@@ -13,6 +13,16 @@ private struct EditorPreviewBuilder: MarkdownWidgetBuilder {
     func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView { render(node) }
 }
 
+private struct EditorPreviewExtensionBuilder: MarkdownWidgetBuilder {
+    let accepts: (MarkdownExtensionNode) -> Bool
+    let render: (MarkdownExtensionNode) -> AnyView
+
+    func canBuild(_ node: Markup) -> Bool { false }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView { AnyView(Text("unused")) }
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool { accepts(node) }
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView { render(node) }
+}
+
 @MainActor
 final class EditorPreviewBuilderRegistryTests: XCTestCase {
     private let source = "# Native heading\n\nNative body"
@@ -55,8 +65,29 @@ final class EditorPreviewBuilderRegistryTests: XCTestCase {
         }
     }
 
-    private func renderEditor(mode: MarkdownEditorMode, registry: BuilderRegistry) -> UIImage? {
-        let controller = MarkdownEditorController(text: source)
+    func testExtensionBuildersReachPreviewAndSplit() {
+        let registry = BuilderRegistry()
+        var received: [String] = []
+        for type in ["inline_math", "block_math", "footnote_reference", "footnote_definition", "details"] {
+            registry.register(type, builder: EditorPreviewExtensionBuilder(accepts: { $0.type == type },
+                                                                          render: { node in
+                received.append(node.type)
+                return AnyView(Text(node.content))
+            }))
+        }
+        let source = "Formula $x$ and [^n]\n\n$$y$$\n\n[^n]: Note\n\n<details>\n<summary>Expand</summary>\nBody\n</details>"
+        for mode in [MarkdownEditorMode.preview, .split] {
+            received.removeAll()
+            XCTAssertNotNil(renderEditor(mode: mode, registry: registry, source: source))
+            for type in ["inline_math", "block_math", "footnote_reference", "footnote_definition", "details"] {
+                XCTAssertTrue(received.contains(type), "Missing \(type) in \(mode)")
+            }
+        }
+    }
+
+    private func renderEditor(mode: MarkdownEditorMode, registry: BuilderRegistry,
+                              source: String? = nil) -> UIImage? {
+        let controller = MarkdownEditorController(text: source ?? self.source)
         controller.mode = mode
         let editor = SmoothMarkdownEditor(controller: controller, builderRegistry: registry)
         return ImageRenderer(content: editor.frame(width: 390, height: 700)).uiImage

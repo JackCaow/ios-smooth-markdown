@@ -132,6 +132,46 @@ public struct SmoothMarkdownView: View {
         return builderRegistry?.findBuilder(node) != nil
     }
 
+    private func extensionBuilder(_ node: MarkdownExtensionNode) -> (any MarkdownWidgetBuilder)? {
+        builderRegistry?.findBuilder(node)
+    }
+
+    private func htmlStyleNode(_ text: String, tags: [SafeHTML.Tag]) -> MarkdownExtensionNode? {
+        guard enableHTML, builderRegistry != nil else { return nil }
+        // An HTML opener/closer alone has no renderable content. Prefer the
+        // innermost accepted style around the actual text run.
+        for tag in tags.reversed() {
+            let type: String? = switch tag.name {
+            case "b", "strong": "bold"
+            case "i", "em": "italic"
+            case "s", "del", "strike": "strikethrough"
+            case "u", "ins": "underline"
+            case "mark": "highlight"
+            case "sub": "subscript"
+            case "sup": "superscript"
+            case "kbd": "kbd"
+            case "span", "font": "styled_span"
+            default: nil
+            }
+            guard let type else { continue }
+            let node = MarkdownExtensionNode.htmlStyle(type: type, tag: tag.name, text: text,
+                                                       attributes: tag.attributes)
+            if extensionBuilder(node) != nil { return node }
+        }
+        return nil
+    }
+
+    private func hasCustomExtension(in node: Markup) -> Bool {
+        InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins).contains { run in
+            switch run {
+            case let .math(latex): return extensionBuilder(.inlineMath(latex)) != nil
+            case let .footnote(label): return extensionBuilder(.footnoteReference(label)) != nil
+            case let .text(value, _, tags, _): return htmlStyleNode(value, tags: tags) != nil
+            default: return false
+            }
+        }
+    }
+
     func containsCustomBlockBuilder(_ node: Markup) -> Bool {
         guard builderRegistry != nil else { return false }
         if hasCustomBuilder(node) { return true }
@@ -139,7 +179,7 @@ public struct SmoothMarkdownView: View {
             // Match the same post-plugin text pieces that inlineView will dispatch.
             // The raw swift-markdown Text node may contain a plugin token that
             // becomes a separate result before builders see ordinary text.
-            return InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
+            return hasCustomExtension(in: node) || InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
                                       hasCustomBuilder: hasCustomBuilder).contains {
                 if case .custom = $0 { return true }
                 return false
@@ -184,7 +224,14 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(PluginBlockSyntax.sections(source, registry: plugins).enumerated()), id: \.offset) { _, item in
                 pluginSection(item)
             }
-        case let .details(details): detailsBlock(details)
+        case let .details(details):
+            let node = MarkdownExtensionNode.details(summary: details.summary, content: details.content,
+                                                     isOpen: details.isOpen)
+            if let builder = extensionBuilder(node) {
+                builder.build(node, context: renderContext())
+            } else {
+                detailsBlock(details)
+            }
         }
     }
 
@@ -216,7 +263,14 @@ public struct SmoothMarkdownView: View {
                 mathSection(item)
             }
             #endif
-        case let .definition(definition): footnoteDefinition(definition)
+        case let .definition(definition):
+            let node = MarkdownExtensionNode.footnoteDefinition(label: definition.label,
+                                                                 content: definition.content)
+            if let builder = extensionBuilder(node) {
+                builder.build(node, context: renderContext())
+            } else {
+                footnoteDefinition(definition)
+            }
         }
     }
 
@@ -232,7 +286,8 @@ public struct SmoothMarkdownView: View {
         ForEach(Array(ReaderMathSelectionGroup.group(items, enableHTML: enableHTML,
                                                      plugins: plugins,
                                                      allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton,
-                                                     hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { _, group in
+                                                     hasCustomBuilder: containsCustomBlockBuilder,
+                                                     hasCustomDisplayMath: { extensionBuilder(.blockMath($0)) != nil }).enumerated()), id: \.offset) { _, group in
             switch group {
             case let .legacy(legacy): readerGroup(legacy)
             case let .math(latex): standaloneBlockMath(latex)
@@ -789,6 +844,7 @@ public struct SmoothMarkdownView: View {
     private enum FlowPiece {
         case text(SwiftUI.Text)
         case custom(Markup, InlineContent.Style)
+        case extensionNode(MarkdownExtensionNode)
         case image(SafeHTML.ImageSpec)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
@@ -815,10 +871,20 @@ public struct SmoothMarkdownView: View {
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }
         let hasPlugin = runs.contains { if case .plugin = $0 { return true }; return false }
-        if !hasImage && !hasFootnote && !hasMath && !hasPlugin && !hasCustom {
+        let hasCustomFootnote = runs.contains { run in
+            if case let .footnote(label) = run {
+                return extensionBuilder(.footnoteReference(label)) != nil
+            }
+            return false
+        }
+        let hasCustomHTMLStyle = runs.contains { run in
+            if case let .text(value, _, tags, _) = run { return htmlStyleNode(value, tags: tags) != nil }
+            return false
+        }
+        if !hasImage && !hasFootnote && !hasMath && !hasPlugin && !hasCustom && !hasCustomHTMLStyle {
             return AnyView(inline(runs))
         }
-        if !hasImage && !hasMath && !hasPlugin && !hasCustom {
+        if !hasImage && !hasMath && !hasPlugin && !hasCustom && !hasCustomFootnote && !hasCustomHTMLStyle {
             var result = SwiftUI.Text("")
             for run in runs {
                 switch run {
@@ -836,7 +902,9 @@ public struct SmoothMarkdownView: View {
             case let .image(image):
                 pieces.append(.image(image))
             case let .footnote(label):
-                pieces.append(.text(footnoteReference(label)))
+                let node = MarkdownExtensionNode.footnoteReference(label)
+                if extensionBuilder(node) != nil { pieces.append(.extensionNode(node)) }
+                else { pieces.append(.text(footnoteReference(label))) }
             case let .math(latex):
                 pieces.append(.math(latex))
             case let .plugin(plugin, match):
@@ -844,6 +912,10 @@ public struct SmoothMarkdownView: View {
             case let .custom(node, style):
                 pieces.append(.custom(node, style))
             case let .text(value, sourceStyle, tags, code):
+                if let node = htmlStyleNode(value, tags: tags) {
+                    pieces.append(.extensionNode(node))
+                    continue
+                }
                 let style = inlineStyle(sourceStyle)
                 var word = ""
                 for character in value {
@@ -866,15 +938,13 @@ public struct SmoothMarkdownView: View {
                 switch piece {
                 case let .text(text): text.fixedSize()
                 case let .custom(node, style): customInlineView(node, style: style).fixedSize()
+                case let .extensionNode(node):
+                    extensionBuilder(node)?.build(node, context: renderContext()).fixedSize()
                 case let .image(image):
                     imageView(image, inline: true)
                         .layoutValue(key: InlineImageKey.self, value: true)
                 case let .math(latex):
-                    SwiftUIMath.Math(latex)
-                        .mathTypesettingStyle(.text)
-                        .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
-                        .fixedSize()
-                        .accessibilityLabel(latex)
+                    inlineMath(latex)
                 case let .plugin(plugin, match):
                     pluginView(plugin, match).fixedSize()
                 case .lineBreak:
@@ -894,7 +964,32 @@ public struct SmoothMarkdownView: View {
             .foregroundColor(styleSheet.footnoteColor ?? .blue)
     }
 
+    @ViewBuilder
+    private func inlineMath(_ latex: String) -> some View {
+        let node = MarkdownExtensionNode.inlineMath(latex)
+        if let builder = extensionBuilder(node) {
+            builder.build(node, context: renderContext()).fixedSize()
+        } else {
+            SwiftUIMath.Math(latex)
+                .mathTypesettingStyle(.text)
+                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
+                .fixedSize()
+                .accessibilityLabel(latex)
+        }
+    }
+
     private func blockMath(_ latex: String) -> some View {
+        let node = MarkdownExtensionNode.blockMath(latex)
+        return Group {
+            if let builder = extensionBuilder(node) {
+                builder.build(node, context: renderContext())
+            } else {
+                nativeBlockMath(latex)
+            }
+        }
+    }
+
+    private func nativeBlockMath(_ latex: String) -> some View {
         ScrollView(.horizontal) {
             SwiftUIMath.Math(latex)
                 .mathTypesettingStyle(.display)

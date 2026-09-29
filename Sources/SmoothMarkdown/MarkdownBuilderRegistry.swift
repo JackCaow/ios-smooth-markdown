@@ -14,12 +14,77 @@ public protocol MarkdownWidgetBuilder {
 
     /// Replaces a parser-plugin view when `canBuild` accepts its result.
     func build(_ node: MarkdownPluginNode, context: MarkdownRenderContext) -> AnyView
+
+    /// Matches a native extension parsed outside swift-markdown's Markup tree.
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool
+
+    /// Replaces an extension node such as math, a footnote, or details.
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView
 }
 
 public extension MarkdownWidgetBuilder {
     func canBuild(_ node: MarkdownPluginNode) -> Bool { false }
     func build(_ node: MarkdownPluginNode, context: MarkdownRenderContext) -> AnyView {
         AnyView(Text(node.source))
+    }
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool { false }
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView {
+        AnyView(Text(node.source))
+    }
+}
+
+/// A parsed extension that has no corresponding swift-markdown `Markup` node.
+/// `content` is the inner formula or Markdown body; `source` is normalized
+/// Markdown spelling and may differ from the author's original whitespace.
+public struct MarkdownExtensionNode {
+    public enum Kind { case inline, block }
+
+    public let kind: Kind
+    public let type: String
+    public let source: String
+    public let content: String
+    public let attributes: [String: String]
+
+    public init(kind: Kind, type: String, source: String, content: String,
+                attributes: [String: String] = [:]) {
+        self.kind = kind
+        self.type = type
+        self.source = source
+        self.content = content
+        self.attributes = attributes
+    }
+
+    public static func inlineMath(_ latex: String) -> Self {
+        .init(kind: .inline, type: "inline_math", source: "$\(latex)$", content: latex)
+    }
+
+    public static func blockMath(_ latex: String) -> Self {
+        .init(kind: .block, type: "block_math", source: "$$\n\(latex)\n$$", content: latex)
+    }
+
+    public static func footnoteReference(_ label: String) -> Self {
+        .init(kind: .inline, type: "footnote_reference", source: "[^\(label)]", content: label,
+              attributes: ["label": label])
+    }
+
+    public static func footnoteDefinition(label: String, content: String) -> Self {
+        .init(kind: .block, type: "footnote_definition", source: "[^\(label)]: \(content)",
+              content: content, attributes: ["label": label])
+    }
+
+    public static func details(summary: String, content: String, isOpen: Bool) -> Self {
+        .init(kind: .block, type: "details", source: "<details\(isOpen ? " open" : "")>\n<summary>\(summary)</summary>\n\(content)\n</details>",
+              content: content, attributes: ["summary": summary, "open": isOpen ? "true" : "false"])
+    }
+
+    /// A rendered HTML style run. Raw opening/closing tags are stateful parser
+    /// tokens, so builders receive their styled text instead of a token alone.
+    public static func htmlStyle(type: String, tag: String, text: String,
+                                 attributes: [String: String] = [:]) -> Self {
+        var attributes = attributes
+        attributes["tag"] = tag
+        return .init(kind: .inline, type: type, source: text, content: text,
+                     attributes: attributes)
     }
 }
 
@@ -126,6 +191,14 @@ public final class BuilderRegistry {
     }
 
     public func findBuilder(_ node: MarkdownPluginNode) -> (any MarkdownWidgetBuilder)? {
+        if let exact = builders[node.type], exact.canBuild(node) { return exact }
+        for key in keys {
+            if let builder = builders[key], builder.canBuild(node) { return builder }
+        }
+        return nil
+    }
+
+    public func findBuilder(_ node: MarkdownExtensionNode) -> (any MarkdownWidgetBuilder)? {
         if let exact = builders[node.type], exact.canBuild(node) { return exact }
         for key in keys {
             if let builder = builders[key], builder.canBuild(node) { return builder }
