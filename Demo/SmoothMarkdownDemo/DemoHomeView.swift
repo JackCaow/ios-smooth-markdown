@@ -97,6 +97,13 @@ struct DemoHomeView: View {
                                for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Smooth Markdown Demo")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .accessibilityAddTraits(.isHeader)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     Button(DemoLocalizations.text("examples", in: language), systemImage: "line.3.horizontal") { showNavigation = true }
                         .accessibilityIdentifier("open-examples")
