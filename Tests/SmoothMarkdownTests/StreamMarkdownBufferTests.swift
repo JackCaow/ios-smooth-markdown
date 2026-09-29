@@ -38,6 +38,28 @@ final class StreamMarkdownBufferTests: XCTestCase {
         XCTAssertEqual(buffer.visibleText, "lead <font colo")
     }
 
+    func testStreamingHTMLScriptsRemainTaggedAcrossChunkBoundaries() {
+        var buffer = StreamMarkdownBuffer(startMillis: 0, enableHTML: true)
+        XCTAssertNil(buffer.append("H<su", nowMillis: 50))
+        XCTAssertEqual(buffer.visibleText, "H")
+        XCTAssertNil(buffer.append("b>2", nowMillis: 100))
+        XCTAssertEqual(buffer.visibleText, "H<sub>2")
+        let partial = MarkdownSyntax.parse(buffer.visibleText, enableHTML: true).child(at: 0)!
+        let subRun = InlineContent.runs(in: partial, enableHTML: true).compactMap { run -> [SafeHTML.Tag]? in
+            if case let .text("2", _, tags, _) = run { return tags }
+            return nil
+        }.first
+        XCTAssertEqual(subRun?.last?.name, "sub")
+
+        XCTAssertNil(buffer.append("</sub>O e=mc<sup>2</sup>", nowMillis: 150))
+        let complete = MarkdownSyntax.parse(buffer.visibleText, enableHTML: true).child(at: 0)!
+        let scripts = InlineContent.runs(in: complete, enableHTML: true).compactMap { run -> String? in
+            if case let .text("2", _, tags, _) = run { return tags.last?.name }
+            return nil
+        }
+        XCTAssertEqual(scripts, ["sub", "sup"])
+    }
+
     func testHTMLToggleReRendersAccumulatedPrefixAndPreservesStream() {
         var buffer = StreamMarkdownBuffer(startMillis: 0, enableHTML: true)
         XCTAssertNil(buffer.append("lead <font colo", nowMillis: 50))

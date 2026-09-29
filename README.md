@@ -76,4 +76,4 @@ style.blockSpacing = 16
 SmoothMarkdownView(markdown: content, styleSheet: style)
 ```
 
-The demo's Theme menu switches among all presets. `horizontalRuleThickness`, `tableHeaderBackgroundColor`, `listBulletFont`, and `listBulletColor` customize rules, table headers, and list markers. The light and dark presets include Flutter's table header colors. Flutter's stylesheet also offers more specialized text styles; its odd and even table row decoration fields are currently declared but unused by the Flutter renderer.
+The demo's Theme menu switches among all presets. `horizontalRuleThickness`, `tableHeaderBackgroundColor`, `listBulletFont`, and `listBulletColor` customize rules, table headers, and list markers. With `enableHTML: true`, `<sub>` and `<sup>` use 75% of the native body size and separate `subscriptStyle` and `superscriptStyle` overrides. The light and dark presets include Flutter's table header colors. Flutter's stylesheet also offers more specialized text styles; its odd and even table row decoration fields are currently declared but unused by the Flutter renderer.
