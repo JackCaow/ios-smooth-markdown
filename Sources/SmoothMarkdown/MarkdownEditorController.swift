@@ -9,18 +9,25 @@ struct PendingListParagraph: Equatable {
     let insertedTerminator: String
 }
 
-/// A UTF-16 offset in formatted prose, a root list item's primary line, or
-/// a fenced code block's body. Code offsets exclude the opening and closing fences.
+/// A UTF-16 offset in formatted prose, a root list item's primary line,
+/// a fenced code body, or the visible text of one GFM table cell.
 public struct MarkdownSemanticTextPosition: Equatable {
     public let blockID: String
     public let offset: Int
-    /// The root item within a source-backed list. `nil` selects prose text.
+    /// The root item within a source-backed list. `nil` outside lists.
     public let listItemIndex: Int?
+    /// A table row and column, with row zero denoting the header. Both are
+    /// required for a cell endpoint; its offset excludes cell padding and escapes.
+    public let tableRow: Int?
+    public let tableColumn: Int?
 
-    public init(blockID: String, offset: Int, listItemIndex: Int? = nil) {
+    public init(blockID: String, offset: Int, listItemIndex: Int? = nil,
+                tableRow: Int? = nil, tableColumn: Int? = nil) {
         self.blockID = blockID
         self.offset = offset
         self.listItemIndex = listItemIndex
+        self.tableRow = tableRow
+        self.tableColumn = tableColumn
     }
 }
 
@@ -290,6 +297,10 @@ public final class MarkdownEditorController: ObservableObject {
         var result: [String: NSRange] = [:]
         for index in resolved.firstIndex...resolved.lastIndex {
             let block = blocks[index]
+            if case .table = block.kind {
+                result[block.id] = NSRange(location: 0, length: 1)
+                continue
+            }
             if case .list = block.kind {
                 // List rows receive an item-level text tint from the companion
                 // range map; this entry keeps complete/intervening rows tinted.
@@ -328,6 +339,30 @@ public final class MarkdownEditorController: ObservableObject {
                 items[index] = NSRange(location: lower, length: upper - lower)
             }
             result[block.id] = items
+        }
+        return result
+    }
+
+    /// Character tints inside cells touched by a source-backed text range.
+    /// Whole intermediary tables keep their existing row-level tint.
+    public func semanticTableCellHighlightRanges(_ selection: MarkdownSemanticTextSelection)
+        -> [String: [Int: [Int: NSRange]]]? {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
+        let blocks = semanticDocument.blocks
+        var result: [String: [Int: [Int: NSRange]]] = [:]
+        for index in resolved.firstIndex...resolved.lastIndex {
+            let block = blocks[index]
+            guard case let .table(table) = block.kind else { continue }
+            let startsHere = index == resolved.firstIndex && resolved.start.tableRow != nil
+            let endsHere = index == resolved.lastIndex && resolved.end.tableRow != nil
+            guard startsHere || endsHere else { continue }
+            let row = startsHere ? resolved.start.tableRow! : resolved.end.tableRow!
+            let column = startsHere ? resolved.start.tableColumn! : resolved.end.tableColumn!
+            let raw = row == 0 ? table.headers[column] : table.rows[row - 1][column]
+            let length = (Self.visibleTableCell(raw).text as NSString).length
+            let lower = startsHere ? resolved.startOffset : 0
+            let upper = endsHere ? resolved.endOffset : length
+            result[block.id] = [row: [column: NSRange(location: lower, length: upper - lower)]]
         }
         return result
     }
@@ -883,12 +918,14 @@ public final class MarkdownEditorController: ObservableObject {
             let body: String
             switch block.kind {
             case .paragraph, .heading:
-                guard position.listItemIndex == nil else { return nil }
+                guard position.listItemIndex == nil, position.tableRow == nil,
+                      position.tableColumn == nil else { return nil }
                 body = block.plainText
                 let ending = block.source.hasSuffix("\r\n") ? 2 : block.source.hasSuffix("\n") ? 1 : 0
                 bodyStart = (block.source as NSString).length - (body as NSString).length - ending
             case let .list(list):
-                guard let index = position.listItemIndex, list.items.indices.contains(index),
+                guard position.tableRow == nil, position.tableColumn == nil,
+                      let index = position.listItemIndex, list.items.indices.contains(index),
                       let root = list.items.first,
                       list.items.allSatisfy({ $0.indent == root.indent &&
                           $0.continuations.isEmpty && $0.trailingContinuations.isEmpty }),
@@ -896,11 +933,26 @@ public final class MarkdownEditorController: ObservableObject {
                 body = line.content
                 bodyStart = line.offset
             case .fencedCode:
-                guard position.listItemIndex == nil,
+                guard position.listItemIndex == nil, position.tableRow == nil,
+                      position.tableColumn == nil,
                       let codeStart = Self.codeBodyStart(in: block) else { return nil }
                 body = block.plainText
                 bodyStart = codeStart
-            case .table, .horizontalRule, .plugin, .raw: return nil
+            case let .table(table):
+                guard position.listItemIndex == nil,
+                      let row = position.tableRow, let column = position.tableColumn,
+                      row >= 0, row <= table.rows.count,
+                      table.headers.indices.contains(column),
+                      let cellRange = document.sourceRangeOfTableCell(blockID: position.blockID,
+                                                                      row: row, column: column) else { return nil }
+                let raw = row == 0 ? table.headers[column] : table.rows[row - 1][column]
+                let mapped = Self.visibleTableCell(raw)
+                guard position.offset >= 0, position.offset < mapped.boundaries.count,
+                      Range(NSRange(location: position.offset, length: 0), in: mapped.text) != nil else { return nil }
+                let absolute = cellRange.location + mapped.boundaries[position.offset]
+                guard isValidSourceRange(NSRange(location: absolute, length: 0)) else { return nil }
+                return absolute
+            case .horizontalRule, .plugin, .raw: return nil
             }
             guard position.offset >= 0, position.offset <= (body as NSString).length,
                   Range(NSRange(location: position.offset, length: 0), in: body) != nil,
@@ -923,7 +975,9 @@ public final class MarkdownEditorController: ObservableObject {
         if firstIndex == lastIndex, case .fencedCode = document.blocks[firstIndex].kind {
             sameCodeBlock = true
         } else { sameCodeBlock = false }
-        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock),
+        let sameTableCell = firstIndex == lastIndex && start.tableRow != nil &&
+            start.tableRow == end.tableRow && start.tableColumn == end.tableColumn
+        guard (firstIndex != lastIndex || start.listItemIndex != nil || sameCodeBlock || sameTableCell),
               startSourceOffset < endSourceOffset else { return nil }
         return .init(firstIndex: firstIndex, lastIndex: lastIndex,
                      start: start, end: end,
@@ -937,6 +991,12 @@ public final class MarkdownEditorController: ObservableObject {
         let original = semanticDocument
         let first = original.blocks[resolved.firstIndex]
         let last = original.blocks[resolved.lastIndex]
+        if case .table = first.kind {
+            return replacementForTableEndpointRange(resolved, with: replacement, document: original)
+        }
+        if case .table = last.kind {
+            return replacementForTableEndpointRange(resolved, with: replacement, document: original)
+        }
         if case .fencedCode = first.kind {
             return replacementForCodeEndpointRange(resolved, with: replacement, document: original)
         }
@@ -1023,6 +1083,149 @@ public final class MarkdownEditorController: ObservableObject {
         guard start + length <= source.length,
               source.substring(with: NSRange(location: start, length: length)) == code else { return nil }
         return start
+    }
+
+    /// The formatted cell displays escaped pipes without their source slash.
+    /// Keep a UTF-16 boundary map so a visible selection includes both source
+    /// characters when it selects an escaped pipe.
+    private static func visibleTableCell(_ raw: String) -> (text: String, boundaries: [Int]) {
+        let source = Array(raw.utf16)
+        var visible: [UInt16] = []
+        var boundaries = [0]
+        var index = 0
+        while index < source.count {
+            if source[index] == 92, index + 1 < source.count, source[index + 1] == 124 {
+                visible.append(124)
+                index += 2
+            } else {
+                visible.append(source[index])
+                index += 1
+            }
+            boundaries.append(index)
+        }
+        return (String(decoding: visible, as: UTF16.self), boundaries)
+    }
+
+    private static func escapedTableInsertion(_ value: String) -> String? {
+        guard value.utf8.count <= 1_048_576,
+              !value.contains("\n"), !value.contains("\r"), !value.contains("\t") else { return nil }
+        var result = ""
+        var slashes = 0
+        for character in value {
+            if character == "|", slashes.isMultiple(of: 2) { result.append("\\") }
+            result.append(character)
+            slashes = character == "\\" ? slashes + 1 : 0
+        }
+        return result
+    }
+
+    private static func tableWithCell(_ table: MarkdownSourceTable, row: Int, column: Int,
+                                      raw: String) -> MarkdownSourceTable {
+        var expected = table
+        if row == 0 { expected.headers[column] = raw }
+        else { expected.rows[row - 1][column] = raw }
+        return expected
+    }
+
+    private func replacementForTableEndpointRange(_ resolved: ResolvedSemanticTextSelection,
+                                                  with replacement: String,
+                                                  document: MarkdownDocument) -> (markdown: String, caret: Int)? {
+        guard let inserted = Self.escapedTableInsertion(replacement) else { return nil }
+        let first = document.blocks[resolved.firstIndex]
+        let last = document.blocks[resolved.lastIndex]
+        let source = text as NSString
+        let tableFirst: Bool = { if case .table = first.kind { return true }; return false }()
+        let tableBlock = tableFirst ? first : last
+        guard case let .table(table) = tableBlock.kind else { return nil }
+        let position = tableFirst ? resolved.start : resolved.end
+        guard let row = position.tableRow, let column = position.tableColumn,
+              let cellRange = document.sourceRangeOfTableCell(blockID: tableBlock.id,
+                                                              row: row, column: column) else { return nil }
+        let raw = row == 0 ? table.headers[column] : table.rows[row - 1][column]
+        let mapped = Self.visibleTableCell(raw)
+        let cellStart = cellRange.location
+        let cellEnd = NSMaxRange(cellRange)
+        let expectedRaw: String
+        let expectedVisible: String
+        let next: String
+        let caret: Int
+
+        if resolved.firstIndex == resolved.lastIndex {
+            guard resolved.start.tableRow == row, resolved.start.tableColumn == column,
+                  resolved.end.tableRow == row, resolved.end.tableColumn == column else { return nil }
+            let range = NSRange(location: resolved.startSourceOffset,
+                                length: resolved.endSourceOffset - resolved.startSourceOffset)
+            next = source.replacingCharacters(in: range, with: inserted)
+            let rawSource = raw as NSString
+            expectedRaw = rawSource.substring(to: mapped.boundaries[resolved.startOffset]) + inserted
+                + rawSource.substring(from: mapped.boundaries[resolved.endOffset])
+            let visible = mapped.text as NSString
+            expectedVisible = visible.substring(to: resolved.startOffset) + replacement
+                + visible.substring(from: resolved.endOffset)
+            caret = resolved.startSourceOffset + (inserted as NSString).length
+        } else if tableFirst {
+            guard row == table.rows.count, column == table.columnCount - 1,
+                  let tableRange = document.sourceRange(of: tableBlock.id) else { return nil }
+            let lastPrefix: String
+            switch last.kind {
+            case .paragraph: lastPrefix = ""
+            case .heading:
+                guard let bodyStart = Self.editableBodyStart(in: last) else { return nil }
+                lastPrefix = (last.source as NSString).substring(to: bodyStart)
+            default: return nil
+            }
+            let tableTail = source.substring(with: NSRange(location: cellEnd,
+                                                           length: NSMaxRange(tableRange) - cellEnd))
+            next = source.substring(to: resolved.startSourceOffset) + inserted + tableTail
+                + last.leadingTrivia + lastPrefix + source.substring(from: resolved.endSourceOffset)
+            expectedRaw = (raw as NSString).substring(to: mapped.boundaries[resolved.startOffset]) + inserted
+            expectedVisible = (mapped.text as NSString).substring(to: resolved.startOffset) + replacement
+            caret = resolved.startSourceOffset + (inserted as NSString).length
+        } else {
+            guard row == 0, column == 0,
+                  let firstRange = document.sourceRange(of: first.id),
+                  let tableRange = document.sourceRange(of: tableBlock.id),
+                  let firstBodyStart = Self.editableBodyStart(in: first) else { return nil }
+            switch first.kind {
+            case .paragraph, .heading: break
+            default: return nil
+            }
+            let firstBodyEnd = firstRange.location + firstBodyStart + (first.plainText as NSString).length
+            let firstTail = source.substring(with: NSRange(location: firstBodyEnd,
+                                                            length: NSMaxRange(firstRange) - firstBodyEnd))
+            let tablePrefix = source.substring(with: NSRange(location: tableRange.location,
+                                                              length: cellStart - tableRange.location))
+            next = source.substring(to: resolved.startSourceOffset) + replacement + firstTail
+                + tableBlock.leadingTrivia + tablePrefix + source.substring(from: resolved.endSourceOffset)
+            expectedRaw = (raw as NSString).substring(from: mapped.boundaries[resolved.endOffset])
+            expectedVisible = (mapped.text as NSString).substring(from: resolved.endOffset)
+            caret = resolved.startSourceOffset + (replacement as NSString).length
+        }
+        guard next != text,
+              Self.visibleTableCell(expectedRaw).text == expectedVisible else { return nil }
+        let parsed = codec.parse(next)
+        let removedBlocks = max(0, resolved.lastIndex - resolved.firstIndex - 1)
+        let expectedCount = document.blocks.count - removedBlocks
+        guard parsed.toMarkdown() == next, parsed.trailingTrivia == document.trailingTrivia,
+              parsed.blocks.count == expectedCount else { return nil }
+        for index in 0..<resolved.firstIndex {
+            guard Self.sameSourceBlock(parsed.blocks[index], document.blocks[index]) else { return nil }
+        }
+        let parsedTable = parsed.blocks[tableFirst ? resolved.firstIndex : resolved.firstIndex + 1]
+        guard case let .table(updatedTable) = parsedTable.kind,
+              parsedTable.leadingTrivia == tableBlock.leadingTrivia,
+              updatedTable == Self.tableWithCell(table, row: row, column: column, raw: expectedRaw) else { return nil }
+        if resolved.firstIndex != resolved.lastIndex {
+            let proseBlock = tableFirst ? last : first
+            let parsedProse = parsed.blocks[tableFirst ? resolved.firstIndex + 1 : resolved.firstIndex]
+            guard parsedProse.leadingTrivia == proseBlock.leadingTrivia,
+                  Self.sameEndpointKind(proseBlock.kind, parsedProse.kind) else { return nil }
+        }
+        for oldIndex in (resolved.lastIndex + 1)..<document.blocks.count {
+            let newIndex = oldIndex - removedBlocks
+            guard Self.sameSourceBlock(parsed.blocks[newIndex], document.blocks[oldIndex]) else { return nil }
+        }
+        return (next, caret)
     }
 
     private func replacementForCodeEndpointRange(_ resolved: ResolvedSemanticTextSelection,
