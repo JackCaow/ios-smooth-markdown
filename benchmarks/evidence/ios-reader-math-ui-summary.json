@@ -1,0 +1,42 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "6951A181-8995-494A-81D2-7996A5122A7F",
+        "deviceName" : "iPhone 17 Pro",
+        "modelName" : "iPhone 17 Pro",
+        "osBuildNumber" : "23A8464",
+        "osVersion" : "26.0.1",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 4,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "SmoothMarkdownDemo · Built with macOS 15.6.1",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1790660067.422,
+  "passedTests" : 4,
+  "result" : "Passed",
+  "skippedTests" : 0,
+  "startTime" : 1790659915.181,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - SmoothMarkdownDemo",
+  "topInsights" : [
+
+  ],
+  "totalTestCount" : 4
+}

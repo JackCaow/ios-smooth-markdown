@@ -1,4 +1,5 @@
 import XCTest
+import Markdown
 @testable import SmoothMarkdown
 
 final class ReaderSelectionDocumentTests: XCTestCase {
@@ -185,6 +186,65 @@ final class ReaderSelectionDocumentTests: XCTestCase {
             if case .individual = $0 { return true }
             return false
         })
+    }
+
+    func testDisplayMathBridgeCopiesLatexBetweenStyledProse() {
+        let groups = ReaderMathSelectionGroup.group(mathItems("Before **bold**.\n\n$$\nE=mc^2\n$$\n\nAfter."),
+                                                    enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .bridge(items) = groups[0],
+              let document = ReaderBlockRangeDocument(items, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected one prose-math-prose range")
+        }
+        XCTAssertEqual(document.segments.count, 3)
+        XCTAssertEqual(document.segments[1].kind, .displayMath("E=mc^2"))
+        XCTAssertEqual(document.copiedText(in: 0...2, enableHTML: false, plugins: nil),
+                       "Before bold.\nE=mc^2\nAfter.")
+        XCTAssertEqual(document.copiedText(in: 1...2, enableHTML: false, plugins: nil),
+                       "E=mc^2\nAfter.")
+    }
+
+    func testDisplayMathBridgeIncludesTableAndSkipsImageAlt() {
+        let source = "Before\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\n$$x+y$$\n\n![plot](https://example.com/p.png)\n\nAfter"
+        let groups = ReaderMathSelectionGroup.group(mathItems(source), enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .bridge(items) = groups[0],
+              let document = ReaderBlockRangeDocument(items, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected table-math-image range")
+        }
+        XCTAssertEqual(document.segments.count, 5)
+        XCTAssertEqual(document.copiedText(in: 0...4, enableHTML: false, plugins: nil),
+                       "Before\nName\tValue\nAlpha\t42\nx+y\nAfter")
+    }
+
+    func testFencedCodeRemainsBoundaryAfterDisplayMath() {
+        let source = "Before\n\n$$x+y$$\n\n```swift\nprint(1)\n```\n\nAfter"
+        let groups = ReaderMathSelectionGroup.group(mathItems(source), enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 3)
+        guard case let .bridge(items) = groups[0],
+              let document = ReaderBlockRangeDocument(items, enableHTML: false, plugins: nil),
+              case let .legacy(.individual(node)) = groups[1], node is Markdown.CodeBlock else {
+            return XCTFail("Code block should break the math range")
+        }
+        XCTAssertEqual(document.copiedText(in: 0...1, enableHTML: false, plugins: nil), "Before\nx+y")
+    }
+
+    func testStandaloneDisplayMathHasItsOwnCopyEndpoint() {
+        let groups = ReaderMathSelectionGroup.group([.displayMath("a\\frac{1}{2}")],
+                                                    enableHTML: false, plugins: nil)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .math(latex) = groups[0] else { return XCTFail("Expected standalone math") }
+        XCTAssertEqual(latex, "a\\frac{1}{2}")
+    }
+
+    private func mathItems(_ source: String) -> [ReaderBlockRangeDocument.Item] {
+        MathSyntax.sections(source).flatMap { section in
+            switch section {
+            case let .markdown(markdown):
+                return Array(MarkdownSyntax.parse(markdown).children).map(ReaderBlockRangeDocument.Item.markup)
+            case let .block(latex): return [.displayMath(latex)]
+            }
+        }
     }
 
 }
