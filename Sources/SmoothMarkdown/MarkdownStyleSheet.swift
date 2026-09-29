@@ -110,6 +110,10 @@ public struct MarkdownStyleSheet {
     public var codeFont: Font?
     public var tableHeaderFont: Font?
     public var tableCellFont: Font?
+    /// Semantic roles used by the selectable UIKit reader. Set these with custom
+    /// SwiftUI fonts so both renderer paths respond to Dynamic Type alike.
+    public var readerParagraphTextStyle: Font.TextStyle
+    public var readerHeadingTextStyles: [Font.TextStyle]
     /// Font and color of ordered and unordered list markers.
     public var listBulletFont: Font?
     public var listBulletColor: Color?
@@ -145,6 +149,8 @@ public struct MarkdownStyleSheet {
         codeFont: Font? = nil,
         tableHeaderFont: Font? = nil,
         tableCellFont: Font? = nil,
+        readerParagraphTextStyle: Font.TextStyle = .body,
+        readerHeadingTextStyles: [Font.TextStyle] = [.title, .title2, .title3, .headline, .subheadline, .footnote],
         listBulletFont: Font? = nil,
         listBulletColor: Color? = nil,
         blockSpacing: CGFloat = 12,
@@ -201,6 +207,8 @@ public struct MarkdownStyleSheet {
         self.codeFont = codeFont
         self.tableHeaderFont = tableHeaderFont
         self.tableCellFont = tableCellFont
+        self.readerParagraphTextStyle = readerParagraphTextStyle
+        self.readerHeadingTextStyles = readerHeadingTextStyles
         self.listBulletFont = listBulletFont
         self.listBulletColor = listBulletColor
         self.blockSpacing = max(0, blockSpacing)
@@ -268,8 +276,7 @@ public struct MarkdownStyleSheet {
     }
 
     private static var defaultHeadingFonts: [Font] {
-        [.largeTitle, .title, .title2, .title3, .headline, .subheadline]
-            .map { .system($0, weight: .bold) }
+        MarkdownTypography.headings
     }
 
     private static func rgb(_ value: UInt32) -> Color {

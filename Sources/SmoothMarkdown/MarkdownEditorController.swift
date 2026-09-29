@@ -189,6 +189,22 @@ public final class MarkdownEditorController: ObservableObject {
         return (text as NSString).substring(with: range)
     }
 
+    /// Text-coordinate highlights for a native drag across formatted rows.
+    /// Unsupported structures and invalid UTF-16 endpoints produce no highlights.
+    public func semanticTextHighlightRanges(_ selection: MarkdownSemanticTextSelection) -> [String: NSRange]? {
+        guard let resolved = resolveSemanticTextSelection(selection) else { return nil }
+        let blocks = semanticDocument.blocks
+        var result: [String: NSRange] = [:]
+        for index in resolved.firstIndex...resolved.lastIndex {
+            let block = blocks[index]
+            let length = (block.plainText as NSString).length
+            let start = index == resolved.firstIndex ? resolved.startOffset : 0
+            let end = index == resolved.lastIndex ? resolved.endOffset : length
+            result[block.id] = NSRange(location: start, length: end - start)
+        }
+        return result
+    }
+
     private func isHeading(_ block: MarkdownDocumentBlock) -> Bool {
         if case .heading = block.kind { return true }
         return false

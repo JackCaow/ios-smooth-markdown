@@ -91,7 +91,7 @@ struct DemoHomeView: View {
                 }
             }
             .background(theme.isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
-            .navigationTitle("Smooth Markdown Demo")
+            .navigationTitle("Markdown Demo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -450,7 +450,7 @@ private struct DemoSourceSheet: View {
         NavigationStack {
             ScrollView {
                 Text(markdown)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.body, design: .monospaced))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                     .padding()
