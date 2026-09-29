@@ -92,6 +92,43 @@ final class MarkdownEditorControllerTests: XCTestCase {
         XCTAssertEqual(controller.text, "/wiki")
     }
 
+    func testCustomSlashInsertsSeparatedBlockAsOneUndoStep() {
+        let controller = MarkdownEditorController(text: "before\n\n/card\n\nafter")
+        let block = try! XCTUnwrap(controller.semanticDocument.blocks.first { $0.plainText == "/card" })
+        let match = try! XCTUnwrap(controller.slashCommandMatch(
+            inBlock: block.id, selection: NSRange(location: 5, length: 0)))
+        XCTAssertTrue(controller.applyCustomSlashCommand("  > Note  ", match: match))
+        XCTAssertEqual(controller.text, "before\n\n> Note\n\nafter")
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, "before\n\n/card\n\nafter")
+        XCTAssertFalse(controller.canUndo)
+    }
+
+    func testCustomSlashRejectsStaleTriggerAndEmptyMarkdown() {
+        let controller = MarkdownEditorController(text: "/embed")
+        let block = try! XCTUnwrap(controller.semanticDocument.blocks.first)
+        let match = try! XCTUnwrap(controller.slashCommandMatch(
+            inBlock: block.id, selection: NSRange(location: 6, length: 0)))
+        XCTAssertFalse(controller.applyCustomSlashCommand("  ", match: match))
+        XCTAssertEqual(controller.text, "/embed")
+        controller.replaceRange(match.range, with: "/other")
+        XCTAssertFalse(controller.applyCustomSlashCommand("content", match: match))
+        XCTAssertEqual(controller.text, "/other")
+    }
+
+    func testEditorCapabilitiesFilterCommands() {
+        let capabilities = MarkdownEditorCapabilities(disabledCommands: [.bold, .heading2])
+        XCTAssertFalse(capabilities.supports(.bold))
+        XCTAssertFalse(capabilities.supports(.heading2))
+        XCTAssertTrue(capabilities.supports(.italic))
+        XCTAssertTrue(MarkdownEditorCapabilities.all.supports(.bold))
+        XCTAssertEqual(capabilities.visibleToolbarCommands([.heading2, .italic, .bold, .table]),
+                       [.italic, .table])
+        XCTAssertEqual(MarkdownEditorCapabilities.all.visibleToolbarCommands([.wikilink, .link],
+                                                                               enableWikilinks: false), [.link])
+        XCTAssertEqual(MarkdownEditorCapabilities.all.visibleToolbarCommands().first, .bold)
+    }
+
     func testParagraphRemovesTaskMarker() {
         let controller = MarkdownEditorController(text: "- [x] done")
         controller.applyCommand(.paragraph)

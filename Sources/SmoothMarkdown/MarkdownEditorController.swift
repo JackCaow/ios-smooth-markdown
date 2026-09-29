@@ -526,6 +526,22 @@ public final class MarkdownEditorController: ObservableObject {
         return true
     }
 
+    /// Inserts a host-provided slash result as a separated Markdown block.
+    /// The trigger is checked again after an asynchronous host callback, and
+    /// removing it plus inserting the block forms one undo step.
+    @discardableResult
+    public func applyCustomSlashCommand(_ markdown: String, match: MarkdownSlashCommandMatch) -> Bool {
+        let block = markdown.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !block.isEmpty, isValidSourceRange(match.range),
+              (text as NSString).substring(with: match.range) == "/" + match.query else { return false }
+        setSelection(NSRange(location: NSMaxRange(match.range), length: 0))
+        transaction {
+            replaceRange(match.range, with: "")
+            insertSeparatedBlock(block)
+        }
+        return true
+    }
+
     public func applyCommand(_ command: MarkdownEditorCommand, argument: String? = nil) {
         if let level = command.headingLevel {
             transformLines { _, line in
@@ -665,7 +681,7 @@ public struct MarkdownSlashCommandMatch {
     public let query: String
 }
 
-public enum MarkdownEditorCommand {
+public enum MarkdownEditorCommand: Hashable {
     case paragraph, bold, italic, strikethrough, inlineCode
     case heading1, heading2, heading3, heading4, heading5, heading6
     case unorderedList, orderedList, taskList, blockquote, codeBlock
@@ -681,5 +697,75 @@ public enum MarkdownEditorCommand {
         case .heading6: 6
         default: nil
         }
+    }
+
+    var toolbarTitle: String {
+        switch self {
+        case .paragraph: "Text"
+        case .bold: "B"
+        case .italic: "I"
+        case .strikethrough: "Strike"
+        case .inlineCode: "Inline Code"
+        case .heading1: "H1"
+        case .heading2: "H2"
+        case .heading3: "H3"
+        case .heading4: "H4"
+        case .heading5: "H5"
+        case .heading6: "H6"
+        case .unorderedList: "List"
+        case .orderedList: "Numbered"
+        case .taskList: "Task"
+        case .blockquote: "Quote"
+        case .codeBlock: "Code"
+        case .link: "Link"
+        case .image: "Image"
+        case .table: "Table"
+        case .blockMath: "Math"
+        case .mermaidDiagram: "Mermaid"
+        case .horizontalRule: "Divider"
+        case .wikilink: "Wiki"
+        }
+    }
+}
+
+/// Controls which built-in commands appear in the editor and can be selected.
+public struct MarkdownEditorCapabilities {
+    public static let all = Self()
+    public static let defaultToolbarCommands: [MarkdownEditorCommand] = [
+        .bold, .italic, .heading1, .unorderedList, .taskList,
+        .codeBlock, .link, .table, .wikilink
+    ]
+    public let disabledCommands: Set<MarkdownEditorCommand>
+
+    public init(disabledCommands: Set<MarkdownEditorCommand> = []) {
+        self.disabledCommands = disabledCommands
+    }
+
+    public func supports(_ command: MarkdownEditorCommand) -> Bool {
+        !disabledCommands.contains(command)
+    }
+
+    /// Preserves host order and drops commands unavailable to this editor.
+    public func visibleToolbarCommands(_ configured: [MarkdownEditorCommand]? = nil,
+                                       enableWikilinks: Bool = true) -> [MarkdownEditorCommand] {
+        (configured ?? Self.defaultToolbarCommands).filter {
+            supports($0) && ($0 != .wikilink || enableWikilinks)
+        }
+    }
+}
+
+/// A host command shown after built-in slash suggestions.
+public struct MarkdownEditorSlashCommand {
+    public let title: String
+    public let searchText: String
+    public let markdown: String?
+    public let onSelected: ((String) async -> String?)?
+
+    public init(title: String, searchText: String, markdown: String? = nil,
+                onSelected: ((String) async -> String?)? = nil) {
+        self.title = title
+        self.searchText = searchText
+        self.markdown = markdown
+        self.onSelected = onSelected
     }
 }

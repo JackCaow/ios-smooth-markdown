@@ -20,6 +20,10 @@ public struct SmoothMarkdownEditor: View {
     private let enableWikilinks: Bool
     private let wikilinkSuggestions: [String]
     private let onTapWikilink: ((String) -> Void)?
+    private let capabilities: MarkdownEditorCapabilities
+    private let toolbarCommands: [MarkdownEditorCommand]?
+    private let customSlashCommands: [MarkdownEditorSlashCommand]
+    private let enableSlashCommands: Bool
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 onPickImage: MarkdownEditorHostIO.ImagePicker? = nil,
@@ -30,7 +34,11 @@ public struct SmoothMarkdownEditor: View {
                 onHostIOEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil,
                 enableWikilinks: Bool = true,
                 wikilinkSuggestions: [String] = [],
-                onTapWikilink: ((String) -> Void)? = nil) {
+                onTapWikilink: ((String) -> Void)? = nil,
+                capabilities: MarkdownEditorCapabilities = .all,
+                toolbarCommands: [MarkdownEditorCommand]? = nil,
+                enableSlashCommands: Bool = true,
+                customSlashCommands: [MarkdownEditorSlashCommand] = []) {
         self.controller = controller
         self.onSave = onSave
         self.hasImagePicker = onPickImage != nil
@@ -38,6 +46,10 @@ public struct SmoothMarkdownEditor: View {
         self.enableWikilinks = enableWikilinks
         self.wikilinkSuggestions = wikilinkSuggestions
         self.onTapWikilink = onTapWikilink
+        self.capabilities = capabilities
+        self.toolbarCommands = toolbarCommands
+        self.enableSlashCommands = enableSlashCommands
+        self.customSlashCommands = customSlashCommands
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onExportPDF: onExportPDF,
@@ -83,15 +95,9 @@ public struct SmoothMarkdownEditor: View {
                         Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
                         Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
                         if controller.mode != .formatted {
-                            commandButton("B", .bold)
-                            commandButton("I", .italic)
-                            commandButton("H1", .heading1)
-                            commandButton("List", .unorderedList)
-                            commandButton("Task", .taskList)
-                            commandButton("Code", .codeBlock)
-                            commandButton("Link", .link)
-                            commandButton("Table", .table)
-                            if enableWikilinks { commandButton("Wiki", .wikilink) }
+                            ForEach(visibleToolbarCommands, id: \.self) { command in
+                                commandButton(command.toolbarTitle, command)
+                            }
                         }
                     }
                     .buttonStyle(.borderless)
@@ -151,7 +157,10 @@ public struct SmoothMarkdownEditor: View {
                         SourceTextView(controller: controller)
                     case .formatted:
                         FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
-                                            wikilinkSuggestions: wikilinkSuggestions)
+                                            wikilinkSuggestions: wikilinkSuggestions,
+                                            capabilities: capabilities,
+                                            enableSlashCommands: enableSlashCommands,
+                                            customSlashCommands: customSlashCommands)
                     case .preview:
                         SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
                     case .split:
@@ -218,8 +227,15 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private func commandButton(_ title: String, _ command: MarkdownEditorCommand) -> some View {
-        Button(title) { controller.applyCommand(command) }
+        Button(title) {
+            guard capabilities.supports(command), command != .wikilink || enableWikilinks else { return }
+            controller.applyCommand(command)
+        }
             .padding(.horizontal, 5)
+    }
+
+    private var visibleToolbarCommands: [MarkdownEditorCommand] {
+        capabilities.visibleToolbarCommands(toolbarCommands, enableWikilinks: enableWikilinks)
     }
 
     private func runHostIO(_ work: @escaping () async -> Bool) {
@@ -236,7 +252,22 @@ public struct SmoothMarkdownEditor: View {
 private struct EditorSlashCommand {
     let title: String
     let searchText: String
-    let command: MarkdownEditorCommand
+    let command: MarkdownEditorCommand?
+    let customCommand: MarkdownEditorSlashCommand?
+
+    init(title: String, searchText: String, command: MarkdownEditorCommand) {
+        self.title = title
+        self.searchText = searchText
+        self.command = command
+        self.customCommand = nil
+    }
+
+    init(custom: MarkdownEditorSlashCommand) {
+        self.title = custom.title
+        self.searchText = custom.searchText
+        self.command = nil
+        self.customCommand = custom
+    }
 
     static let builtIns: [Self] = [
         .init(title: "Text", searchText: "paragraph body plain normal", command: .paragraph),
@@ -265,6 +296,9 @@ private struct FormattedBlocksView: View {
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
+    let capabilities: MarkdownEditorCapabilities
+    let enableSlashCommands: Bool
+    let customSlashCommands: [MarkdownEditorSlashCommand]
     @State private var rangeStartID: String?
     @State private var rangeEndID: String?
     @State private var copiedRange = false
@@ -361,7 +395,10 @@ private struct FormattedBlocksView: View {
                             .accessibilityIdentifier("block-range-\(block.id)")
                             FormattedBlockRow(controller: controller, block: block,
                                               enableWikilinks: enableWikilinks,
-                                              wikilinkSuggestions: wikilinkSuggestions)
+                                              wikilinkSuggestions: wikilinkSuggestions,
+                                              capabilities: capabilities,
+                                              enableSlashCommands: enableSlashCommands,
+                                              customSlashCommands: customSlashCommands)
                         }
                         .padding(4)
                         .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
@@ -451,6 +488,9 @@ private struct FormattedBlockRow: View {
     let block: MarkdownDocumentBlock
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
+    let capabilities: MarkdownEditorCapabilities
+    let enableSlashCommands: Bool
+    let customSlashCommands: [MarkdownEditorSlashCommand]
     @State private var inlineSelection = NSRange(location: 0, length: 0)
     @State private var wikilinkSelectedIndex = 0
     @State private var slashSelectedIndex = 0
@@ -521,12 +561,15 @@ private struct FormattedBlockRow: View {
     }
 
     private var activeSlashMatch: MarkdownSlashCommandMatch? {
-        controller.slashCommandMatch(inBlock: block.id, selection: inlineSelection)
+        enableSlashCommands ? controller.slashCommandMatch(inBlock: block.id, selection: inlineSelection) : nil
     }
 
     private var visibleSlashCommands: [EditorSlashCommand] {
         guard let match = activeSlashMatch else { return [] }
-        return EditorSlashCommand.builtIns.filter {
+        let all = EditorSlashCommand.builtIns.filter {
+            ($0.command.map { capabilities.supports($0) && ($0 != .wikilink || enableWikilinks) } ?? true)
+        } + customSlashCommands.map(EditorSlashCommand.init(custom:))
+        return all.filter {
             match.query.isEmpty || $0.title.localizedCaseInsensitiveContains(match.query)
                 || $0.searchText.localizedCaseInsensitiveContains(match.query)
         }
@@ -559,8 +602,24 @@ private struct FormattedBlockRow: View {
 
     private func selectSlashCommand(_ item: EditorSlashCommand) {
         guard let match = activeSlashMatch else { return }
-        if controller.applySlashCommand(item.command, match: match) {
+        if let command = item.command,
+           capabilities.supports(command),
+           (command != .wikilink || enableWikilinks),
+           controller.applySlashCommand(command, match: match) {
             slashSelectedIndex = 0
+        }
+        if let custom = item.customCommand {
+            Task { @MainActor in
+                let markdown: String?
+                if let fixed = custom.markdown {
+                    markdown = fixed
+                } else {
+                    markdown = await custom.onSelected?(match.query)
+                }
+                if let markdown, controller.applyCustomSlashCommand(markdown, match: match) {
+                    slashSelectedIndex = 0
+                }
+            }
         }
     }
 
@@ -644,10 +703,18 @@ private struct FormattedBlockRow: View {
 
     private var inlineActions: some View {
         HStack(spacing: 12) {
-            Button("B") { apply(.bold) }.accessibilityLabel("Bold selection")
-            Button("I") { apply(.italic) }.accessibilityLabel("Italic selection")
-            Button("Link") { showLinkEditor = true }.accessibilityLabel("Link selection")
-            Button("Code") { apply(.code) }.accessibilityLabel("Inline code selection")
+            if capabilities.supports(.bold) {
+                Button("B") { apply(.bold) }.accessibilityLabel("Bold selection")
+            }
+            if capabilities.supports(.italic) {
+                Button("I") { apply(.italic) }.accessibilityLabel("Italic selection")
+            }
+            if capabilities.supports(.link) {
+                Button("Link") { showLinkEditor = true }.accessibilityLabel("Link selection")
+            }
+            if capabilities.supports(.inlineCode) {
+                Button("Code") { apply(.code) }.accessibilityLabel("Inline code selection")
+            }
         }
         .font(.caption.weight(.semibold))
         .buttonStyle(.bordered)
