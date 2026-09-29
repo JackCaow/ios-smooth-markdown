@@ -1,6 +1,30 @@
 import SmoothMarkdown
 import SwiftUI
 
+/// Shared type roles for the native example. Semantic styles follow Dynamic Type.
+enum DemoTypography {
+    static let pageTitle = Font.title3.weight(.semibold)
+    static let barTitle = Font.headline
+    static let body = Font.body
+    static let message = Font.subheadline
+    static let secondary = Font.subheadline
+    static let metadata = Font.caption
+    static let timestamp = Font.caption2
+
+    static func chatMarkdown(_ style: inout MarkdownStyleSheet, compactHeading: Bool = false) {
+        // Keep chat text compact while preserving the Flutter heading hierarchy.
+        style.paragraphFont = message
+        let headingStyles: [Font.TextStyle] = compactHeading
+            ? [.title3, .headline, .subheadline, .subheadline, .caption, .caption2]
+            : [.title2, .title3, .headline, .subheadline, .subheadline, .caption]
+        style.headingFonts = headingStyles.map { .system($0, weight: .semibold) }
+        style.codeFont = .system(.subheadline, design: .monospaced)
+        style.tableHeaderFont = message.weight(.semibold)
+        style.tableCellFont = message
+        style.listBulletFont = message
+    }
+}
+
 enum DemoTheme: String, CaseIterable, Identifiable {
     case defaultLight = "Default Light"
     case defaultDark = "Default Dark"

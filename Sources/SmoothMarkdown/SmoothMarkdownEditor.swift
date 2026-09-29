@@ -13,6 +13,7 @@ public struct SmoothMarkdownEditor: View {
     @State private var searchHasNavigated = false
     @State private var focusMode = false
     @FocusState private var searchFieldFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private let onSave: ((String) -> Void)?
     private let hostIO: MarkdownEditorHostIO
     private let hasImagePicker: Bool
@@ -68,31 +69,11 @@ public struct SmoothMarkdownEditor: View {
     public var body: some View {
         VStack(spacing: 0) {
             if !focusMode {
-                HStack {
-                    Picker("Mode", selection: $controller.mode) {
-                        ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
-                            Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    focusToggle
-                    Menu("File") {
-                        if hasImagePicker {
-                            Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
-                        }
-                        if hasMarkdownImporter {
-                            Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
-                        }
-                        Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
-                        Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
-                    }
-                    .disabled(hostIOBusy)
-                    if let onSave {
-                        Button("Save") {
-                            onSave(controller.text)
-                            controller.markSaved()
-                        }
-                        .disabled(!controller.isDirty)
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(alignment: .leading, spacing: 8) { editorHeaderControls }
+                    } else {
+                        HStack { editorHeaderControls }
                     }
                 }
                 .padding(.horizontal)
@@ -100,7 +81,7 @@ public struct SmoothMarkdownEditor: View {
 
             if !focusMode {
                 ScrollView(.horizontal) {
-                    HStack(spacing: 2) {
+                    HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 12 : 8) {
                         Button("Undo") { controller.undo() }.disabled(!controller.canUndo)
                         Button("Redo") { controller.redo() }.disabled(!controller.canRedo)
                         if controller.mode != .formatted {
@@ -111,8 +92,9 @@ public struct SmoothMarkdownEditor: View {
                     }
                     .buttonStyle(.borderless)
                     .padding(.horizontal)
+                    .padding(.vertical, dynamicTypeSize.isAccessibilitySize ? 8 : 0)
                 }
-                .frame(height: 44)
+                .frame(minHeight: 44)
             }
 
             if searchOpen || !focusMode {
@@ -198,6 +180,35 @@ public struct SmoothMarkdownEditor: View {
         }
         .onChange(of: searchQuery) { _, _ in searchIndex = 0; searchHasNavigated = false }
         .onChange(of: controller.text) { _, _ in searchIndex = 0; searchHasNavigated = false }
+    }
+
+    @ViewBuilder
+    private var editorHeaderControls: some View {
+        Picker("Mode", selection: $controller.mode) {
+            ForEach(MarkdownEditorMode.allCases, id: \.self) { mode in
+                Text(mode == .formatted ? "Blocks" : mode.rawValue.capitalized).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        focusToggle
+        Menu("File") {
+            if hasImagePicker {
+                Button("Insert Image") { runHostIO { await hostIO.pickImage() } }
+            }
+            if hasMarkdownImporter {
+                Button("Import Markdown") { runHostIO { await hostIO.importMarkdown() } }
+            }
+            Button("Export Markdown") { runHostIO { await hostIO.exportMarkdown() } }
+            Button("Export PDF") { runHostIO { await hostIO.exportPDF() } }
+        }
+        .disabled(hostIOBusy)
+        if let onSave {
+            Button("Save") {
+                onSave(controller.text)
+                controller.markSaved()
+            }
+            .disabled(!controller.isDirty)
+        }
     }
 
     private var searchMatches: [NSRange] { controller.findMatches(searchQuery) }
@@ -316,6 +327,7 @@ private struct EditorSlashCommand {
 
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
@@ -327,7 +339,15 @@ private struct FormattedBlocksView: View {
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     @State private var rangeStartID: String?
     @State private var rangeEndID: String?
+    @State private var textRangeStart: MarkdownSemanticTextPosition?
+    @State private var textRangeEnd: MarkdownSemanticTextPosition?
     @State private var copiedRange = false
+    @State private var showingEditingTips = false
+
+    private var textRange: MarkdownSemanticTextSelection? {
+        guard let textRangeStart, let textRangeEnd else { return nil }
+        return .init(anchor: textRangeStart, focus: textRangeEnd)
+    }
 
     private enum Row: Identifiable {
         case block(MarkdownDocumentBlock)
@@ -366,14 +386,28 @@ private struct FormattedBlocksView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(rangeStartID == nil ? "Tap Start range on a block, then End range on another block." :
-                         rangeEndID == nil ? "Choose the last block in the range." : "Block range selected.")
+                if dynamicTypeSize.isAccessibilitySize {
+                    DisclosureGroup("Editing tips", isExpanded: $showingEditingTips) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                            Text("Tap Start range on a block, then End range on another block.")
+                            Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    if !dynamicTypeSize.isAccessibilitySize || rangeStartID != nil {
+                        Text(rangeStartID == nil ? "Tap Start range on a block, then End range on another block." :
+                             rangeEndID == nil ? "Choose the last block in the range." : "Block range selected.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     HStack(spacing: 8) {
                         if let rangeStartID, let rangeEndID {
                             Button("Copy Markdown") {
@@ -394,6 +428,42 @@ private struct FormattedBlocksView: View {
                         if rangeStartID != nil {
                             Button("Clear range") { clearRange() }
                                 .accessibilityIdentifier("block-range-clear")
+                        }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack(spacing: 8) {
+                        if let textRange {
+                            Button("Copy text range") {
+                                if let copied = controller.copySemanticTextRange(textRange) {
+                                    UIPasteboard.general.string = copied
+                                    copiedRange = true
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-copy")
+                            Button("Delete text range", role: .destructive) {
+                                if controller.deleteSemanticTextRange(textRange) { clearRange() }
+                            }
+                            .disabled(!controller.canReplaceSemanticTextRange(textRange))
+                            .accessibilityIdentifier("text-range-delete")
+                            Button("Replace from clipboard") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceSemanticTextRange(textRange, with: value) {
+                                    clearRange()
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-replace")
+                        }
+                        if textRangeStart != nil {
+                            Button("Clear text range") { clearRange() }
+                                .accessibilityIdentifier("text-range-clear")
                         }
                     }
                     .font(.caption)
@@ -427,7 +497,16 @@ private struct FormattedBlocksView: View {
                                               customSlashCommands: customSlashCommands,
                                               customBlockMatcher: customBlockMatcher,
                                               customBlockBuilder: customBlockBuilder,
-                                              customBlockEditorBuilder: customBlockEditorBuilder)
+                                              customBlockEditorBuilder: customBlockEditorBuilder,
+                                              onCaptureTextPosition: { position, isStart in
+                        if isStart {
+                            textRangeStart = position
+                            textRangeEnd = nil
+                        } else {
+                            textRangeEnd = position
+                        }
+                        copiedRange = false
+                    })
                         }
                         .padding(4)
                         .background(isInSelectedRange(block.id) ? Color.accentColor.opacity(0.12) : .clear,
@@ -446,6 +525,8 @@ private struct FormattedBlocksView: View {
     private func clearRange() {
         rangeStartID = nil
         rangeEndID = nil
+        textRangeStart = nil
+        textRangeEnd = nil
         copiedRange = false
     }
 
@@ -469,6 +550,7 @@ private struct PendingListParagraphField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
         field.placeholder = "Paragraph"
         field.accessibilityIdentifier = "list-exit-paragraph"
         field.text = controller.pendingListParagraph?.draft
@@ -523,6 +605,7 @@ private struct FormattedBlockRow: View {
     let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var customBlockEditing = false
     @State private var customBlockExpectedText: String?
     @State private var inlineSelection = NSRange(location: 0, length: 0)
@@ -540,13 +623,16 @@ private struct FormattedBlockRow: View {
             case let .heading(level, _):
                 blockLabel("Heading \(level)")
                 inlineActions
-                inlineTextView(font: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold),
+                textRangeActions
+                inlineTextView(font: UIFontMetrics(forTextStyle: headingTextStyle(level))
+                    .scaledFont(for: .systemFont(ofSize: CGFloat(32 - (level - 1) * 3), weight: .bold)),
                                identifier: "heading-\(block.id)")
                 wikilinkSuggestionPanel
                 slashSuggestionPanel
             case .paragraph:
                 blockLabel("Paragraph")
                 inlineActions
+                textRangeActions
                 inlineTextView(font: .preferredFont(forTextStyle: .body), identifier: "paragraph-\(block.id)")
                 wikilinkSuggestionPanel
                 slashSuggestionPanel
@@ -754,6 +840,15 @@ private struct FormattedBlockRow: View {
         .frame(minHeight: 44)
     }
 
+    private func headingTextStyle(_ level: Int) -> UIFont.TextStyle {
+        switch level {
+        case 1: .largeTitle
+        case 2: .title1
+        case 3: .title2
+        default: .title3
+        }
+    }
+
     private func selectWikilink(_ title: String) {
         if let next = controller.insertWikilinkSuggestion(title, inBlock: block.id,
                                                           selection: inlineSelection) {
@@ -800,6 +895,21 @@ private struct FormattedBlockRow: View {
         .font(.caption.weight(.semibold))
         .buttonStyle(.bordered)
         .disabled(inlineSelection.length == 0)
+    }
+
+    private var textRangeActions: some View {
+        HStack(spacing: 8) {
+            Button("Start at selection") {
+                onCaptureTextPosition(.init(blockID: block.id, offset: inlineSelection.location), true)
+            }
+            .accessibilityIdentifier("text-range-start-\(block.id)")
+            Button("End at selection") {
+                onCaptureTextPosition(.init(blockID: block.id, offset: NSMaxRange(inlineSelection)), false)
+            }
+            .accessibilityIdentifier("text-range-end-\(block.id)")
+        }
+        .font(.caption)
+        .buttonStyle(.bordered)
     }
 
     private func apply(_ mark: MarkdownInlineMark) {
@@ -1052,6 +1162,7 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.delegate = context.coordinator
         field.addTarget(context.coordinator, action: #selector(Coordinator.textChanged(_:)), for: .editingChanged)
         field.font = .preferredFont(forTextStyle: .body)
+        field.adjustsFontForContentSizeCategory = true
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
         field.returnKeyType = .default
@@ -1133,6 +1244,7 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
         view.textContainer.lineFragmentPadding = 0
         view.font = font
+        view.adjustsFontForContentSizeCategory = true
         view.text = text
         view.autocorrectionType = .default
         view.accessibilityIdentifier = identifier
@@ -1203,7 +1315,9 @@ private struct SourceTextView: UIViewRepresentable {
         let view = UITextView()
         view.delegate = context.coordinator
         view.accessibilityIdentifier = "markdown-source"
-        view.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
+        view.font = UIFontMetrics(forTextStyle: .body)
+            .scaledFont(for: .monospacedSystemFont(ofSize: 15, weight: .regular))
+        view.adjustsFontForContentSizeCategory = true
         view.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         view.autocapitalizationType = .none
         view.autocorrectionType = .no

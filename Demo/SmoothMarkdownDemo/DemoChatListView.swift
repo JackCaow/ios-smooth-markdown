@@ -54,6 +54,7 @@ private struct DemoChatMessage: Identifiable {
 
 /// Mirrors Flutter example/lib/chat_list_demo.dart with local responses and simulated typing.
 struct DemoChatListView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let parentIsDark: Bool
 
     @State private var messages: [DemoChatMessage] = []
@@ -139,19 +140,41 @@ struct DemoChatListView: View {
     }
 
     private var titleBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                titleIdentity
+                Spacer(minLength: 0)
+                actionButtons
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                titleIdentity
+                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(isDark ? Color(red: 0.173, green: 0.173, blue: 0.18) : .white)
+    }
+
+    private var titleIdentity: some View {
         HStack(spacing: 12) {
             Image(systemName: "brain.head.profile")
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(.blue, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI Assistant").font(.headline)
+                Text("AI Assistant").font(DemoTypography.barTitle)
                 Text(isStreaming ? "Typing..." : "Online")
-                    .font(.caption)
+                    .font(DemoTypography.metadata)
                     .foregroundStyle(isStreaming ? .blue : .green)
                     .accessibilityIdentifier("chat-assistant-status")
             }
-            Spacer()
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
             Button {
                 darkOverride = !isDark
             } label: {
@@ -168,22 +191,19 @@ struct DemoChatListView: View {
             .accessibilityLabel("Cache Statistics")
             .accessibilityIdentifier("chat-cache-statistics")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(isDark ? Color(red: 0.173, green: 0.173, blue: 0.18) : .white)
+        .labelStyle(.iconOnly)
     }
 
     private func bubble(_ message: DemoChatMessage) -> some View {
         HStack(alignment: .top, spacing: 8) {
             if !message.isUser { avatar("brain.head.profile", color: .blue) }
-            if message.isUser { Spacer(minLength: 36) }
+            if message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             VStack(alignment: .leading, spacing: 4) {
                 if message.isStreaming, let stream = replyStreams.stream(for: message.id) {
                     DemoStreamingMarkdownBubble(stream: stream,
                                                 styleSheet: bubbleStyle(isUser: false),
                                                 plugins: nil,
-                                                emptyLabel: "Assistant is typing",
-                                                onVisibleChange: { scrollRevision += 1 })
+                                                emptyLabel: "Assistant is typing")
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
@@ -192,7 +212,7 @@ struct DemoChatListView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(message.timestamp, style: .time)
-                    .font(.system(size: 11))
+                    .font(DemoTypography.timestamp)
                     .foregroundStyle(message.isUser ? Color.white.opacity(0.7) : .secondary)
                     .accessibilityIdentifier(message.isUser ? "chat-user-bubble" : "chat-assistant-bubble")
             }
@@ -200,9 +220,9 @@ struct DemoChatListView: View {
             .padding(.vertical, 10)
             .background(message.isUser ? Color(red: 0, green: 0.478, blue: 1) : bubbleColor,
                         in: RoundedRectangle(cornerRadius: 20))
-            .frame(maxWidth: 310,
+            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? nil : 310,
                    alignment: message.isUser ? .trailing : .leading)
-            if !message.isUser { Spacer(minLength: 36) }
+            if !message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             if message.isUser { avatar("person.fill", color: .gray) }
         }
         .frame(maxWidth: .infinity)
@@ -210,7 +230,7 @@ struct DemoChatListView: View {
 
     private func avatar(_ symbol: String, color: Color) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 16))
+            .font(DemoTypography.message)
             .foregroundStyle(.white)
             .frame(width: 32, height: 32)
             .background(color, in: Circle())
@@ -221,11 +241,11 @@ struct DemoChatListView: View {
         style.backgroundColor = nil
         style.contentPadding = 0
         style.blockSpacing = 8
+        DemoTypography.chatMarkdown(&style)
         if isUser {
             style.textColor = .white
             style.headingColor = .white
             style.linkColor = .white
-            style.paragraphFont = .system(size: 15)
         }
         return style
     }

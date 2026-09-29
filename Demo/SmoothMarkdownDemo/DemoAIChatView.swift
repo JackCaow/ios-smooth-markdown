@@ -50,6 +50,33 @@ private struct AIChatFixture: Decodable {
     }
 }
 
+/// Keeps mock chunks tied to elapsed time when Markdown layout delays the main actor.
+enum MockAIChatSchedule {
+    static func chunks(_ response: String, sizeUTF16: Int) -> [String] {
+        let units = Array(response.utf16)
+        var chunks: [String] = []
+        var offset = 0
+        let chunkSize = max(1, sizeUTF16)
+        while offset < units.count {
+            var end = min(offset + chunkSize, units.count)
+            // Never split an emoji's UTF-16 surrogate pair across updates.
+            if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]),
+               (0xDC00...0xDFFF).contains(units[end]) {
+                end += 1
+            }
+            chunks.append(String(decoding: units[offset..<end], as: UTF16.self))
+            offset = end
+        }
+        return chunks
+    }
+
+    static func dueChunkCount(elapsedMillis: UInt64, delayMillis: UInt64, totalChunks: Int) -> Int {
+        guard totalChunks > 0 else { return 0 }
+        let elapsedIntervals = elapsedMillis / max(1, delayMillis)
+        return Int(min(UInt64(totalChunks - 1), elapsedIntervals)) + 1
+    }
+}
+
 private struct AIChatMessage: Identifiable {
     let id = UUID()
     var content: String
@@ -77,6 +104,7 @@ private enum LiveChatConfiguration {
 
 /// Counterpart of Flutter's AI Chat demo, with mock and optional live streams.
 struct DemoAIChatView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let parentIsDark: Bool
 
     @State private var messages: [AIChatMessage] = []
@@ -146,6 +174,7 @@ struct DemoAIChatView: View {
                             .padding(.horizontal, 16)
                             .padding(.vertical, 16)
                         }
+                        .accessibilityIdentifier("ai-chat-message-list")
                         .defaultScrollAnchor(.bottom)
                         .onChange(of: scrollRevision) { _, _ in
                             reader.scrollTo("ai-chat-bottom", anchor: .bottom)
@@ -172,21 +201,44 @@ struct DemoAIChatView: View {
     }
 
     private var titleBar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                titleIdentity
+                Spacer(minLength: 0)
+                actionButtons
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                titleIdentity
+                actionButtons.frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(surfaceColor)
+    }
+
+    private var titleIdentity: some View {
         HStack(spacing: 12) {
             Image(systemName: "sparkles")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.headline.weight(.semibold))
                 .foregroundStyle(.white)
                 .frame(width: 36, height: 36)
                 .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
                             in: RoundedRectangle(cornerRadius: 12))
             VStack(alignment: .leading, spacing: 2) {
-                Text("AI Chat Demo").font(.headline)
+                Text("AI Chat Demo").font(DemoTypography.barTitle)
                 Text(modeStatus)
-                    .font(.caption)
+                    .font(DemoTypography.metadata)
                     .foregroundStyle(isStreaming ? .blue : liveAPIAvailable ? .green : .orange)
                     .accessibilityIdentifier("ai-chat-status")
             }
-            Spacer()
+            .layoutPriority(1)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: dynamicTypeSize.isAccessibilitySize ? 4 : 8) {
             Button {
                 newChat()
             } label: {
@@ -209,9 +261,7 @@ struct DemoAIChatView: View {
             .accessibilityLabel("API 设置")
             .accessibilityIdentifier("ai-chat-settings")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(surfaceColor)
+        .labelStyle(.iconOnly)
     }
 
     private func quickPrompts(_ fixture: AIChatFixture) -> some View {
@@ -220,7 +270,7 @@ struct DemoAIChatView: View {
                 ForEach(fixture.quickPrompts) { prompt in
                     Button(prompt.label) { send(prompt.prompt) }
                         .buttonStyle(.bordered)
-                        .font(.caption)
+                        .font(DemoTypography.metadata)
                         .disabled(isStreaming)
                         .accessibilityHint(prompt.description)
                         .accessibilityIdentifier("ai-chat-prompt-\(prompt.id)")
@@ -235,14 +285,13 @@ struct DemoAIChatView: View {
     private func bubble(_ message: AIChatMessage) -> some View {
         HStack(alignment: .top, spacing: 8) {
             if !message.isUser { avatar("sparkles", color: .indigo) }
-            if message.isUser { Spacer(minLength: 36) }
+            if message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             VStack(alignment: .leading, spacing: 4) {
                 if message.isStreaming, let stream = replyStreams.stream(for: message.id) {
                     DemoStreamingMarkdownBubble(stream: stream,
                                                 styleSheet: bubbleStyle(isUser: false),
                                                 plugins: plugins,
-                                                emptyLabel: "AI 正在输入",
-                                                onVisibleChange: { scrollRevision += 1 })
+                                                emptyLabel: "AI 正在输入")
                 } else {
                     SmoothMarkdownView(markdown: message.content,
                                        styleSheet: bubbleStyle(isUser: message.isUser),
@@ -252,14 +301,14 @@ struct DemoAIChatView: View {
                 }
                 HStack(spacing: 10) {
                     Text(message.timestamp, style: .time)
-                        .font(.system(size: 11))
+                        .font(DemoTypography.timestamp)
                         .foregroundStyle(message.isUser ? Color.white.opacity(0.7) : .secondary)
                     if !message.isUser && !message.content.isEmpty {
                         Button {
                             source = .init(markdown: message.content)
                         } label: {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 11))
+                                .font(DemoTypography.timestamp)
                         }
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("查看 Markdown 源码")
@@ -271,8 +320,9 @@ struct DemoAIChatView: View {
             .padding(.vertical, 10)
             .background(message.isUser ? Color(red: 0, green: 0.478, blue: 1) : surfaceColor,
                         in: RoundedRectangle(cornerRadius: 20))
-            .frame(maxWidth: 310, alignment: message.isUser ? .trailing : .leading)
-            if !message.isUser { Spacer(minLength: 36) }
+            .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? nil : 310,
+                   alignment: message.isUser ? .trailing : .leading)
+            if !message.isUser { Spacer(minLength: dynamicTypeSize.isAccessibilitySize ? 8 : 36) }
             if message.isUser { avatar("person.fill", color: .gray) }
         }
         .frame(maxWidth: .infinity)
@@ -280,7 +330,7 @@ struct DemoAIChatView: View {
 
     private func avatar(_ symbol: String, color: Color) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 15))
+            .font(DemoTypography.message)
             .foregroundStyle(.white)
             .frame(width: 32, height: 32)
             .background(color, in: RoundedRectangle(cornerRadius: 10))
@@ -291,11 +341,11 @@ struct DemoAIChatView: View {
         style.backgroundColor = nil
         style.contentPadding = 0
         style.blockSpacing = 8
+        DemoTypography.chatMarkdown(&style)
         if isUser {
             style.textColor = .white
             style.headingColor = .white
             style.linkColor = .white
-            style.paragraphFont = .system(size: 15)
         }
         return style
     }
@@ -379,6 +429,7 @@ struct DemoAIChatView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .accessibilityIdentifier("ai-chat-settings-form")
             .navigationTitle("API 设置")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -460,22 +511,28 @@ struct DemoAIChatView: View {
                 return
             }
             let response = fixture.response(for: text)
-            let units = Array(response.utf16)
-            var offset = 0
-            while offset < units.count {
+            let chunks = MockAIChatSchedule.chunks(response, sizeUTF16: fixture.chunkSizeUTF16)
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            var nextChunk = 0
+            while nextChunk < chunks.count {
                 guard !Task.isCancelled, replyStreams.runID == currentRunID else { return }
-                var end = min(offset + fixture.chunkSizeUTF16, units.count)
-                // Preserve a surrogate pair at a UTF-16 chunk boundary so append-only
-                // buffering still produces the exact fixture response at completion.
-                if end < units.count, (0xD800...0xDBFF).contains(units[end - 1]),
-                   (0xDC00...0xDFFF).contains(units[end]) {
-                    end += 1
+                let elapsed = UInt64(max(0, (ProcessInfo.processInfo.systemUptime - startedAt) * 1_000))
+                let due = MockAIChatSchedule.dueChunkCount(elapsedMillis: elapsed,
+                                                            delayMillis: fixture.delayMillis,
+                                                            totalChunks: chunks.count)
+                if due > nextChunk {
+                    guard replyStreams.append(chunks[nextChunk..<due].joined(),
+                                              to: messageID, in: currentRunID) else { return }
+                    nextChunk = due
                 }
-                let fragment = String(decoding: units[offset..<end], as: UTF16.self)
-                guard replyStreams.append(fragment, to: messageID, in: currentRunID) else { return }
-                offset = end
+                let nextDeadline = startedAt + Double(nextChunk) * Double(fixture.delayMillis) / 1_000
+                let remaining = nextDeadline - ProcessInfo.processInfo.systemUptime
                 do {
-                    try await Task.sleep(nanoseconds: fixture.delayMillis * 1_000_000)
+                    if remaining > 0 {
+                        try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                    } else {
+                        await Task.yield()
+                    }
                 } catch { return }
             }
             guard !Task.isCancelled,
