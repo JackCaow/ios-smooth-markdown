@@ -32,6 +32,36 @@ public struct MarkdownSemanticTextSelection: Equatable {
     }
 }
 
+/// A contiguous run of sibling items inside one source-backed list block.
+public struct MarkdownSemanticListItemSelection: Equatable {
+    public let blockID: String
+    public let anchorIndex: Int
+    public let focusIndex: Int
+
+    public init(blockID: String, anchorIndex: Int, focusIndex: Int) {
+        self.blockID = blockID
+        self.anchorIndex = anchorIndex
+        self.focusIndex = focusIndex
+    }
+}
+
+/// A rectangular group of table cells. Row zero is the header; body rows start at one.
+public struct MarkdownSemanticTableCellSelection: Equatable {
+    public let blockID: String
+    public let anchorRow: Int
+    public let anchorColumn: Int
+    public let focusRow: Int
+    public let focusColumn: Int
+
+    public init(blockID: String, anchorRow: Int, anchorColumn: Int, focusRow: Int, focusColumn: Int) {
+        self.blockID = blockID
+        self.anchorRow = anchorRow
+        self.anchorColumn = anchorColumn
+        self.focusRow = focusRow
+        self.focusColumn = focusColumn
+    }
+}
+
 /// Source-backed editing commands. Offsets use UTF-16, matching UITextView selections.
 @MainActor
 public final class MarkdownEditorController: ObservableObject {
@@ -203,6 +233,107 @@ public final class MarkdownEditorController: ObservableObject {
             result[block.id] = NSRange(location: start, length: end - start)
         }
         return result
+    }
+
+    private func resolvedListItems(_ selection: MarkdownSemanticListItemSelection)
+        -> (MarkdownSourceList, ClosedRange<Int>)? {
+        guard let block = semanticDocument.blockById(selection.blockID),
+              case let .list(list) = block.kind,
+              list.items.indices.contains(selection.anchorIndex),
+              list.items.indices.contains(selection.focusIndex),
+              selection.anchorIndex != selection.focusIndex else { return nil }
+        let range = min(selection.anchorIndex, selection.focusIndex)...max(selection.anchorIndex, selection.focusIndex)
+        let indent = list.items[range.lowerBound].indent
+        guard list.items[range].allSatisfy({ $0.indent == indent }) else { return nil }
+        return (list, range)
+    }
+
+    public func copySemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> String? {
+        guard let (list, range) = resolvedListItems(selection) else { return nil }
+        return list.items[range].map(\.source).joined()
+    }
+
+    private func deletedListItemMarkdown(_ selection: MarkdownSemanticListItemSelection) -> String? {
+        guard let (_, range) = resolvedListItems(selection) else { return nil }
+        let document = semanticDocument
+        guard let updated = document.updatingList(selection.blockID, {
+            $0.removingSiblingItems(from: range.lowerBound, to: range.upperBound)
+        })?.toMarkdown(), updated != text else { return nil }
+        let reparsed = codec.parse(updated)
+        guard reparsed.toMarkdown() == updated, reparsed.blocks.count == document.blocks.count,
+              zip(reparsed.blocks, document.blocks).allSatisfy({ next, old in
+                  if old.id == selection.blockID {
+                      if case .list = next.kind {
+                          return next.id == old.id && next.leadingTrivia == old.leadingTrivia
+                      }
+                      return false
+                  }
+                  return next.id == old.id && next.kind == old.kind && next.source == old.source &&
+                      next.leadingTrivia == old.leadingTrivia
+              }) else { return nil }
+        return updated
+    }
+
+    public func canDeleteSemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> Bool {
+        deletedListItemMarkdown(selection) != nil
+    }
+
+    @discardableResult
+    public func deleteSemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> Bool {
+        guard let updated = deletedListItemMarkdown(selection) else { return false }
+        return replaceSemanticMarkdown(updated)
+    }
+
+    private func resolvedTableCells(_ selection: MarkdownSemanticTableCellSelection)
+        -> (MarkdownSourceTable, ClosedRange<Int>, ClosedRange<Int>)? {
+        guard let block = semanticDocument.blockById(selection.blockID),
+              case let .table(table) = block.kind else { return nil }
+        let rows = min(selection.anchorRow, selection.focusRow)...max(selection.anchorRow, selection.focusRow)
+        let columns = min(selection.anchorColumn, selection.focusColumn)...max(selection.anchorColumn, selection.focusColumn)
+        guard rows.lowerBound >= 0, rows.upperBound <= table.rows.count,
+              columns.lowerBound >= 0, columns.upperBound < table.columnCount,
+              rows.count * columns.count > 1 else { return nil }
+        return (table, rows, columns)
+    }
+
+    public func semanticTableCellRectangle(_ selection: MarkdownSemanticTableCellSelection)
+        -> (rows: ClosedRange<Int>, columns: ClosedRange<Int>)? {
+        guard let (_, rows, columns) = resolvedTableCells(selection) else { return nil }
+        return (rows, columns)
+    }
+
+    public func copySemanticTableCellsAsTSV(_ selection: MarkdownSemanticTableCellSelection) -> String? {
+        guard let (table, rows, columns) = resolvedTableCells(selection) else { return nil }
+        return rows.map { row in
+            columns.map { column in
+                let source = row == 0 ? table.headers[column] : table.rows[row - 1][column]
+                return source.replacingOccurrences(of: "\\|", with: "|")
+            }.joined(separator: "\t")
+        }.joined(separator: "\n")
+    }
+
+    private func clearedTableCellsMarkdown(_ selection: MarkdownSemanticTableCellSelection) -> String? {
+        guard let (_, rows, columns) = resolvedTableCells(selection) else { return nil }
+        return semanticDocument.updatingTable(selection.blockID, preservingSource: true) { table in
+            var result = table
+            for row in rows {
+                for column in columns {
+                    if row == 0 { result.headers[column] = "" }
+                    else { result.rows[row - 1][column] = "" }
+                }
+            }
+            return result
+        }?.toMarkdown()
+    }
+
+    public func canClearSemanticTableCells(_ selection: MarkdownSemanticTableCellSelection) -> Bool {
+        clearedTableCellsMarkdown(selection) != nil
+    }
+
+    @discardableResult
+    public func clearSemanticTableCells(_ selection: MarkdownSemanticTableCellSelection) -> Bool {
+        guard let updated = clearedTableCellsMarkdown(selection) else { return false }
+        return replaceSemanticMarkdown(updated)
     }
 
     private func isHeading(_ block: MarkdownDocumentBlock) -> Bool {

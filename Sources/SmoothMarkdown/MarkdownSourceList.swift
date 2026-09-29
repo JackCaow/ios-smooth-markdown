@@ -80,6 +80,19 @@ public struct MarkdownSourceList: Equatable {
 
     public func toMarkdown() -> String { items.map(\.source).joined() }
 
+    /// Deletes a contiguous run of siblings while retaining every other item's exact source.
+    /// Nested descendants are never silently detached from a selected parent.
+    public func removingSiblingItems(from first: Int, to last: Int) -> Self? {
+        guard items.indices.contains(first), items.indices.contains(last), first != last else { return nil }
+        let range = min(first, last)...max(first, last)
+        guard range.count < items.count else { return nil }
+        let indent = items[range.lowerBound].indent
+        guard items[range].allSatisfy({ $0.indent == indent }) else { return nil }
+        var next = items
+        next.removeSubrange(range)
+        return .init(items: next)
+    }
+
     public func replacingItemContent(at index: Int, with content: String) -> Self? {
         guard items.indices.contains(index), let item = items[index].replacingContent(content) else { return nil }
         var next = items
