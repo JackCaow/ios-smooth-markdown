@@ -729,6 +729,14 @@ private struct FormattedBlocksView: View {
                                 }
                             }
                             .accessibilityIdentifier("text-range-replace")
+                            Button("Paste Markdown blocks") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceSemanticTextRangeWithMarkdownBlocks(textRange,
+                                                                                         markdown: value) {
+                                    clearRange()
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-paste-blocks")
                         }
                         if textRangeStart != nil {
                             Button("Clear text range") { clearRange() }
