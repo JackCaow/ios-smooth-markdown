@@ -79,5 +79,36 @@ final class MarkdownTypographyTests: XCTestCase {
         XCTAssertEqual(thirdParagraph?.firstLineHeadIndent, 0)
         XCTAssertEqual(thirdParagraph?.paragraphSpacingBefore, 0)
     }
+
+    func testSelectableReaderKeepsOneTextKitLayoutForMeasurementAndDecorations() {
+        let source = """
+        # 🚀 完整 Markdown 功能展示
+
+        欢迎来到 Flutter Smooth Markdown 的完整功能演示页面！
+
+        ## 📝 我的建议 - 粗体标题
+
+        标题现在支持所有行内格式，包括粗体、斜体、代码、链接等！
+        """
+        let document = ReaderSelectionDocument.compose(Array(MarkdownSyntax.parse(source).children),
+                                                       enableHTML: false, plugins: nil)!
+        let reader = ReaderSelectionTextView(document: document, styleSheet: .light(),
+                                              onLinkTap: nil, onTextLongPress: nil,
+                                              selectable: true, onCharacterTap: nil)
+        let host = UIHostingController(rootView: reader)
+        host.view.frame = CGRect(x: 0, y: 0, width: 370, height: 900)
+        host.view.layoutIfNeeded()
+        func quoteView(_ view: UIView) -> QuoteTextView? {
+            if let quote = view as? QuoteTextView { return quote }
+            return view.subviews.lazy.compactMap(quoteView).first
+        }
+        guard let native = quoteView(host.view) else { return XCTFail("Reader text view missing") }
+        XCTAssertNil(native.textLayoutManager, "TextKit 2 would be replaced after the first glyph geometry read")
+        let before = native.sizeThatFits(CGSize(width: 370, height: CGFloat.greatestFiniteMagnitude)).height
+        native.layoutManager.ensureLayout(for: native.textContainer)
+        let after = native.sizeThatFits(CGSize(width: 370, height: CGFloat.greatestFiniteMagnitude)).height
+        XCTAssertEqual(before, after, accuracy: 1)
+        XCTAssertGreaterThanOrEqual(after + 1, native.layoutManager.usedRect(for: native.textContainer).maxY)
+    }
 }
 #endif

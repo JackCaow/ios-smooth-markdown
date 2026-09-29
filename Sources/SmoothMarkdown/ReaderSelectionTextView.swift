@@ -15,7 +15,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     let onCharacterTap: ((Int) -> Void)?
 
     func makeUIView(context: Context) -> QuoteTextView {
-        let view = QuoteTextView()
+        // Decorations use NSLayoutManager glyph coordinates. Creating a default
+        // UITextView uses TextKit 2 on iOS 16+, then accessing layoutManager
+        // while drawing switches it to TextKit 1 after SwiftUI has measured it.
+        // Keep measurement, text drawing, and decoration geometry on TextKit 1.
+        let view = QuoteTextView(usingTextLayoutManager: false)
         view.backgroundColor = .clear
         view.isEditable = false
         // Conversation bubbles own the first long press. Enabling UITextView's
@@ -381,6 +385,8 @@ final class QuoteTextView: UITextView {
     }
 
     override func draw(_ rect: CGRect) {
+        // Geometry below must come from the completed layout used by the text.
+        layoutManager.ensureLayout(for: textContainer)
         let quoteFrames = quoteFrames()
         if let quoteBackgroundColor {
             quoteBackgroundColor.setFill()
