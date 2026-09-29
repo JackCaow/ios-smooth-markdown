@@ -1487,7 +1487,7 @@ private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
-    @State private var focusRequest: (index: Int, token: UUID)?
+    @State private var focusRequest: (index: Int, continuationIndex: Int?, offset: Int, token: UUID)?
     @State private var selectedItems: MarkdownSemanticListItemSelection?
     @State private var rangeLinkDestination = "https://"
     @State private var showingRangeLinkEditor = false
@@ -1497,6 +1497,12 @@ private struct FormattedListView: View {
         let first = min(selectedItems.anchorIndex, selectedItems.focusIndex)
         let last = max(selectedItems.anchorIndex, selectedItems.focusIndex)
         return (first...last).contains(index)
+    }
+
+    private func requestedFocus(for index: Int, continuationIndex: Int? = nil) -> (token: UUID, offset: Int)? {
+        guard let focusRequest, focusRequest.index == index,
+              focusRequest.continuationIndex == continuationIndex else { return nil }
+        return (focusRequest.token, focusRequest.offset)
     }
 
     var body: some View {
@@ -1540,6 +1546,7 @@ private struct FormattedListView: View {
                         } else {
                             Text(item.marker).font(.system(.body, design: .monospaced))
                         }
+                        let sourceAtRender = controller.text
                         FormattedListItemField(text: Binding(get: {
                             guard let block = controller.semanticDocument.blockById(blockID),
                                   case let .list(current) = block.kind,
@@ -1556,14 +1563,21 @@ private struct FormattedListView: View {
                                     selectedItems = selection
                                 }
                             },
-                            focusRequest: focusRequest?.index == index ? focusRequest?.token : nil,
+                            focusRequest: requestedFocus(for: index),
                             onSubmit: { contentOffset in
                                 let split = contentOffset < (item.content as NSString).length
                                 if controller.submitSemanticListItem(id: blockID, at: index, contentOffset: contentOffset), split {
-                                    focusRequest = (index + 1, UUID())
+                                    focusRequest = (index + 1, nil, 0, UUID())
                                 }
                         }, onIndent: { outdent in
                             _ = changeIndent(at: index, outdent: outdent)
+                        }, onStructuredPaste: { range, markdown in
+                            guard MarkdownEditorController.isStructuredBlockPaste(markdown, hasMarkedText: false),
+                                  let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                    id: blockID, index: index, range: range, markdown: markdown,
+                                    ifTextIs: sourceAtRender) else { return false }
+                            focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                            return true
                         })
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
                         .frame(maxWidth: .infinity)
@@ -1580,7 +1594,8 @@ private struct FormattedListView: View {
                     }
                     ForEach(item.continuations.indices, id: \.self) { lineIndex in
                         let continuation = item.continuations[lineIndex]
-                        TextField("Continuation", text: Binding(get: {
+                        let sourceAtRender = controller.text
+                        FormattedListItemField(text: Binding(get: {
                             guard let block = controller.semanticDocument.blockById(blockID),
                                   case let .list(current) = block.kind,
                                   current.items.indices.contains(index),
@@ -1592,7 +1607,26 @@ private struct FormattedListView: View {
                             controller.updateSemanticList(id: blockID) {
                                 $0.replacingContinuationContent(at: index, lineIndex: lineIndex, with: value)
                             }
-                        }))
+                        }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            onRangeDrag: { anchor, focus in
+                                let selection = MarkdownSemanticListItemSelection(blockID: blockID,
+                                                                                   anchorIndex: anchor,
+                                                                                   focusIndex: focus)
+                                if controller.copySemanticListItemRange(selection) != nil {
+                                    selectedItems = selection
+                                }
+                            }, focusRequest: requestedFocus(for: index, continuationIndex: lineIndex),
+                            onSubmit: nil, onIndent: { outdent in
+                                _ = changeIndent(at: index, outdent: outdent)
+                            }, onStructuredPaste: { range, markdown in
+                                guard MarkdownEditorController.isStructuredBlockPaste(markdown, hasMarkedText: false),
+                                      let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                        id: blockID, index: index, continuationIndex: lineIndex,
+                                        range: range, markdown: markdown,
+                                        ifTextIs: sourceAtRender) else { return false }
+                                focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                                return true
+                            })
                         .padding(.leading, CGFloat(continuation.indent.count - item.indent.count) * 8)
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)-continuation-\(lineIndex)")
                     }
@@ -1718,9 +1752,10 @@ private struct FormattedListItemField: UIViewRepresentable {
     let index: Int
     let isRangeSelected: Bool
     let onRangeDrag: (Int, Int) -> Void
-    let focusRequest: UUID?
-    let onSubmit: (Int) -> Void
+    let focusRequest: (token: UUID, offset: Int)?
+    let onSubmit: ((Int) -> Void)?
     let onIndent: (Bool) -> Void
+    let onStructuredPaste: (NSRange, String) -> Bool
 
     func makeUIView(context: Context) -> FormattedListKeyboardTextField {
         let field = FormattedListKeyboardTextField()
@@ -1761,11 +1796,13 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.backgroundColor = isRangeSelected ?
             (editorTheme.selectionColor.map(UIColor.init) ?? UIColor.systemBlue.withAlphaComponent(0.2)) : .clear
         if field.text != text { field.text = text }
-        if let focusRequest, context.coordinator.handledFocusRequest != focusRequest {
-            context.coordinator.handledFocusRequest = focusRequest
+        if let focusRequest, context.coordinator.handledFocusRequest != focusRequest.token {
+            context.coordinator.handledFocusRequest = focusRequest.token
             field.becomeFirstResponder()
-            field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
-                                                      to: field.beginningOfDocument)
+            if let caret = field.position(from: field.beginningOfDocument,
+                                          offset: min(focusRequest.offset, ((field.text ?? "") as NSString).length)) {
+                field.selectedTextRange = field.textRange(from: caret, to: caret)
+            }
         }
     }
 
@@ -1782,8 +1819,20 @@ private struct FormattedListItemField: UIViewRepresentable {
         }
 
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            guard parent.onSubmit != nil else { return true }
             (textField as? FormattedListKeyboardTextField)?.submitAtCurrentCaret()
             return false
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            if MarkdownEditorController.isStructuredBlockPaste(string, hasMarkedText: textField.markedTextRange != nil) {
+                // A single-line field cannot safely absorb rejected block syntax.
+                // Keep its displayed text in sync with the source model.
+                _ = parent.onStructuredPaste(range, string)
+                return false
+            }
+            return true
         }
     }
 }

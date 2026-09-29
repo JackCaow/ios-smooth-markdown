@@ -78,7 +78,112 @@ public struct MarkdownSourceListContinuation: Equatable {
 public struct MarkdownSourceList: Equatable {
     public let items: [MarkdownSourceListItem]
 
+    /// A source edit for a list-row paste. The focus points at the last pasted
+    /// child, rather than the original row whose UIKit field will be rebuilt.
+    struct BlockPasteEdit {
+        let source: String
+        let focusIndex: Int
+        let focusContinuationIndex: Int?
+        let focusOffset: Int
+        let sourceCaretOffset: Int
+    }
+
     public func toMarkdown() -> String { items.map(\.source).joined() }
+
+    /// Inserts a list fragment below one item without serializing the old
+    /// marker, task checkbox, descendants, or adjacent items. The native
+    /// flattened list model cannot represent a parent paragraph after its
+    /// nested children, so a nonempty suffix is rejected rather than silently
+    /// assigning it to the last child or turning it into a different block.
+    func replacingLineRangeWithNestedList(at index: Int, continuationIndex: Int? = nil,
+                                          range: NSRange, markdown: String) -> BlockPasteEdit? {
+        guard items.indices.contains(index), !markdown.isEmpty else { return nil }
+        let item = items[index]
+        let line: String
+        let lineStart: Int
+        let parentPrefix: String
+        let precedingLength = items[..<index].reduce(0) { partial, previous in
+            partial + (previous.source as NSString).length
+        }
+        if let continuationIndex {
+            guard continuationIndex == item.continuations.count - 1 else { return nil }
+            let continuation = item.continuations[continuationIndex]
+            line = continuation.content
+            let primary = item.indent + item.marker + item.spacing + (item.taskMarker ?? "")
+                + item.taskSpacing + item.content + item.lineEnding
+            let previousContinuations = item.continuations[..<continuationIndex]
+                .reduce(0) { partial, previous in partial + (previous.source as NSString).length }
+            lineStart = precedingLength + (primary as NSString).length
+                + previousContinuations + (continuation.indent as NSString).length
+            parentPrefix = item.indent + item.marker + item.spacing
+        } else {
+            line = item.content
+            let primaryPrefix = item.indent + item.marker + item.spacing
+                + (item.taskMarker ?? "") + item.taskSpacing
+            lineStart = precedingLength + (primaryPrefix as NSString).length
+            parentPrefix = item.indent + item.marker + item.spacing
+        }
+        let body = line as NSString
+        guard range.location != NSNotFound, range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= body.length, Range(range, in: line) != nil else { return nil }
+        let before = body.substring(to: range.location)
+        let after = body.substring(from: NSMaxRange(range))
+        guard after.isEmpty, !parentPrefix.contains("\t"),
+              MarkdownInlineMarkEditor.canSplitForBlockPaste(line, range: range) else { return nil }
+        let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .newlines)
+        let parsedFragment = MarkdownDocumentCodec().parse(normalized)
+        guard !parsedFragment.blocks.isEmpty, parsedFragment.toMarkdown() == normalized,
+              parsedFragment.blocks.allSatisfy({ if case .list = $0.kind { return true }; return false }),
+              let first = parsedFragment.blocks.first,
+              case .list = first.kind else { return nil }
+        let indent = String(repeating: " ", count: Self.indentationWidth(parentPrefix))
+        let ending = toMarkdown().contains("\r\n") ? "\r\n" : "\n"
+        let nested = normalized.components(separatedBy: "\n")
+            .map { $0.isEmpty ? "" : indent + $0 }.joined(separator: ending)
+        let insertion = before + ending + nested
+        let source = (toMarkdown() as NSString).replacingCharacters(in: NSRange(location: lineStart, length: body.length),
+                                                                     with: insertion)
+        let parsed = MarkdownDocumentCodec().parse(source)
+        guard parsed.blocks.count == 1, case let .list(result) = parsed.blocks[0].kind,
+              parsed.toMarkdown() == source else { return nil }
+        let oldTail = Array(items.dropFirst(index + 1))
+        let editedLinePreserved: Bool
+        if let continuationIndex {
+            editedLinePreserved = result.items[index].content == item.content &&
+                result.items[index].continuations.count == item.continuations.count &&
+                result.items[index].continuations[..<continuationIndex] == item.continuations[..<continuationIndex] &&
+                result.items[index].continuations[continuationIndex].content == before
+        } else {
+            editedLinePreserved = result.items[index].content == before &&
+                result.items[index].continuations == item.continuations
+        }
+        guard Array(result.items[..<index]) == Array(items[..<index]),
+              result.items.count > items.count,
+              result.items[index].indent == item.indent,
+              result.items[index].marker == item.marker,
+              result.items[index].spacing == item.spacing,
+              result.items[index].taskMarker == item.taskMarker,
+              result.items[index].taskSpacing == item.taskSpacing,
+              editedLinePreserved,
+              Array(result.items.dropFirst(result.items.count - oldTail.count)) == oldTail else { return nil }
+        let added = result.items.count - items.count
+        let focusIndex = index + added
+        guard result.items.indices.contains(focusIndex),
+              Self.indentationWidth(result.items[focusIndex].indent) > Self.indentationWidth(item.indent),
+              (index + 1...focusIndex).allSatisfy({
+                  Self.indentationWidth(result.items[$0].indent) > Self.indentationWidth(item.indent)
+              }) else { return nil }
+        let caret = lineStart + (insertion as NSString).length
+        let focused = result.items[focusIndex]
+        let focusContinuationIndex = focused.continuations.isEmpty ? nil : focused.continuations.count - 1
+        let focusText = focusContinuationIndex.map { focused.continuations[$0].content } ?? focused.content
+        return .init(source: source, focusIndex: focusIndex,
+                     focusContinuationIndex: focusContinuationIndex,
+                     focusOffset: (focusText as NSString).length,
+                     sourceCaretOffset: caret)
+    }
 
     /// Deletes a contiguous run of siblings while retaining every other item's exact source.
     /// Nested descendants are never silently detached from a selected parent.
