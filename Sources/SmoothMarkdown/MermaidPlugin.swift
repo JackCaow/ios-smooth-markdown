@@ -32,21 +32,25 @@ public struct MermaidPlugin: BlockParserPlugin {
         let code = content.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty else { return nil }
         let info = opening.info
-        let theme = info.components(separatedBy: .whitespaces).first { $0.hasPrefix("theme=") }
-            .map { String($0.dropFirst("theme=".count)) } ?? ""
+        let theme = MermaidTheme.fromFenceInfo(info)
         return .init(linesConsumed: cursor - index, source: lines[index..<cursor].joined(separator: "\n"),
                      content: code, attributes: ["fence": String(repeating: opening.marker, count: opening.count),
-                                                 "info": info, "theme": theme])
+                                                 "info": info, "theme": theme?.rawValue ?? ""])
     }
 
     public func render(_ match: BlockPluginMatch) -> AnyView {
         if let diagram = MermaidParser.parse(match.content) {
-            return AnyView(MermaidDiagramView(diagram: diagram, onNodeTap: onNodeTap).padding(.vertical, 8))
+            return AnyView(MermaidDiagramView(diagram: diagram, theme: theme(for: match), onNodeTap: onNodeTap)
+                .padding(.vertical, 8))
         }
         return AnyView(VStack(alignment: .leading, spacing: 6) {
             SwiftUI.Text("Unsupported Mermaid diagram").font(.caption).foregroundColor(.secondary)
             SwiftUI.Text(match.content).font(.system(.body, design: .monospaced)).textSelection(.enabled)
         }.frame(maxWidth: .infinity, alignment: .leading).padding(12))
+    }
+
+    func theme(for match: BlockPluginMatch) -> MermaidTheme? {
+        match.attributes["theme"].flatMap(MermaidTheme.init(rawValue:))
     }
 
     private func opener(_ line: String) -> (marker: String, count: Int, info: String)? {
