@@ -3,6 +3,28 @@ import Markdown
 @testable import SmoothMarkdown
 
 final class ReaderSelectionDocumentTests: XCTestCase {
+    func testInlineCodeParagraphNativeRouteKeepsCodeAndAdjacentLink() {
+        let source = "Before `var x = 42;` [link](https://example.com) after"
+        guard let paragraph = MarkdownSyntax.parse(source).child(at: 0) as? Paragraph,
+              let document = ReaderSelectionDocument.inlineCodeParagraph(
+                  paragraph, enableHTML: false, plugins: nil) else {
+            return XCTFail("Inline code paragraph should use native text layout")
+        }
+        XCTAssertEqual(document.copiedText, "Before var x = 42; link after")
+        XCTAssertEqual(document.lines.flatMap(\.runs).filter(\.code).map(\.text), ["var x = 42;"])
+        XCTAssertEqual(document.lines.flatMap(\.runs).compactMap(\.style.link),
+                       [URL(string: "https://example.com")!])
+
+        let prose = MarkdownSyntax.parse("Before and after").child(at: 0) as! Paragraph
+        XCTAssertNil(ReaderSelectionDocument.inlineCodeParagraph(prose, enableHTML: false,
+                                                                  plugins: nil))
+        let mixed = MarkdownSyntax.parse("Before `code` ![image](https://example.com/a.png)")
+            .child(at: 0) as! Paragraph
+        XCTAssertNil(ReaderSelectionDocument.inlineCodeParagraph(mixed, enableHTML: false,
+                                                                  plugins: nil),
+                     "An image must retain the SwiftUI inline flow layout")
+    }
+
     func testConsecutiveHeadingParagraphListAndQuoteComposeOneCopyRange() {
         let source = """
         # Heading

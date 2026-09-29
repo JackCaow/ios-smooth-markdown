@@ -78,6 +78,25 @@ final class DemoExamplesUITests: XCTestCase {
         add(featureScreenshot)
     }
 
+    func testBasicFormattingInlineCodeBackgroundScreenshotOnPhysicalDevice() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("language-en", in: app)
+        choose("example-basic-formatting", in: app)
+        XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
+        let code = app.textViews.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@",
+            "var x = 42;", "var\u{00A0}x\u{00A0}=\u{00A0}42;"
+        )).firstMatch
+        XCTAssertTrue(code.waitForExistence(timeout: 5))
+        XCTAssertTrue(code.isHittable, "Inline code must be visible before capturing layout")
+        Thread.sleep(forTimeInterval: 1)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Physical iPhone Basic Formatting inline code background"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testReaderLayoutInPhysicalLandscape() {
         let device = XCUIDevice.shared
         device.orientation = .portrait

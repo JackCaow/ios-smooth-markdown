@@ -350,9 +350,25 @@ public struct SmoothMarkdownView: View {
             } else if enableHTML, let html = sole as? InlineHTML, let image = SafeHTML.imageTag(html.rawHTML) {
                 imageView(image)
             } else {
+                #if os(iOS)
+                if (alignment == nil || alignment == .leading),
+                   let document = ReaderSelectionDocument.inlineCodeParagraph(
+                       paragraph, enableHTML: enableHTML, plugins: plugins) {
+                    ReaderSelectionTextView(document: document, styleSheet: styleSheet,
+                                            onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
+                                            selectable: selectable, onCharacterTap: nil)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    inlineView(paragraph).font(styleSheet.paragraphFont ?? .body)
+                        .multilineTextAlignment(alignment ?? .leading)
+                        .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
+                        .markdownTextSelection(selectable)
+                }
+                #else
                 inlineView(paragraph).font(styleSheet.paragraphFont ?? .body).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                     .markdownTextSelection(selectable)
+                #endif
             }
         } else if let code = node as? CodeBlock {
             if let codeBuilder {
