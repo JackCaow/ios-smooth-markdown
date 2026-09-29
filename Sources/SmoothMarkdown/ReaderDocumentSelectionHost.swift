@@ -3,12 +3,11 @@ import SwiftUI
 import UIKit
 
 /// A document-wide native selection surface. Callers must measure and supply
-/// every attachment before presenting it. SmoothMarkdownView currently uses
-/// this for complete prose projections and keeps the existing visual renderer
-/// for attachments until those blocks have matching host contracts.
+/// every attachment before presenting it.
 @available(iOS 17.0, *)
 final class ReaderDocumentSelectionTextView: QuoteTextView {
     private(set) var projection: ReaderTextKitProjection?
+    var hostedControllers: [String: UIHostingController<AnyView>] = [:]
     private var attachmentViews: [String: UIView] = [:]
     private var attachmentSizes: [String: CGSize] = [:]
     private var measuredWidth: CGFloat = 0
@@ -108,17 +107,18 @@ final class ReaderDocumentSelectionTextView: QuoteTextView {
     }
 }
 
-/// Actual on-screen unified selection for documents whose complete styled
-/// projection matches the semantic document. Visual attachments remain on the
-/// established renderer until each has a measured host and interaction policy.
+/// Actual on-screen unified selection. Built-in visual blocks are hosted at
+/// their measured TextKit attachment positions and copy through the projection.
 @available(iOS 17.0, *)
 struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let selectionDocument: ReaderSelectionDocument
     let projection: ReaderTextKitProjection
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
+    let sourceView: SmoothMarkdownView
 
     func makeUIView(context: Context) -> ReaderDocumentSelectionTextView {
         let view = ReaderDocumentSelectionTextView()
@@ -151,12 +151,37 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     }
 
     private func configure(_ view: ReaderDocumentSelectionTextView, width: CGFloat) {
+        guard width.isFinite, width > 0 else { return }
         let renderer = ReaderSelectionTextView(document: selectionDocument, styleSheet: styleSheet,
                                                onLinkTap: onLinkTap, onTextLongPress: nil,
                                                selectable: true, onCharacterTap: nil)
         let built = renderer.attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize))
-        guard view.apply(projection, availableWidth: width, measuredAttachments: [:], hostedViews: [:],
+        var controllers: [String: UIHostingController<AnyView>] = [:]
+        var measured: [String: CGSize] = [:]
+        var hosted: [String: UIView] = [:]
+        for attachment in projection.attachments {
+            guard let content = sourceView.visualAttachmentView(for: attachment.content) else { return }
+            let root = AnyView(content
+                .frame(width: width, alignment: .leading)
+                .environment(\.dynamicTypeSize, dynamicTypeSize)
+                .environment(\.colorScheme, colorScheme)
+                .environment(\.openURL, OpenURLAction { url in
+                    guard MarkdownSyntax.isSafeLink(url) else { return .discarded }
+                    if let onLinkTap { onLinkTap(url); return .handled }
+                    return .systemAction
+                }))
+            let controller = view.hostedControllers[attachment.id] ?? UIHostingController(rootView: root)
+            controller.rootView = root
+            controller.view.backgroundColor = .clear
+            let size = controller.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+            guard size.height.isFinite, size.height > 0 else { return }
+            controllers[attachment.id] = controller
+            measured[attachment.id] = CGSize(width: width, height: ceil(size.height))
+            hosted[attachment.id] = controller.view
+        }
+        guard view.apply(projection, availableWidth: width, measuredAttachments: measured, hostedViews: hosted,
                          styledText: built.text) else { return }
+        view.hostedControllers = controllers
         let decoration = styleSheet.resolvedBlockquoteDecoration
         view.quoteRegions = built.quoteRegions
         view.ruleRegions = built.ruleRegions

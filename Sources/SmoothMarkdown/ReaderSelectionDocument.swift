@@ -73,10 +73,37 @@ struct ReaderSelectionDocument {
         return copied as String
     }
 
-    static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+    static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?,
+                        visualBlockAnchors: Bool = false) -> ReaderSelectionDocument? {
+        composeItems(nodes.map(ReaderBlockRangeDocument.Item.markup), enableHTML: enableHTML,
+                     plugins: plugins, visualBlockAnchors: visualBlockAnchors)
+    }
+
+    static func composeItems(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
+                             plugins: ParserPluginRegistry?,
+                             visualBlockAnchors: Bool = false) -> ReaderSelectionDocument? {
         var lines: [Line] = []
         var nextQuoteID = 0
-        for node in nodes {
+        for item in items {
+            if case .displayMath = item {
+                guard visualBlockAnchors else { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            guard case let .markup(node) = item else { return nil }
+            if visualBlockAnchors, node is CodeBlock || node is Markdown.Table {
+                if node is Markdown.Table,
+                   ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML,
+                                                      plugins: plugins) == nil { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
             guard let part = linesForBlock(node, enableHTML: enableHTML, plugins: plugins,
                                            indent: 0, quoteIDs: [], nextQuoteID: &nextQuoteID) else { return nil }
             lines.append(contentsOf: part)

@@ -233,7 +233,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                 builder: ReaderTextSelectionMenuBuilder) -> UIMenu? {
             guard range.location >= 0, range.length > 0,
                   NSMaxRange(range) <= textView.textStorage.length else { return nil }
-            let selected = QuoteTextView.transformedCopyText(in: textView.textStorage,
+            let selected = (textView as? ReaderDocumentSelectionTextView)?
+                .projection?.copiedText(in: range)
+                ?? QuoteTextView.transformedCopyText(in: textView.textStorage,
                                                              ruleRegions: (textView as? QuoteTextView)?.ruleRegions ?? [],
                                                              range: range)
                 ?? (textView.textStorage.string as NSString).substring(with: range)
