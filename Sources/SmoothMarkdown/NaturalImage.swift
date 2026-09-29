@@ -64,7 +64,7 @@ struct RemoteBitmapView: View {
                     bitmapView(bitmap).resizable().scaledToFit()
                 }
             } else if failed {
-                SwiftUI.Text(fallback)
+                RemoteBitmapFailureView(label: fallback)
             } else {
                 ProgressView()
             }
@@ -87,6 +87,18 @@ struct RemoteBitmapView: View {
                 failed = true
             }
         }
+    }
+}
+
+/// Mirrors Flutter's network-bitmap error icon while retaining the alt text
+/// for accessibility and image-tap callbacks.
+struct RemoteBitmapFailureView: View {
+    let label: String
+
+    var body: some View {
+        SwiftUI.Image(systemName: "exclamationmark.circle.fill")
+            .font(.system(size: 24))
+            .accessibilityLabel(label)
     }
 }
 

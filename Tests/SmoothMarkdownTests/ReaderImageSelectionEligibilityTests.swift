@@ -52,4 +52,13 @@ final class ReaderImageSelectionEligibilityTests: XCTestCase {
             ReaderImageSelectionEligibility.imageSpecs(for: $0, enableHTML: false, plugins: nil)
         })
     }
+
+    func testUnsafeImageSourceCannotEnterRemoteSelectionLoader() {
+        let markdown = "Before.\n\n![Unsafe](javascript:alert(1).png)\n\nAfter."
+        let nodes = Array(MarkdownSyntax.parse(markdown).children)
+        let document = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil)
+        XCTAssertNil(document.flatMap {
+            ReaderImageSelectionEligibility.imageSpecs(for: $0, enableHTML: false, plugins: nil)
+        })
+    }
 }

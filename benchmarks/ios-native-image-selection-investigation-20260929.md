@@ -49,8 +49,10 @@ respond to taps, and offer its surrounding-content menu.
   retain image taps and the "Select surrounding content" context menu.
 - Safe HTTP(S) bitmap and SVG images now load asynchronously in the selection
   container. While loading, the existing explicit block range shows a progress
-  indicator. A failed request or decode keeps that range and shows the existing
-  iOS alt-text fallback. Once all remote images in the group decode, the same
+  indicator. A failed request or decode keeps that range. Bitmap failures show
+  a 24-point error icon, matching Flutter's `CachedNetworkImage` error widget,
+  with alt text as the accessibility label; SVG failures retain the iOS alt-text
+  fallback. Once all remote images in the group decode, the same
   decoded image data supplies both natural sizes and visible image views in the
   continuous native selection surface. The Flutter `Links & Images` shape is
   eligible even though it starts with headings and ends with an image.
@@ -65,7 +67,7 @@ respond to taps, and offer its surrounding-content menu.
   clears the previous range. The drag recognizer does not cancel UIKit touches
   and does not receive touches that begin on the hosted image, leaving its tap
   and context menu to the image view.
-- `swift test` passed 250 tests (1 skipped) after the remote-image extension,
+- `swift test` passed 252 tests (1 skipped) after the remote-image extension,
   including focused projection and eligibility tests. Generic iOS
   `build-for-testing` compiled the Demo, its UI tests, and the native-image
   XCTest source.
@@ -76,7 +78,7 @@ respond to taps, and offer its surrounding-content menu.
   selection and check image tap/context-menu behavior. Selection range retention
   in code does not establish that UIKit keeps the visible handles or edit menu.
   Repeat on the Demo `Links & Images` remote bitmap after it loads; verify the
-  broken URL still presents its alt fallback and explicit selection. Check a
+  broken bitmap URL shows its error icon and explicit selection. Check a
   loaded remote SVG and orientation/width changes for image alignment.
   The iPhone was unavailable when this revision was prepared.
 

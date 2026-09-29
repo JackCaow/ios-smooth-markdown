@@ -621,7 +621,8 @@ public struct SmoothMarkdownView: View {
     private func resolvedRemoteImageView(_ image: SafeHTML.ImageSpec,
                                          resolution: ReaderRemoteImageResolution?) -> AnyView {
         let label = image.alt.isEmpty ? (image.title ?? "Image") : image.alt
-        guard case let .remote(url, _) = ImageSource.parse(image.source) else {
+        guard let source = ImageSource.parse(image.source),
+              case let .remote(url, _) = source else {
             return AnyView(SwiftUI.Text(label))
         }
         let width = image.width.map { CGFloat($0) }
@@ -638,7 +639,12 @@ public struct SmoothMarkdownView: View {
                                                  explicitWidth: width, explicitHeight: height) {
                 SwiftUI.Image(uiImage: bitmap).resizable().scaledToFit()
             })
-        case .failure: content = AnyView(SwiftUI.Text(label))
+        case .failure:
+            if source.remoteFailurePresentation == .svgAltText {
+                content = AnyView(SwiftUI.Text(label))
+            } else {
+                content = AnyView(RemoteBitmapFailureView(label: label))
+            }
         case nil: content = AnyView(ProgressView())
         }
         return accessibleImage(content, url: url, image: image, label: label, inline: false)
