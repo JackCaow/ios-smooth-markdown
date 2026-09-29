@@ -327,6 +327,7 @@ private struct EditorSlashCommand {
 
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
@@ -341,6 +342,7 @@ private struct FormattedBlocksView: View {
     @State private var textRangeStart: MarkdownSemanticTextPosition?
     @State private var textRangeEnd: MarkdownSemanticTextPosition?
     @State private var copiedRange = false
+    @State private var showingEditingTips = false
 
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
@@ -384,14 +386,28 @@ private struct FormattedBlocksView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(rangeStartID == nil ? "Tap Start range on a block, then End range on another block." :
-                         rangeEndID == nil ? "Choose the last block in the range." : "Block range selected.")
+                if dynamicTypeSize.isAccessibilitySize {
+                    DisclosureGroup("Editing tips", isExpanded: $showingEditingTips) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                            Text("Tap Start range on a block, then End range on another block.")
+                            Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text("Select text in a heading or paragraph, then use its B, I, Link, or Code action. Markdown markers remain visible.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    if !dynamicTypeSize.isAccessibilitySize || rangeStartID != nil {
+                        Text(rangeStartID == nil ? "Tap Start range on a block, then End range on another block." :
+                             rangeEndID == nil ? "Choose the last block in the range." : "Block range selected.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     HStack(spacing: 8) {
                         if let rangeStartID, let rangeEndID {
                             Button("Copy Markdown") {
@@ -418,9 +434,11 @@ private struct FormattedBlocksView: View {
                     .buttonStyle(.bordered)
                 }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text("Select text in a paragraph or heading, then capture Start and End at the selected caret positions.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     HStack(spacing: 8) {
                         if let textRange {
                             Button("Copy text range") {

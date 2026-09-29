@@ -3,17 +3,29 @@ import SwiftUI
 
 /// Host callbacks and feedback for the editor page in Flutter's example app.
 struct DemoEditorView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: MarkdownEditorController
     @State private var lastExport: String?
     @State private var hostMessage: String?
+    @State private var showingHelp = false
+
+    private let helpText = "Try the toolbar, slash commands at the start of a paragraph, wikilinks, Find, Focus, and the demo's image, import, and export callbacks."
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Scratch-style editor preview")
-                .font(.title3.weight(.semibold))
-            Text("Try the toolbar, slash commands at the start of a paragraph, wikilinks, Find, Focus, and the demo's image, import, and export callbacks.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if dynamicTypeSize.isAccessibilitySize {
+                DisclosureGroup("Editor help", isExpanded: $showingHelp) {
+                    Text(helpText)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Scratch-style editor preview")
+                    .font(.title3.weight(.semibold))
+                Text(helpText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
             SmoothMarkdownEditor(
                 controller: controller,
                 onPickImage: {
