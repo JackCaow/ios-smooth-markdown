@@ -194,6 +194,28 @@ final class DemoExamplesUITests: XCTestCase {
         XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
     }
 
+    func testMermaidGalleryZoomKeepsNodeCallbackAndSourceReachable() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("feature-mermaid", in: app)
+        let viewport = app.otherElements["mermaid-interactive-viewport"]
+        XCTAssertTrue(viewport.waitForExistence(timeout: 5))
+        let node = app.buttons["mermaid-node-A"]
+        XCTAssertTrue(node.waitForExistence(timeout: 5))
+        viewport.pinch(withScale: 1.2, velocity: 1)
+        node.tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).doubleTap()
+        app.buttons["mermaid-theme"].tap()
+        XCTAssertTrue(app.staticTexts["mermaid-source"].exists)
+        XCTAssertTrue(node.exists)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(viewport.waitForExistence(timeout: 5))
+        node.tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+    }
+
     func testFeatureBackKeepsExampleThemeAndSource() {
         let app = XCUIApplication()
         app.launch()
