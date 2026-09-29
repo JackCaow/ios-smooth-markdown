@@ -9,6 +9,17 @@ struct ReaderSelectionDocument {
         let text: String
         let style: InlineContent.Style
         let code: Bool
+        let htmlUnderline: Bool
+        let highlighted: Bool
+
+        init(text: String, style: InlineContent.Style, code: Bool,
+             htmlUnderline: Bool = false, highlighted: Bool = false) {
+            self.text = text
+            self.style = style
+            self.code = code
+            self.htmlUnderline = htmlUnderline
+            self.highlighted = highlighted
+        }
     }
 
     struct Line: Equatable {
@@ -122,8 +133,10 @@ struct ReaderSelectionDocument {
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
             case let .text(value, style, tags, code):
-                if !tags.isEmpty { return nil }
-                output.append(.init(text: value, style: style, code: code))
+                guard tags.allSatisfy({ ["u", "ins", "mark"].contains($0.name) }) else { return nil }
+                output.append(.init(text: value, style: style, code: code,
+                                    htmlUnderline: tags.contains { $0.name == "u" || $0.name == "ins" },
+                                    highlighted: tags.contains { $0.name == "mark" }))
             case .image, .footnote, .math, .plugin: return nil
             }
         }

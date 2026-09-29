@@ -280,9 +280,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             paragraph.minimumLineHeight = baseFont.pointSize * heightFactor
             paragraph.lineBreakStrategy = headingLevel == nil ? [] : .pushOut
             for run in line.runs {
-                let inlineStyle = styleSheet.resolvedInlineStyle(
-                    bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
-                    link: run.style.link != nil, code: run.code)
+                let inlineStyle = styleSheet.resolvedHTMLStyle(
+                    styleSheet.resolvedInlineStyle(
+                        bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
+                        link: run.style.link != nil, code: run.code),
+                    underline: run.htmlUnderline, highlight: run.highlighted)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
                 let scaledFont = MarkdownTypography.font(textStyle: textStyle,
                                                          weight: fontWeight, customSize: inlineStyle.fontSize,
