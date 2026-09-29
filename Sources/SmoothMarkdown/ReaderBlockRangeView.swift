@@ -138,10 +138,11 @@ struct ReaderBlockRangeView: View {
     }
 
     private func beginSelection() {
-        if !selecting { onSelectionStarted?() }
+        let wasSelecting = selecting
         selecting = true
         anchor = nil
         focus = nil
+        if !wasSelecting { onSelectionStarted?() }
     }
 
     private func reset() {

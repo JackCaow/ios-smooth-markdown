@@ -4,8 +4,8 @@ Status: **draft implementation, physical acceptance pending**. The earlier
 native TextKit drag failed on the iPhone. A revised selection gesture and
 multi-image text projection now build and pass model tests, but the iPhone was
 unavailable before the new gesture could be run. Keep this branch as a Draft PR.
-The branch includes `main` at `07d64ec` (including natural image sizing and
-editor state callbacks).
+The branch includes `main` at `dfed3f9` (including natural image sizing,
+editor state callbacks, and toolbar slots).
 
 ## Acceptance case
 
@@ -65,9 +65,10 @@ respond to taps, and offer its surrounding-content menu.
   clears the previous range. The drag recognizer does not cancel UIKit touches
   and does not receive touches that begin on the hosted image, leaving its tap
   and context menu to the image view.
-- `swift test` passed 235 tests (1 skipped) after the static audit, including
-  four focused projection tests. Generic iOS `build-for-testing` compiled the
-  Demo, its UI tests, and the native-image XCTest source.
+- `swift test` passed 250 tests (1 skipped) after the remote-image extension,
+  including focused projection and eligibility tests. Generic iOS
+  `build-for-testing` compiled the Demo, its UI tests, and the native-image
+  XCTest source.
 - **Physical gate:** run `ReaderImageRangeUITests.testNativeDragSelectionCrossesBundledImage`
   and `testNativeDragSelectionCrossesTwoBundledImages` on the iPhone 17. Save
   screenshots of the selection handles and verify the system Copy menu puts
