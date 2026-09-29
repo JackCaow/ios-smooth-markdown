@@ -4,10 +4,15 @@ struct InlineBreakKey: LayoutValueKey {
     static let defaultValue = false
 }
 
+struct InlineImageKey: LayoutValueKey {
+    static let defaultValue = false
+}
+
 /// Places text fragments and image views on the same line, wrapping at words.
 struct InlineFlowLayout: Layout {
     private struct Arrangement {
         let positions: [CGPoint]
+        let sizes: [CGSize]
         let size: CGSize
     }
 
@@ -19,13 +24,16 @@ struct InlineFlowLayout: Layout {
         let arrangement = arrange(subviews, width: bounds.width)
         for (index, subview) in subviews.enumerated() {
             subview.place(at: CGPoint(x: bounds.minX + arrangement.positions[index].x,
-                                      y: bounds.minY + arrangement.positions[index].y), proposal: .unspecified)
+                                      y: bounds.minY + arrangement.positions[index].y),
+                          proposal: subview[InlineImageKey.self]
+                              ? ProposedViewSize(arrangement.sizes[index]) : .unspecified)
         }
     }
 
     private func arrange(_ subviews: Subviews, width: CGFloat) -> Arrangement {
         let available = max(width, 1)
         var positions = Array(repeating: CGPoint.zero, count: subviews.count)
+        var sizes = Array(repeating: CGSize.zero, count: subviews.count)
         var x: CGFloat = 0
         var y: CGFloat = 0
         var lineHeight: CGFloat = 0
@@ -37,17 +45,20 @@ struct InlineFlowLayout: Layout {
                 lineHeight = 0
                 continue
             }
-            let size = subview.sizeThatFits(.unspecified)
+            let size = subview.sizeThatFits(subview[InlineImageKey.self]
+                                            ? ProposedViewSize(width: available, height: nil) : .unspecified)
             if x > 0 && x + size.width > available {
                 y += max(lineHeight, 20)
                 x = 0
                 lineHeight = 0
             }
             positions[index] = CGPoint(x: x, y: y)
+            sizes[index] = size
             x += size.width
             lineHeight = max(lineHeight, size.height)
             usedWidth = max(usedWidth, min(x, available))
         }
-        return Arrangement(positions: positions, size: CGSize(width: usedWidth, height: y + max(lineHeight, 1)))
+        return Arrangement(positions: positions, sizes: sizes,
+                           size: CGSize(width: usedWidth, height: y + max(lineHeight, 1)))
     }
 }
