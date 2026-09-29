@@ -11,6 +11,7 @@ private let keycapPaddingAttribute = NSAttributedString.Key("SmoothMarkdownKeyca
 @available(iOS 17.0, *)
 struct ReaderSelectionTextView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderSelectionDocument
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
@@ -78,6 +79,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.onTextLongPress = onTextLongPress
         context.coordinator.onCharacterTap = onCharacterTap
+        context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
         context.coordinator.longPress?.isEnabled = onTextLongPress != nil
         context.coordinator.characterTap?.isEnabled = onCharacterTap != nil
         view.accessibilityIdentifier = onCharacterTap == nil ? nil : "reader-character-endpoint-text"
@@ -125,6 +127,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         var onLinkTap: ((URL) -> Void)?
         var onTextLongPress: ((@escaping () -> Void) -> Void)?
         var onCharacterTap: ((Int) -> Void)?
+        var textSelectionMenuBuilder: ReaderTextSelectionMenuBuilder?
         weak var textView: QuoteTextView?
         weak var longPress: UILongPressGestureRecognizer?
         weak var characterTap: UITapGestureRecognizer?
@@ -208,9 +211,33 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                  menuFor configuration: UIEditMenuConfiguration,
                                  suggestedActions: [UIMenuElement]) -> UIMenu? {
             guard let textView, textView.selectedRange.length > 0 else { return nil }
+            if let textSelectionMenuBuilder {
+                return customMenu(in: textView, range: textView.selectedRange,
+                                  suggestedActions: suggestedActions,
+                                  builder: textSelectionMenuBuilder)
+            }
             return UIMenu(children: [UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) {
                 [weak textView] _ in textView?.copy(nil)
             }])
+        }
+
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
+                      suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard let textSelectionMenuBuilder else { return nil }
+            return customMenu(in: textView, range: range, suggestedActions: suggestedActions,
+                              builder: textSelectionMenuBuilder)
+        }
+
+        private func customMenu(in textView: UITextView, range: NSRange,
+                                suggestedActions: [UIMenuElement],
+                                builder: ReaderTextSelectionMenuBuilder) -> UIMenu? {
+            guard range.location >= 0, range.length > 0,
+                  NSMaxRange(range) <= textView.textStorage.length else { return nil }
+            let selected = QuoteTextView.transformedCopyText(in: textView.textStorage,
+                                                             ruleRegions: (textView as? QuoteTextView)?.ruleRegions ?? [],
+                                                             range: range)
+                ?? (textView.textStorage.string as NSString).substring(with: range)
+            return builder(selected, suggestedActions)
         }
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
