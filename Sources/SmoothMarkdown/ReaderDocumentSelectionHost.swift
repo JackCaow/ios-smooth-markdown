@@ -119,11 +119,14 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
     let sourceView: SmoothMarkdownView
+    let selectionController: SmoothSelectionController?
 
     func makeUIView(context: Context) -> ReaderDocumentSelectionTextView {
         let view = ReaderDocumentSelectionTextView()
         view.delegate = context.coordinator
         context.coordinator.textView = view
+        context.coordinator.selectionController = selectionController
+        selectionController?.attach(view)
         view.accessibilityIdentifier = "reader-whole-document-selection"
         view.accessibilityCustomActions = [UIAccessibilityCustomAction(
             name: "Select all reader text", target: view,
@@ -132,6 +135,11 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     }
 
     func updateUIView(_ view: ReaderDocumentSelectionTextView, context: Context) {
+        if context.coordinator.selectionController !== selectionController {
+            context.coordinator.selectionController?.detach(view)
+            context.coordinator.selectionController = selectionController
+        }
+        selectionController?.attach(view)
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
         configure(view, width: max(1, view.bounds.width))
@@ -148,6 +156,11 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
     func makeCoordinator() -> ReaderSelectionTextView.Coordinator {
         ReaderSelectionTextView.Coordinator(onLinkTap: onLinkTap, onTextLongPress: nil,
                                             onCharacterTap: nil)
+    }
+
+    static func dismantleUIView(_ view: ReaderDocumentSelectionTextView, coordinator: ReaderSelectionTextView.Coordinator) {
+        coordinator.selectionController?.detach(view)
+        coordinator.selectionController = nil
     }
 
     private func configure(_ view: ReaderDocumentSelectionTextView, width: CGFloat) {

@@ -128,6 +128,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         var onTextLongPress: ((@escaping () -> Void) -> Void)?
         var onCharacterTap: ((Int) -> Void)?
         var textSelectionMenuBuilder: ReaderTextSelectionMenuBuilder?
+        weak var selectionController: SmoothSelectionController?
         weak var textView: QuoteTextView?
         weak var longPress: UILongPressGestureRecognizer?
         weak var characterTap: UITapGestureRecognizer?

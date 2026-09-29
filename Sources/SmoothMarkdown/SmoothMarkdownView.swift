@@ -40,6 +40,8 @@ public struct SmoothMarkdownView: View {
     public let enableCache: Bool
     /// Enables native text selection in the reader. Defaults to false, like Flutter.
     public let selectable: Bool
+    /// Programmatic selection for a complete native TextKit reader host.
+    public let selectionController: SmoothSelectionController?
     public let enableCrossBlockSelection: Bool
     /// Set to false when a host scroll view owns vertical scrolling, such as a chat list.
     public let scrollable: Bool
@@ -60,6 +62,7 @@ public struct SmoothMarkdownView: View {
         builderRegistry: BuilderRegistry? = nil,
         enableCache: Bool = true,
         selectable: Bool = false,
+        selectionController: SmoothSelectionController? = nil,
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true
     ) {
@@ -78,6 +81,7 @@ public struct SmoothMarkdownView: View {
         self.builderRegistry = builderRegistry
         self.enableCache = enableCache
         self.selectable = selectable
+        self.selectionController = selectionController
         self.enableCrossBlockSelection = enableCrossBlockSelection
         self.scrollable = scrollable
     }
@@ -109,7 +113,8 @@ public struct SmoothMarkdownView: View {
             ReaderWholeDocumentSelectionView(selectionDocument: unified.selection,
                                              projection: unified.projection,
                                              styleSheet: styleSheet, onLinkTap: onLinkTap,
-                                             sourceView: self)
+                                             sourceView: self,
+                                             selectionController: selectionController)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(styleSheet.contentPadding)
         } else {
@@ -150,7 +155,9 @@ public struct SmoothMarkdownView: View {
             case let .block(latex): return [.displayMath(latex)]
             }
         }
-        guard items.count > 1,
+        // Single blocks keep their existing renderer unless the caller needs
+        // a native host for programmatic selection.
+        guard !items.isEmpty, (items.count > 1 || selectionController != nil),
               !items.contains(where: { item in
                   switch item {
                   case let .markup(node):
