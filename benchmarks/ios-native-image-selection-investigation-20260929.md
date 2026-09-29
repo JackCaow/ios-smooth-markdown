@@ -45,8 +45,15 @@ respond to taps, and offer its surrounding-content menu.
 ## Revised draft and current gate
 
 - One TextKit selection surface now contains multiple bundled SVG/bitmap image
-  anchors and their surrounding paragraphs. Hosted SwiftUI image views retain
-  image taps and the "Select surrounding content" context menu.
+  anchors and their surrounding paragraphs/headings. Hosted SwiftUI image views
+  retain image taps and the "Select surrounding content" context menu.
+- Safe HTTP(S) bitmap and SVG images now load asynchronously in the selection
+  container. While loading, the existing explicit block range shows a progress
+  indicator. A failed request or decode keeps that range and shows the existing
+  iOS alt-text fallback. Once all remote images in the group decode, the same
+  decoded image data supplies both natural sizes and visible image views in the
+  continuous native selection surface. The Flutter `Links & Images` shape is
+  eligible even though it starts with headings and ends with an image.
 - Image slots use `NaturalImageLayout.resolvedSize` for the available width, so
   tall or wide local images follow the Reader's natural-size behavior rather
   than forcing a fixed 320-point cap.
@@ -67,8 +74,11 @@ respond to taps, and offer its surrounding-content menu.
   before/middle/after prose in the clipboard. Also drag a handle again after
   selection and check image tap/context-menu behavior. Selection range retention
   in code does not establish that UIKit keeps the visible handles or edit menu.
+  Repeat on the Demo `Links & Images` remote bitmap after it loads; verify the
+  broken URL still presents its alt fallback and explicit selection. Check a
+  loaded remote SVG and orientation/width changes for image alignment.
   The iPhone was unavailable when this revision was prepared.
 
-Remote images, custom image builders, non-prose neighbors, and image-only edge
+Custom image builders, non-prose neighbors, failed remote images, and image-only
 groups continue to use the existing explicit block range. Do not merge the
 native path before its physical drag, Copy, and visual checks pass.

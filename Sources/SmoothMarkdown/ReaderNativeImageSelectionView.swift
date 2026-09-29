@@ -4,6 +4,50 @@ import SwiftDraw
 import SwiftUI
 import UIKit
 
+struct ReaderRemoteImageKey: Hashable {
+    let url: URL
+    let svg: Bool
+}
+
+enum ReaderRemoteImageResolution {
+    case svg(SVG)
+    case bitmap(UIImage)
+    case failure
+
+    var naturalSize: CGSize? {
+        switch self {
+        case let .svg(image): image.size
+        case let .bitmap(image): image.size
+        case .failure: nil
+        }
+    }
+
+    static func decode(_ data: Data?, key: ReaderRemoteImageKey) -> Self {
+        guard let data else { return .failure }
+        if key.svg {
+            guard let image = SVG(data: data), valid(size: image.size) else { return .failure }
+            return .svg(image)
+        }
+        guard let image = UIImage(data: data), valid(size: image.size) else { return .failure }
+        return .bitmap(image)
+    }
+
+    private static func valid(size: CGSize) -> Bool {
+        size.width > 0 && size.height > 0 && size.width.isFinite && size.height.isFinite
+    }
+}
+
+struct ReaderNativeImageItem {
+    let spec: SafeHTML.ImageSpec
+    let source: ImageSource
+    let localNaturalSize: CGSize?
+
+    var remoteKey: ReaderRemoteImageKey? {
+        guard case let .remote(url, svg) = source else { return nil }
+        return ReaderRemoteImageKey(url: url, svg: svg)
+    }
+}
+
 @available(iOS 17.0, *)
 struct ReaderNativeImageSelectionContainer: View {
     let document: ReaderBlockRangeDocument
@@ -12,28 +56,84 @@ struct ReaderNativeImageSelectionContainer: View {
     let plugins: ParserPluginRegistry?
     let onLinkTap: ((URL) -> Void)?
     let imageContents: [AnyView]
-    let naturalImageSizes: [CGSize]
+    let imageItems: [ReaderNativeImageItem]
     let spacing: CGFloat
     let renderSegment: (ReaderBlockRangeDocument.Segment, @escaping () -> Void, ((Int) -> Void)?) -> AnyView
+    let renderRemoteImage: (SafeHTML.ImageSpec, ReaderRemoteImageResolution?) -> AnyView
 
     @State private var usingWholeBlockSelection = false
+    @State private var remoteResults: [ReaderRemoteImageKey: ReaderRemoteImageResolution] = [:]
+
+    private var remoteKeys: [ReaderRemoteImageKey] {
+        Array(Set(imageItems.compactMap(\.remoteKey))).sorted { $0.url.absoluteString < $1.url.absoluteString }
+    }
+
+    private var naturalImageSizes: [CGSize]? {
+        let sizes = imageItems.compactMap { item in
+            item.localNaturalSize ?? item.remoteKey.flatMap { remoteResults[$0]?.naturalSize }
+        }
+        return sizes.count == imageItems.count ? sizes : nil
+    }
 
     var body: some View {
         Group {
             if usingWholeBlockSelection {
                 ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
                                      spacing: spacing, startSelecting: true,
+                                     onSelectionStarted: nil,
                                      onSelectionFinished: { usingWholeBlockSelection = false },
-                                     renderSegment: renderSegment)
-            } else {
+                                     renderSegment: fallbackSegment)
+            } else if let naturalImageSizes {
+                let contents = zip(imageItems, imageContents).map { item, localContent -> AnyView in
+                    guard let key = item.remoteKey else { return localContent }
+                    return renderRemoteImage(item.spec, remoteResults[key])
+                }
                 ReaderNativeImageSelectionView(document: document, styleSheet: styleSheet,
                                                enableHTML: enableHTML, plugins: plugins,
                                                onLinkTap: onLinkTap,
-                                               imageContents: imageContents.map { content in
+                                               imageContents: contents.map { content in
                     AnyView(content.contextMenu {
                         Button("Select surrounding content") { usingWholeBlockSelection = true }
                     })
-                }, naturalImageSizes: naturalImageSizes)
+                }, imageItems: imageItems, naturalImageSizes: naturalImageSizes)
+            } else {
+                ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
+                                     spacing: spacing, startSelecting: false,
+                                     onSelectionStarted: { usingWholeBlockSelection = true },
+                                     onSelectionFinished: nil, renderSegment: fallbackSegment)
+            }
+        }
+        .task(id: remoteKeys) { await loadRemoteImages() }
+    }
+
+    private func fallbackSegment(_ segment: ReaderBlockRangeDocument.Segment,
+                                 beginSelection: @escaping () -> Void,
+                                 onCharacterTap: ((Int) -> Void)?) -> AnyView {
+        if segment.isImage,
+           let spec = ReaderNativeImageSelectionView.imageSpec(for: segment, enableHTML: enableHTML),
+           case let .remote(url, svg) = ImageSource.parse(spec.source) {
+            return renderRemoteImage(spec, remoteResults[ReaderRemoteImageKey(url: url, svg: svg)])
+        }
+        return renderSegment(segment, beginSelection, onCharacterTap)
+    }
+
+    private func loadRemoteImages() async {
+        remoteResults = remoteResults.filter { remoteKeys.contains($0.key) }
+        let missing = remoteKeys.filter { remoteResults[$0] == nil }
+        await withTaskGroup(of: (ReaderRemoteImageKey, Data?).self) { group in
+            for key in missing {
+                group.addTask {
+                    do {
+                        let (data, response) = try await URLSession.shared.data(from: key.url)
+                        guard let response = response as? HTTPURLResponse,
+                              (200..<300).contains(response.statusCode) else { return (key, nil) }
+                        return (key, data)
+                    } catch { return (key, nil) }
+                }
+            }
+            for await (key, data) in group {
+                guard !Task.isCancelled else { return }
+                remoteResults[key] = ReaderRemoteImageResolution.decode(data, key: key)
             }
         }
     }
@@ -52,43 +152,39 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
     let plugins: ParserPluginRegistry?
     let onLinkTap: ((URL) -> Void)?
     let imageContents: [AnyView]
+    let imageItems: [ReaderNativeImageItem]
     let naturalImageSizes: [CGSize]
 
-    static func imageSizes(for document: ReaderBlockRangeDocument, enableHTML: Bool,
-                           plugins: ParserPluginRegistry?) -> [CGSize]? {
-        guard document.segments.count >= 3,
-              document.segments.first?.kind == .text,
-              document.segments.last?.kind == .text else { return nil }
-        var sizes: [CGSize] = []
-        for segment in document.segments {
-            switch segment.kind {
-            case .text:
-                guard let text = ReaderSelectionDocument.compose(segment.nodes,
-                                                                 enableHTML: enableHTML, plugins: plugins),
-                      text.selectionText == text.copiedText,
-                      text.lines.allSatisfy({ $0.kind == .paragraph }) else { return nil }
-            case .image:
-                guard let paragraph = segment.nodes.first as? Paragraph,
-                      let image = paragraph.children.compactMap({ $0 as? Markdown.Image }).first,
-                      let source = image.source,
-                      let parsed = ImageSource.parse(source) else { return nil }
-                let size: CGSize
-                switch parsed {
-                case let .bundled(name, svg: true):
-                    guard let svg = SVG(named: name, in: .main) else { return nil }
-                    size = svg.size
-                case let .bundled(name, svg: false):
-                    guard let image = UIImage(named: name) else { return nil }
-                    size = image.size
-                case .remote: return nil
-                }
+    static func imageSpec(for segment: ReaderBlockRangeDocument.Segment,
+                          enableHTML: Bool) -> SafeHTML.ImageSpec? {
+        ReaderImageSelectionEligibility.imageSpec(for: segment, enableHTML: enableHTML)
+    }
+
+    static func imageItems(for document: ReaderBlockRangeDocument, enableHTML: Bool,
+                           plugins: ParserPluginRegistry?) -> [ReaderNativeImageItem]? {
+        guard let specs = ReaderImageSelectionEligibility.imageSpecs(for: document,
+                                                                    enableHTML: enableHTML,
+                                                                    plugins: plugins) else { return nil }
+        var items: [ReaderNativeImageItem] = []
+        for spec in specs {
+            guard let parsed = ImageSource.parse(spec.source) else { return nil }
+            let size: CGSize?
+            switch parsed {
+            case let .bundled(name, svg: true):
+                guard let svg = SVG(named: name, in: .main) else { return nil }
+                size = svg.size
+            case let .bundled(name, svg: false):
+                guard let image = UIImage(named: name) else { return nil }
+                size = image.size
+            case .remote: size = nil
+            }
+            if let size {
                 guard size.width > 0, size.height > 0,
                       size.width.isFinite, size.height.isFinite else { return nil }
-                sizes.append(size)
-            case .table, .code, .displayMath: return nil
             }
+            items.append(.init(spec: spec, source: parsed, localNaturalSize: size))
         }
-        return sizes.isEmpty ? nil : sizes
+        return items
     }
 
     func makeUIView(context: Context) -> ReaderNativeImageTextView {
@@ -122,8 +218,10 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
     }
 
     private func configure(_ view: ReaderNativeImageTextView, availableWidth: CGFloat?) {
-        let sizes = naturalImageSizes.map {
-            NaturalImageLayout.resolvedSize(natural: $0, width: nil, height: nil,
+        let sizes: [CGSize] = zip(imageItems, naturalImageSizes).map { item, natural in
+            NaturalImageLayout.resolvedSize(natural: natural,
+                                            width: item.spec.width.map { CGFloat($0) },
+                                            height: item.spec.height.map { CGFloat($0) },
                                             availableWidth: availableWidth)
         }
         let built = attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize), imageSizes: sizes)

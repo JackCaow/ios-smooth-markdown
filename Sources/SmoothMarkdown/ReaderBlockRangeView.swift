@@ -12,6 +12,7 @@ struct ReaderBlockRangeView: View {
     let plugins: ParserPluginRegistry?
     let spacing: CGFloat
     let startSelecting: Bool
+    let onSelectionStarted: (() -> Void)?
     let onSelectionFinished: (() -> Void)?
     let renderSegment: (ReaderBlockRangeDocument.Segment, @escaping () -> Void, ((Int) -> Void)?) -> AnyView
 
@@ -137,6 +138,7 @@ struct ReaderBlockRangeView: View {
     }
 
     private func beginSelection() {
+        if !selecting { onSelectionStarted?() }
         selecting = true
         anchor = nil
         focus = nil

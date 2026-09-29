@@ -4,6 +4,22 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderNativeImageSelectionTests: XCTestCase {
+    func testRemoteImageDecodingProvidesNaturalSizeAndRejectsBadData() {
+        let svgKey = ReaderRemoteImageKey(url: URL(string: "https://example.com/vector.svg")!, svg: true)
+        let svg = Data("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='32'></svg>".utf8)
+        XCTAssertEqual(ReaderRemoteImageResolution.decode(svg, key: svgKey).naturalSize,
+                       CGSize(width: 64, height: 32))
+        XCTAssertNil(ReaderRemoteImageResolution.decode(Data("broken".utf8), key: svgKey).naturalSize)
+
+        let bitmapKey = ReaderRemoteImageKey(url: URL(string: "https://example.com/photo.png")!, svg: false)
+        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10)).pngData { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
+        }
+        XCTAssertEqual(ReaderRemoteImageResolution.decode(bitmap, key: bitmapKey).naturalSize,
+                       CGSize(width: 20, height: 10))
+    }
+
     func testStyleRerenderKeepsNativeSelectionButDocumentReplacementClearsIt() {
         let source = "Before 😀\n█\nAfter"
         let anchor = (source as NSString).range(of: "█").location
