@@ -23,6 +23,11 @@ struct ReaderSelectionDocument {
 
     let lines: [Line]
 
+    /// The exact UTF-16 text projection supplied to ReaderSelectionTextView.
+    var selectionText: String {
+        lines.map { $0.runs.map(\.text).joined() }.joined(separator: "\n")
+    }
+
     var copiedText: String {
         lines.map { $0.kind == .rule ? "" : $0.runs.map(\.text).joined() }.joined(separator: "\n")
     }
@@ -208,7 +213,7 @@ struct ReaderBlockRangeDocument {
             case .text:
                 guard let document = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
                                                                      plugins: plugins),
-                      ((lower == nil && upper == nil) || !document.lines.contains(where: { $0.kind == .rule }))
+                      ((lower == nil && upper == nil) || document.selectionText == document.copiedText)
                 else { return nil }
                 text = document.copiedText
             }

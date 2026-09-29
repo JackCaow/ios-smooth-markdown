@@ -259,9 +259,9 @@ public struct SmoothMarkdownView: View {
         if let document = ReaderSelectionDocument.compose(segment.nodes,
                                                            enableHTML: enableHTML, plugins: plugins),
            (segment.nodes.count > 1 || document.lines.count > 1 || onTextLongPress != nil || onCharacterTap != nil) {
-            // The visual rule anchor occupies one UITextView character but is
-            // omitted from copied text, so its offsets cannot be used directly.
-            let preciseTap = document.lines.contains { $0.kind == .rule } ? nil : onCharacterTap
+            // Only use native offsets when the UIKit text and clipboard text
+            // have identical projections. Visual anchors can differ.
+            let preciseTap = document.selectionText == document.copiedText ? onCharacterTap : nil
             return AnyView(ReaderSelectionTextView(document: document, styleSheet: styleSheet,
                                                    onLinkTap: onLinkTap, onTextLongPress: onTextLongPress,
                                                    selectable: selectable, onCharacterTap: preciseTap))

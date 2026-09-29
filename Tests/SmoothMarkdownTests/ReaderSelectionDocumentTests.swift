@@ -112,6 +112,9 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         }
         XCTAssertEqual(bridge.copiedText(in: 0...2, enableHTML: false, plugins: nil),
                        "Before.\nAfter.")
+        let textDocument = ReaderSelectionDocument.compose(bridge.segments[0].nodes,
+                                                           enableHTML: false, plugins: nil)!
+        XCTAssertNotEqual(textDocument.selectionText, textDocument.copiedText)
         XCTAssertNil(bridge.copiedText(in: 0...2, startUTF16: 3,
                                        enableHTML: false, plugins: nil))
     }

@@ -53,6 +53,8 @@ final class InlineTextStyleTests: XCTestCase {
                                            onLinkTap: nil, onTextLongPress: nil,
                                            selectable: true, onCharacterTap: nil)
             .attributedContent(traits: MarkdownTypography.traits(for: .large)).text
+        XCTAssertEqual(text.string, document.selectionText)
+        XCTAssertEqual(document.selectionText, document.copiedText)
         func attributes(for word: String) -> [NSAttributedString.Key: Any] {
             let range = (text.string as NSString).range(of: word)
             XCTAssertNotEqual(range.location, NSNotFound)
