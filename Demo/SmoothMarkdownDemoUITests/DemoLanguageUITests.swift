@@ -5,21 +5,22 @@ final class DemoLanguageUITests: XCTestCase {
         let app = XCUIApplication()
         app.launch()
 
-        let title = app.staticTexts["demo-current-title"]
-        let status = app.staticTexts["demo-current-theme"]
+        let title = app.buttons["open-examples"]
+        let status = app.buttons["theme-menu"]
         XCTAssertTrue(title.waitForExistence(timeout: 10))
-        XCTAssertEqual(title.label, "Basic Formatting")
-        XCTAssertTrue(status.label.contains("默认亮色"))
+        XCTAssertEqual(title.value as? String, "Basic Formatting")
+        XCTAssertTrue((status.value as? String ?? "").contains("默认亮色"))
+        XCTAssertFalse(app.staticTexts["demo-current-title"].exists)
 
         app.buttons["view-markdown-source"].tap()
         XCTAssertTrue(app.staticTexts["markdown-source-content"].label.contains("# Basic Text Formatting"))
         app.buttons["关闭"].tap()
 
         chooseLanguage("en", app: app)
-        XCTAssertEqual(title.label, "Basic Formatting")
+        XCTAssertEqual(title.value as? String, "Basic Formatting")
         app.buttons["theme-menu"].tap()
         app.buttons["Default Dark"].tap()
-        XCTAssertTrue(status.label.contains("Default Dark"))
+        XCTAssertTrue((status.value as? String ?? "").contains("Default Dark"))
 
         let translated: [(String, String)] = [
             ("ja", "デフォルトダーク"),
@@ -30,18 +31,16 @@ final class DemoLanguageUITests: XCTestCase {
         ]
         for (code, expectedTheme) in translated {
             chooseLanguage(code, app: app)
-            XCTAssertEqual(title.label, "Basic Formatting")
-            XCTAssertTrue(status.label.contains(expectedTheme))
+            XCTAssertEqual(title.value as? String, "Basic Formatting")
+            XCTAssertTrue((status.value as? String ?? "").contains(expectedTheme))
         }
 
         choosePage("feature-math", app: app)
-        XCTAssertTrue(app.staticTexts.matching(identifier: "demo-current-title")
-            .matching(NSPredicate(format: "label == %@", "Math Formula Demo"))
-            .firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.navigationBars["Math Formula Demo"].waitForExistence(timeout: 5))
         app.buttons["demo-feature-back"].tap()
         choosePage("example-headers", app: app)
-        XCTAssertEqual(title.label, "Headers")
-        XCTAssertTrue(status.label.contains("默认暗色"))
+        XCTAssertEqual(title.value as? String, "Headers")
+        XCTAssertTrue((status.value as? String ?? "").contains("默认暗色"))
 
         app.buttons["view-markdown-source"].tap()
         XCTAssertTrue(app.staticTexts["markdown-source-content"].label.contains("# Header 1"))
@@ -53,9 +52,11 @@ final class DemoLanguageUITests: XCTestCase {
 
     private func choosePage(_ identifier: String, app: XCUIApplication) {
         app.buttons["open-examples"].tap()
+        let navigationList = app.descendants(matching: .any)["demo-navigation-list"]
+        XCTAssertTrue(navigationList.waitForExistence(timeout: 5))
         let entry = app.buttons[identifier]
-        for _ in 0..<18 where !entry.isHittable { app.swipeUp() }
-        XCTAssertTrue(entry.waitForExistence(timeout: 5), "Missing navigation entry: \(identifier)")
-        entry.tap()
+        for _ in 0..<18 where !entry.isHittable { navigationList.swipeUp() }
+        XCTAssertTrue(entry.isHittable, "Missing navigation entry: \(identifier)")
+        entry.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 }

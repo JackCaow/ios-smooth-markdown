@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 
 private let codeSpaceAttribute = NSAttributedString.Key("SmoothMarkdownCodeSpace")
+private let inlineCodeBackgroundAttribute = NSAttributedString.Key("SmoothMarkdownInlineCodeBackground")
 
 /// A single read-only UITextView gives adjacent Markdown blocks one native selection range.
 @available(iOS 17.0, *)
@@ -312,7 +313,10 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
                 }
                 if let background = inlineStyle.backgroundColor {
-                    attributes[.backgroundColor] = UIColor(background)
+                    // TextKit stretches .backgroundColor to the paragraph's minimum line height.
+                    // Draw code backgrounds from the run's baseline instead so the smaller
+                    // monospace glyphs sit vertically centered inside the same fill.
+                    attributes[run.code ? inlineCodeBackgroundAttribute : .backgroundColor] = UIColor(background)
                 }
                 if let link = run.style.link {
                     attributes[.link] = link
@@ -443,6 +447,7 @@ final class QuoteTextView: UITextView {
                 UIRectFill(frame)
             }
         }
+        drawInlineCodeBackgrounds()
         if ruleThickness > 0 {
             ruleColor.setFill()
             for range in ruleRegions where range.location < textStorage.length {
@@ -461,6 +466,32 @@ final class QuoteTextView: UITextView {
         for (frame, _) in quoteFrames {
             UIRectFill(CGRect(x: frame.minX, y: frame.minY,
                               width: min(quoteBorderWidth, frame.width), height: frame.height))
+        }
+    }
+
+    private func drawInlineCodeBackgrounds() {
+        guard textStorage.length > 0 else { return }
+        textStorage.enumerateAttribute(inlineCodeBackgroundAttribute,
+                                       in: NSRange(location: 0, length: textStorage.length)) { value, range, _ in
+            guard let color = value as? UIColor else { return }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            color.setFill()
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { lineRect, _, _, lineGlyphs, _ in
+                let segment = NSIntersectionRange(glyphs, lineGlyphs)
+                guard segment.length > 0 else { return }
+                let glyphRect = self.layoutManager.boundingRect(forGlyphRange: segment, in: self.textContainer)
+                let character = self.layoutManager.characterIndexForGlyph(at: segment.location)
+                guard let font = self.textStorage.attribute(.font, at: character,
+                                                            effectiveRange: nil) as? UIFont else { return }
+                let baseline = lineRect.minY + self.layoutManager.location(forGlyphAt: segment.location).y
+                let height = glyphRect.height
+                let fontHeight = font.ascender - font.descender
+                let y = baseline - font.ascender - (height - fontHeight) / 2
+                UIRectFill(CGRect(x: self.textContainerInset.left + glyphRect.minX,
+                                  y: self.textContainerInset.top + y,
+                                  width: glyphRect.width, height: height))
+            }
         }
     }
 

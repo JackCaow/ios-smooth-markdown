@@ -3,7 +3,6 @@ import SwiftUI
 
 /// Shared type roles for the native example. Semantic styles follow Dynamic Type.
 enum DemoTypography {
-    static let pageTitle = Font.title3.weight(.semibold)
     static let barTitle = Font.headline
     static let body = Font.body
     static let message = Font.subheadline
@@ -87,7 +86,7 @@ enum DemoFeature: String, CaseIterable, Identifiable {
     }
     var subtitle: String? {
         switch self {
-        case .aiChat: "Flutter's six prompts with mock or live Qwen streaming"
+        case .aiChat: "DeepSeek chat with optional streaming and sample prompts"
         case .chatList: "Interactive local chat"
         case .conversationList: "12 conversations from Flutter example"
         case .performance: "68 KB reader fixture"

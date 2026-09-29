@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: JackCaow/flutter-smooth-markdown
-          ref: 80e6bb608389c2f8849ff381cdd173eae5e891b7
+          ref: 0634734ccc6e2c63ab78904a68496f4b0a29f071
           path: flutter-smooth-markdown
       - name: Check Flutter Demo fixtures
         working-directory: ios-smooth-markdown
@@ -31,14 +31,9 @@ jobs:
       - name: Generate Demo project
         working-directory: ios-smooth-markdown/Demo
         run: xcodegen generate
-      - name: Select iPhone simulator
-        id: simulator
-        run: |
-          id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for group in devices.values() for device in group if device["name"]=="iPhone 17 Pro" and device["isAvailable"]))')
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-      - name: Test Swift package
+      - name: Compile Swift package tests for iOS devices
         working-directory: ios-smooth-markdown
-        run: xcodebuild test -scheme ios-smooth-markdown -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
-      - name: Build Demo
+        run: xcodebuild build-for-testing -scheme ios-smooth-markdown -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+      - name: Build Demo for iOS devices
         working-directory: ios-smooth-markdown
-        run: xcodebuild build -project Demo/SmoothMarkdownDemo.xcodeproj -scheme SmoothMarkdownDemo -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}' CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild build -project Demo/SmoothMarkdownDemo.xcodeproj -scheme SmoothMarkdownDemo -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
