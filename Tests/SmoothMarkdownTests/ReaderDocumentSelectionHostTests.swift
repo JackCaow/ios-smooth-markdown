@@ -119,13 +119,70 @@ final class ReaderDocumentSelectionHostTests: XCTestCase {
         for attachment in unified.projection.attachments {
             XCTAssertNotNil(complex.visualAttachmentView(for: attachment.content))
         }
-        XCTAssertNil(SmoothMarkdownView(markdown: "A\n\n![image](https://example.com/a.png)\n\nB",
-                                        selectable: true).wholeDocumentSelection)
+        let image = try! XCTUnwrap(SmoothMarkdownView(
+            markdown: "A\n\n![image](https://example.com/a.png)\n\nB",
+            selectable: true).wholeDocumentSelection)
+        XCTAssertEqual(image.projection.attachments.count, 1)
+        XCTAssertEqual(image.projection.copiedText(in: NSRange(
+            location: 0, length: image.projection.attributedText.length)), "A\nB")
         XCTAssertNil(SmoothMarkdownView(markdown: "A `two words`.\n\nB",
                                         selectable: true).wholeDocumentSelection)
         XCTAssertNil(SmoothMarkdownView(markdown: "A\n\nB", selectable: true,
                                         enableCrossBlockSelection: false).wholeDocumentSelection)
         XCTAssertNil(SmoothMarkdownView(markdown: "A\n\nB", selectable: false).wholeDocumentSelection)
+    }
+
+    func testDefaultHostMeasuresStandaloneAndInlineImagesWithExactSelectionCopy() throws {
+        let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
+            forResource: "ReaderImageHost", withExtension: "md")), encoding: .utf8)
+        let reader = SmoothMarkdownView(markdown: source, selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        XCTAssertEqual(candidate.projection.attributedText.string, candidate.selection.selectionText)
+        let images = candidate.projection.attachments.filter {
+            if case .image = $0.content { return true }
+            return false
+        }
+        XCTAssertEqual(images.count, 2)
+        XCTAssertTrue(images.allSatisfy { reader.visualAttachmentView(for: $0.content) != nil })
+        XCTAssertEqual(images.map(\.range.length), [1, 1])
+        XCTAssertEqual(candidate.projection.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)),
+            "Gallery\nBefore 🐈 image.\nText  after 😀.\nAfter image.")
+        XCTAssertEqual(candidate.projection.copiedText(in: images[0].range), "",
+                       "Flutter gives image selection an anchor, while alt and URL remain metadata")
+        XCTAssertEqual(candidate.projection.copiedText(in: images[1].range), "")
+        if case let .image(spec) = images[1].content {
+            XCTAssertEqual(spec.alt, "Inline")
+            XCTAssertEqual(spec.source, "https://example.com/inline.png")
+        } else { XCTFail("Expected image metadata") }
+
+        let host = ReaderDocumentSelectionTextView()
+        let first = UIView()
+        let second = UIView()
+        XCTAssertTrue(host.apply(candidate.projection, availableWidth: 300,
+                                 measuredAttachments: [images[0].id: CGSize(width: 160, height: 90),
+                                                       images[1].id: CGSize(width: 80, height: 40)],
+                                 hostedViews: [images[0].id: first, images[1].id: second]))
+        XCTAssertEqual((host.textStorage.attribute(.attachment, at: images[1].range.location,
+                                                  effectiveRange: nil) as? NSTextAttachment)?.bounds.size,
+                       CGSize(width: 80, height: 40))
+        host.selectedRange = NSRange(location: 0, length: host.textStorage.length)
+        host.copy(nil)
+        XCTAssertEqual(UIPasteboard.general.string,
+                       "Gallery\nBefore 🐈 image.\nText  after 😀.\nAfter image.")
+    }
+
+    func testHTMLImageUsesSameHostAndKeepsAltOutOfCopy() throws {
+        let reader = SmoothMarkdownView(markdown: "Before.\n\n<img src='https://example.com/p.png' alt='Photo' width='36'>\n\nAfter.",
+                                        enableHTML: true, selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        let image = try XCTUnwrap(candidate.projection.attachments.first)
+        if case let .image(spec) = image.content {
+            XCTAssertEqual(spec.alt, "Photo")
+            XCTAssertEqual(spec.width, 36)
+        } else { XCTFail("Expected HTML image") }
+        XCTAssertEqual(candidate.projection.copiedText(in: NSRange(
+            location: 0, length: candidate.projection.attributedText.length)), "Before.\nAfter.")
     }
 }
 #endif

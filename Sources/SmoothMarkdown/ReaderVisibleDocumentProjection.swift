@@ -1,9 +1,8 @@
 import Foundation
 import Markdown
 
-/// The text and block anchors that a future *single* TextKit reader will own.
-/// This is deliberately separate from the current SwiftUI/UITextView renderers:
-/// constructing a projection does not make their independent selections global.
+/// Visible text and block anchors for the continuous TextKit reader host.
+/// A projection alone does not make legacy SwiftUI sections globally selectable.
 struct ReaderVisibleDocumentProjection {
     static let attachment = "\u{FFFC}"
 
