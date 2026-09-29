@@ -11,15 +11,36 @@ struct ReaderBlockRangeView: View {
     let enableHTML: Bool
     let plugins: ParserPluginRegistry?
     let spacing: CGFloat
-    let renderSegment: (ReaderBlockRangeDocument.Segment, @escaping () -> Void) -> AnyView
+    let renderSegment: (ReaderBlockRangeDocument.Segment, @escaping () -> Void, ((Int) -> Void)?) -> AnyView
 
     @State private var selecting = false
-    @State private var anchor: Int?
-    @State private var focus: Int?
+    @State private var anchor: Endpoint?
+    @State private var focus: Endpoint?
 
-    private var selectedRange: ClosedRange<Int>? {
-        guard let anchor, let focus, anchor != focus else { return nil }
-        return min(anchor, focus)...max(anchor, focus)
+    private struct Endpoint {
+        let block: Int
+        let utf16: Int?
+    }
+
+    private struct Selection {
+        let blocks: ClosedRange<Int>
+        let startUTF16: Int?
+        let endUTF16: Int?
+    }
+
+    private var selection: Selection? {
+        guard let anchor, let focus else { return nil }
+        if anchor.block < focus.block {
+            return .init(blocks: anchor.block...focus.block, startUTF16: anchor.utf16,
+                         endUTF16: focus.utf16)
+        }
+        if focus.block < anchor.block {
+            return .init(blocks: focus.block...anchor.block, startUTF16: focus.utf16,
+                         endUTF16: anchor.utf16)
+        }
+        guard let first = anchor.utf16, let last = focus.utf16, first != last else { return nil }
+        return .init(blocks: anchor.block...anchor.block, startUTF16: min(first, last),
+                     endUTF16: max(first, last))
     }
 
     var body: some View {
@@ -28,9 +49,9 @@ struct ReaderBlockRangeView: View {
                 let segment = document.segments[index]
                 Group {
                     if segment.isCode && !selecting {
-                        renderSegment(segment, beginSelection)
+                        renderSegment(segment, beginSelection, nil)
                     } else if segment.isBridge && !selecting {
-                        renderSegment(segment, beginSelection)
+                        renderSegment(segment, beginSelection, nil)
                             .contextMenu {
                                 Button("Select surrounding content") { beginSelection() }
                             }
@@ -38,19 +59,15 @@ struct ReaderBlockRangeView: View {
                                 beginSelection()
                             }
                     } else {
-                        renderSegment(segment, beginSelection)
+                        renderSegment(segment, beginSelection, selecting && !segment.isBridge
+                                      ? { selectEndpoint(.init(block: index, utf16: $0)) } : nil)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .overlay {
-                    if selecting {
+                    if selecting && segment.isBridge {
                         Button {
-                            if anchor == nil || focus != nil {
-                                anchor = index
-                                focus = nil
-                            } else {
-                                focus = index
-                            }
+                            selectEndpoint(.init(block: index, utf16: nil))
                         } label: {
                             RoundedRectangle(cornerRadius: 6)
                                 .fill(Color.accentColor.opacity(isSelected(index) ? 0.12 : 0.001))
@@ -63,22 +80,33 @@ struct ReaderBlockRangeView: View {
                         .accessibilityIdentifier("reader-image-range-block-\(index)")
                     }
                 }
+                if selecting && !segment.isBridge {
+                    Button("Select entire block") {
+                        selectEndpoint(.init(block: index, utf16: nil))
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("reader-image-range-block-\(index)")
+                }
             }
             if selecting {
                 HStack(spacing: 12) {
-                    Text(anchor == nil ? "Choose first block" : focus == nil ? "Choose last block" : "Range selected")
+                    Text(anchor == nil ? "Tap text or choose first block" : focus == nil
+                         ? "Tap text or choose last block" : "Range selected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                     Button("Copy") {
-                        if let selectedRange,
-                           let copied = document.copiedText(in: selectedRange,
+                        if let selection,
+                           let copied = document.copiedText(in: selection.blocks,
+                                                            startUTF16: selection.startUTF16,
+                                                            endUTF16: selection.endUTF16,
                                                             enableHTML: enableHTML, plugins: plugins) {
                             UIPasteboard.general.string = copied
                             reset()
                         }
                     }
-                    .disabled(selectedRange == nil)
+                    .disabled(selection == nil)
                     .accessibilityIdentifier("reader-image-range-copy")
                     Button("Cancel") { reset() }
                         .accessibilityIdentifier("reader-image-range-cancel")
@@ -90,8 +118,17 @@ struct ReaderBlockRangeView: View {
     }
 
     private func isSelected(_ index: Int) -> Bool {
-        if let selectedRange { return selectedRange.contains(index) }
-        return anchor == index
+        if let selection { return selection.blocks.contains(index) }
+        return anchor?.block == index
+    }
+
+    private func selectEndpoint(_ endpoint: Endpoint) {
+        if anchor == nil || focus != nil {
+            anchor = endpoint
+            focus = nil
+        } else {
+            focus = endpoint
+        }
     }
 
     private func beginSelection() {

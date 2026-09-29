@@ -79,6 +79,43 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         XCTAssertNil(bridge.copiedText(in: 0...3, enableHTML: false, plugins: nil))
     }
 
+    func testImageBridgeCopiesCharacterEndpointsWithoutImageAlt() {
+        let source = "Before 🐈 image.\n\n![hidden alt](https://example.com/photo.png)\n\nAfter 😀 image."
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        guard groups.count == 1, case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected text-image-text bridge")
+        }
+        let first = "Before 🐈 image." as NSString
+        let last = "After 😀 image." as NSString
+        let start = first.range(of: "image.").location
+        let end = last.range(of: "😀").location + last.range(of: "😀").length
+        XCTAssertEqual(bridge.copiedText(in: 0...2, startUTF16: start, endUTF16: end,
+                                         enableHTML: false, plugins: nil), "image.\nAfter 😀")
+        XCTAssertEqual(bridge.copiedText(in: 0...2, enableHTML: false, plugins: nil),
+                       "Before 🐈 image.\nAfter 😀 image.")
+        XCTAssertNil(bridge.copiedText(in: 0...2, startUTF16: first.length + 1,
+                                       enableHTML: false, plugins: nil))
+        XCTAssertNil(bridge.copiedText(in: 0...2, startUTF16: 8,
+                                       enableHTML: false, plugins: nil),
+                     "A UTF-16 endpoint must not split a surrogate pair")
+    }
+
+    func testRuleAnchorDisablesCharacterOffsetButKeepsWholeBlockCopy() {
+        let source = "Before.\n\n---\n\n![photo](https://example.com/photo.png)\n\nAfter."
+        let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),
+                                                 enableHTML: false, plugins: nil)
+        guard groups.count == 1, case let .blockBridge(nodes) = groups[0],
+              let bridge = ReaderBlockRangeDocument(nodes, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected rule-image bridge")
+        }
+        XCTAssertEqual(bridge.copiedText(in: 0...2, enableHTML: false, plugins: nil),
+                       "Before.\nAfter.")
+        XCTAssertNil(bridge.copiedText(in: 0...2, startUTF16: 3,
+                                       enableHTML: false, plugins: nil))
+    }
+
     func testUnsafeImageSourceDoesNotBecomeSelectionBridge() {
         let source = "Before\n\n![bad](javascript:alert(1))\n\nAfter"
         let groups = ReaderSelectionGroup.group(Array(MarkdownSyntax.parse(source).children),

@@ -186,23 +186,36 @@ struct ReaderBlockRangeDocument {
         segments = result
     }
 
-    func copiedText(in range: ClosedRange<Int>, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
+    /// UTF-16 offsets let a native text view supply character-precise endpoints.
+    /// A nil offset keeps the existing whole-block endpoint behavior.
+    func copiedText(in range: ClosedRange<Int>, startUTF16: Int? = nil, endUTF16: Int? = nil,
+                    enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
         guard range.lowerBound >= 0, range.upperBound < segments.count else { return nil }
         var parts: [String] = []
-        for segment in segments[range] {
+        for index in range {
+            let segment = segments[index]
+            let lower = index == range.lowerBound ? startUTF16 : nil
+            let upper = index == range.upperBound ? endUTF16 : nil
+            let text: String?
             switch segment.kind {
             case .image: continue
-            case let .code(source): parts.append(source)
-            case let .displayMath(latex): parts.append(latex)
+            case let .code(source): text = source
+            case let .displayMath(latex): text = latex
             case .table:
                 guard let node = segment.nodes.first,
-                      let text = Self.tableText(node, enableHTML: enableHTML, plugins: plugins) else { return nil }
-                parts.append(text)
+                      let tableText = Self.tableText(node, enableHTML: enableHTML, plugins: plugins) else { return nil }
+                text = tableText
             case .text:
-                guard let text = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
-                                                                 plugins: plugins)?.copiedText else { return nil }
-                parts.append(text)
+                guard let document = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
+                                                                     plugins: plugins),
+                      ((lower == nil && upper == nil) || !document.lines.contains(where: { $0.kind == .rule }))
+                else { return nil }
+                text = document.copiedText
             }
+            guard let text else { return nil }
+            if (lower != nil || upper != nil) && segment.kind != .text { return nil }
+            guard let slice = Self.textSlice(text, lowerUTF16: lower, upperUTF16: upper) else { return nil }
+            if !slice.isEmpty { parts.append(slice) }
         }
         guard !parts.isEmpty else { return nil }
         return parts.dropFirst().reduce(into: parts[0]) { copied, part in
@@ -211,6 +224,16 @@ struct ReaderBlockRangeDocument {
             if !copied.hasSuffix("\n") && !part.hasPrefix("\n") { copied += "\n" }
             copied += part
         }
+    }
+
+    private static func textSlice(_ text: String, lowerUTF16: Int?, upperUTF16: Int?) -> String? {
+        let length = text.utf16.count
+        let lower = lowerUTF16 ?? 0
+        let upper = upperUTF16 ?? length
+        guard lower >= 0, lower <= upper, upper <= length,
+              let start = text.utf16.index(text.utf16.startIndex, offsetBy: lower).samePosition(in: text),
+              let end = text.utf16.index(text.utf16.startIndex, offsetBy: upper).samePosition(in: text) else { return nil }
+        return String(text[start..<end])
     }
 
     static func tableText(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
