@@ -9,6 +9,8 @@ struct ReaderSelectionDocument {
         let text: String
         let style: InlineContent.Style
         let code: Bool
+        /// Rendered `[label]` from a Markdown `[^label]` reference.
+        var footnoteReference = false
     }
 
     struct Line: Equatable {
@@ -124,7 +126,10 @@ struct ReaderSelectionDocument {
             case let .text(value, style, tags, code):
                 if !tags.isEmpty { return nil }
                 output.append(.init(text: value, style: style, code: code))
-            case .image, .footnote, .math, .plugin: return nil
+            case let .footnote(label):
+                output.append(.init(text: "[\(label)]", style: .init(), code: false,
+                                    footnoteReference: true))
+            case .image, .math, .plugin: return nil
             }
         }
         return output
