@@ -401,12 +401,7 @@ private struct DemoNavigationDrawer: View {
                             HStack(spacing: 14) {
                                 Image(systemName: DemoNavigationIcon.feature(feature))
                                     .frame(width: 24)
-                                VStack(alignment: .leading) {
-                                    Text(feature.localizedTitle(in: language))
-                                    if let subtitle = feature.localizedSubtitle(in: language) {
-                                        Text(subtitle).font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
+                                Text(feature.localizedTitle(in: language))
                             }
                         }
                         .listRowSeparator(.hidden)
