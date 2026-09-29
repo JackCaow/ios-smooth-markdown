@@ -2,7 +2,10 @@ import Foundation
 
 public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart, classDiagram, stateDiagram, erDiagram }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
-public enum MermaidShape: Equatable { case rectangle, rounded, stadium, diamond, circle, subroutine, cylinder, asymmetric, stateStart, stateEnd }
+public enum MermaidShape: Equatable {
+    case rectangle, rounded, stadium, diamond, hexagon, circle, subroutine, cylinder, asymmetric
+    case parallelogram, parallelogramAlt, trapezoid, trapezoidAlt, stateStart, stateEnd
+}
 public enum MermaidLine: Equatable { case solid, dotted, thick }
 public enum MermaidArrow: Equatable { case none, arrow, cross }
 public enum MermaidParticipantType: Equatable { case participant, actor }
@@ -153,9 +156,13 @@ public struct MermaidDiagram: Equatable {
 /// Parses the documented native Mermaid subsets.
 public enum MermaidParser {
     public static func parse(_ source: String) -> MermaidDiagram? {
+        // Match Flutter's MermaidParser._cleanLines: comments can follow a diagram statement.
         let rawLines = source.components(separatedBy: "\n")
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                      !$0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("%%") }
+            .map { line in
+                guard let comment = line.range(of: "%%") else { return line }
+                return String(line[..<comment.lowerBound])
+            }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let lines = rawLines.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         if lines.first == "---" { return MermaidExtendedParser.kanban(rawLines) }
         guard let header = lines.first else { return nil }
@@ -238,7 +245,9 @@ public enum MermaidParser {
         var edges: [MermaidEdge] = []
         var subgraphs: [MermaidSubgraph] = []
         var openGroups: [Int] = []
-        let arrowPattern = try! NSRegularExpression(pattern: #"\s*(==>|-->|-\.->|---)\s*(\|[^|]*\|)?\s*"#)
+        // Keep longer operators first so `---->` is not consumed as `---`.
+        let arrowPattern = try! NSRegularExpression(
+            pattern: #"\s*(---->|====|==>|-->|-\.->|---|\.\.\.|===)\s*(\|[^|]*\|)?\s*"#)
         for line in lines {
             if let groups = RegexCapture.first(#"^subgraph\s+(.+)$"#, in: line, options: [.caseInsensitive]) {
                 let declaration = groups[1].trimmingCharacters(in: .whitespaces)
@@ -269,7 +278,7 @@ public enum MermaidParser {
                         subgraphs[index] = .init(id: group.id, label: group.label,
                                                  nodeIDs: group.nodeIDs + [node.id], parentID: group.parentID)
                     }
-                }
+                } else { return nil }
                 continue
             }
             var parts: [String] = []
@@ -279,7 +288,7 @@ public enum MermaidParser {
                 cursor = NSMaxRange(match.range)
             }
             parts.append(source.substring(from: cursor).trimmingCharacters(in: .whitespaces))
-            guard parts.count == matches.count + 1, parts.allSatisfy({ !$0.isEmpty }) else { continue }
+            guard parts.count == matches.count + 1, parts.allSatisfy({ !$0.isEmpty }) else { return nil }
             for part in parts {
                 if let node = parseNode(part) {
                     if subgraphs.contains(where: { $0.id == node.id }) { continue }
@@ -289,10 +298,12 @@ public enum MermaidParser {
                         subgraphs[index] = .init(id: group.id, label: group.label,
                                                  nodeIDs: group.nodeIDs + [node.id], parentID: group.parentID)
                     }
+                } else if !subgraphs.contains(where: { $0.id == part }) {
+                    return nil
                 }
             }
             for (index, match) in matches.enumerated() {
-                guard let from = extractID(parts[index]), let to = extractID(parts[index + 1]) else { continue }
+                guard let from = extractID(parts[index]), let to = extractID(parts[index + 1]) else { return nil }
                 let token = source.substring(with: match.range(at: 1))
                 let rawLabel = match.range(at: 2).location == NSNotFound ? "" : source.substring(with: match.range(at: 2))
                 let label = rawLabel.isEmpty ? nil : String(rawLabel.dropFirst().dropLast())
@@ -317,9 +328,14 @@ public enum MermaidParser {
     private static func parseNode(_ source: String) -> MermaidNode? {
         let shapes: [(String, MermaidShape)] = [
             (#"^([A-Za-z_]\w*)\(\((.+)\)\)$"#, .circle),
+            (#"^([A-Za-z_]\w*)\{\{(.+)\}\}$"#, .hexagon),
             (#"^([A-Za-z_]\w*)\[\[(.+)\]\]$"#, .subroutine),
             (#"^([A-Za-z_]\w*)\[\((.+)\)\]$"#, .cylinder),
             (#"^([A-Za-z_]\w*)\(\[(.+)\]\)$"#, .stadium),
+            (#"^([A-Za-z_]\w*)\[/(.+)/\]$"#, .parallelogram),
+            (#"^([A-Za-z_]\w*)\[\\(.+)\\\]$"#, .parallelogramAlt),
+            (#"^([A-Za-z_]\w*)\[/(.+)\\\]$"#, .trapezoid),
+            (#"^([A-Za-z_]\w*)\[\\(.+)/\]$"#, .trapezoidAlt),
             (#"^([A-Za-z_]\w*)\[(.+)\]$"#, .rectangle),
             (#"^([A-Za-z_]\w*)>(.+)\]$"#, .asymmetric),
             (#"^([A-Za-z_]\w*)\((.+)\)$"#, .rounded),
