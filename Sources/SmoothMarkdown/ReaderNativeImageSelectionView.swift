@@ -127,12 +127,7 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
                                             availableWidth: availableWidth)
         }
         let built = attributedContent(traits: MarkdownTypography.traits(for: dynamicTypeSize), imageSizes: sizes)
-        if !view.attributedText.isEqual(to: built.text) || view.renderedDynamicType != dynamicTypeSize {
-            view.attributedText = built.text
-            view.renderedDynamicType = dynamicTypeSize
-            view.imageAnchorsUTF16 = built.imageAnchorsUTF16
-            view.invalidateIntrinsicContentSize()
-        }
+        view.applyRenderedContent(built.text, imageAnchorsUTF16: built.imageAnchorsUTF16)
         view.updateImageSizes(sizes)
     }
 
@@ -193,10 +188,22 @@ final class ReaderNativeImageTextView: UITextView, UIGestureRecognizerDelegate {
     static let imageAnchor = "\u{2588}"
 
     var imageAnchorsUTF16: [Int] = []
-    var renderedDynamicType: DynamicTypeSize?
     private var imageHosts: [UIHostingController<AnyView>] = []
     private var imageSizes: [CGSize] = []
     private var dragAnchorUTF16: Int?
+
+    func applyRenderedContent(_ content: NSAttributedString, imageAnchorsUTF16: [Int]) {
+        if !attributedText.isEqual(to: content) {
+            let oldText = attributedText.string
+            let retained = ReaderImageSelectionProjection.retainedRange(
+                selectedRange, oldText: oldText, newText: content.string)
+            if oldText != content.string { dragAnchorUTF16 = nil }
+            attributedText = content
+            selectedRange = retained ?? NSRange(location: 0, length: 0)
+            invalidateIntrinsicContentSize()
+        }
+        self.imageAnchorsUTF16 = imageAnchorsUTF16
+    }
 
     func installCrossImageSelectionGesture() {
         // UIKit's own drag can stop at a tall image line even when the
@@ -205,8 +212,18 @@ final class ReaderNativeImageTextView: UITextView, UIGestureRecognizerDelegate {
         // actually crosses the image anchor.
         let gesture = UILongPressGestureRecognizer(target: self, action: #selector(trackCrossImageSelection(_:)))
         gesture.minimumPressDuration = 0.35
+        gesture.cancelsTouchesInView = false
         gesture.delegate = self
         addGestureRecognizer(gesture)
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldReceive touch: UITouch) -> Bool {
+        // Image taps and its context menu belong to the hosted SwiftUI view.
+        // A drag beginning in prose remains tracked as it passes over images.
+        !imageHosts.contains { host in
+            touch.view?.isDescendant(of: host.view) == true
+        }
     }
 
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,

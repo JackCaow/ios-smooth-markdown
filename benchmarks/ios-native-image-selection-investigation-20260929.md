@@ -4,7 +4,8 @@ Status: **draft implementation, physical acceptance pending**. The earlier
 native TextKit drag failed on the iPhone. A revised selection gesture and
 multi-image text projection now build and pass model tests, but the iPhone was
 unavailable before the new gesture could be run. Keep this branch as a Draft PR.
-The branch includes `main` at `7a19406` (including natural image sizing).
+The branch includes `main` at `07d64ec` (including natural image sizing and
+editor state callbacks).
 
 ## Acceptance case
 
@@ -52,15 +53,21 @@ respond to taps, and offer its surrounding-content menu.
 - A simultaneous long-press recognizer extends the native `selectedRange` when
   the drag crosses any image anchor. Copy removes those anchors while retaining
   adjacent text and inline-code space semantics.
-- `swift test` passed 232 tests (1 skipped). The three cross-platform
-  projection tests passed. Generic iOS `build-for-testing` compiled the Demo,
-  its UI tests, and the native-image XCTest source.
+- A static follow-up audit preserved the UTF-16 selection when a width or font
+  update rebuilds the same text with different attributes. A changed document
+  clears the previous range. The drag recognizer does not cancel UIKit touches
+  and does not receive touches that begin on the hosted image, leaving its tap
+  and context menu to the image view.
+- `swift test` passed 235 tests (1 skipped) after the static audit, including
+  four focused projection tests. Generic iOS `build-for-testing` compiled the
+  Demo, its UI tests, and the native-image XCTest source.
 - **Physical gate:** run `ReaderImageRangeUITests.testNativeDragSelectionCrossesBundledImage`
   and `testNativeDragSelectionCrossesTwoBundledImages` on the iPhone 17. Save
   screenshots of the selection handles and verify the system Copy menu puts
   before/middle/after prose in the clipboard. Also drag a handle again after
-  selection and check image tap/context-menu behavior. The iPhone was
-  unavailable when this revision was prepared.
+  selection and check image tap/context-menu behavior. Selection range retention
+  in code does not establish that UIKit keeps the visible handles or edit menu.
+  The iPhone was unavailable when this revision was prepared.
 
 Remote images, custom image builders, non-prose neighbors, and image-only edge
 groups continue to use the existing explicit block range. Do not merge the

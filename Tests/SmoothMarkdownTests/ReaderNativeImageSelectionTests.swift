@@ -4,6 +4,24 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderNativeImageSelectionTests: XCTestCase {
+    func testStyleRerenderKeepsNativeSelectionButDocumentReplacementClearsIt() {
+        let source = "Before 😀\n█\nAfter"
+        let anchor = (source as NSString).range(of: "█").location
+        let range = (source as NSString).range(of: "😀\n█\nAfter")
+        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        view.isSelectable = true
+        view.applyRenderedContent(NSAttributedString(string: source), imageAnchorsUTF16: [anchor])
+        view.selectedRange = range
+
+        let styled = NSAttributedString(string: source,
+                                        attributes: [.font: UIFont.systemFont(ofSize: 24)])
+        view.applyRenderedContent(styled, imageAnchorsUTF16: [anchor])
+        XCTAssertEqual(view.selectedRange, range)
+
+        view.applyRenderedContent(NSAttributedString(string: "Changed"), imageAnchorsUTF16: [])
+        XCTAssertEqual(view.selectedRange, NSRange(location: 0, length: 0))
+    }
+
     func testTextKitOneImageGlyphKeepsNativeRangeAndCopiesOnlyText() {
         let source = NSMutableAttributedString(string: "Before 🐈 image.\n")
         let anchor = source.length

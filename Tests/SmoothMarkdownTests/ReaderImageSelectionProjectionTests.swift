@@ -3,6 +3,18 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class ReaderImageSelectionProjectionTests: XCTestCase {
+    func testAttributedStyleUpdateRetainsUTF16SelectionOnlyForSameText() {
+        let source = "Before 😀\n█\nAfter"
+        let range = (source as NSString).range(of: "😀\n█\nAfter")
+        XCTAssertEqual(ReaderImageSelectionProjection.retainedRange(range, oldText: source,
+                                                                   newText: source), range)
+        XCTAssertNil(ReaderImageSelectionProjection.retainedRange(range, oldText: source,
+                                                                  newText: "Replaced text"))
+        XCTAssertNil(ReaderImageSelectionProjection.retainedRange(
+            NSRange(location: (source as NSString).length + 1, length: 1),
+            oldText: source, newText: source))
+    }
+
     func testCopyAcrossTwoImagesKeepsOnlySurroundingText() {
         let source = "Before 😀\n█\nMiddle\n█\nAfter"
         let text = source as NSString
