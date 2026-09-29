@@ -1696,6 +1696,7 @@ private struct FormattedTableView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: 0, column: column, isHeader: true,
+                                                   alignment: table.alignments[column],
                                                    isRangeSelected: isSelected(row: 0, column: column),
                                                    textHighlight: textHighlights?[0]?[column],
                                                    searchHighlights: searchHighlights(row: 0, column: column),
@@ -1724,6 +1725,7 @@ private struct FormattedTableView: View {
                             ForEach(table.headers.indices, id: \.self) { column in
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: row, column: column, isHeader: false,
+                                                   alignment: table.alignments[column],
                                                    isRangeSelected: isSelected(row: row + 1, column: column),
                                                    textHighlight: textHighlights?[row + 1]?[column],
                                                    searchHighlights: searchHighlights(row: row + 1, column: column),
@@ -1792,6 +1794,7 @@ private struct FormattedTableCell: View {
     let row: Int
     let column: Int
     let isHeader: Bool
+    let alignment: MarkdownTableAlignment?
     let isRangeSelected: Bool
     let textHighlight: NSRange?
     let searchHighlights: [NSRange]
@@ -1804,6 +1807,7 @@ private struct FormattedTableCell: View {
                                  identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
                                  isHeader: isHeader,
+                                 alignment: alignment,
                                  isRangeSelected: isRangeSelected, textHighlight: textHighlight,
                                  searchHighlights: searchHighlights, activeSearchHighlight: activeSearchHighlight,
                                  onRangeDrag: onRangeDrag,
@@ -1852,6 +1856,7 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let row: Int
     let column: Int
     let isHeader: Bool
+    let alignment: MarkdownTableAlignment?
     let isRangeSelected: Bool
     let textHighlight: NSRange?
     let searchHighlights: [NSRange]
@@ -1885,6 +1890,7 @@ private struct FormattedTableInputField: UIViewRepresentable {
     }
 
     private func configure(_ field: FormattedRangeTextField) {
+        field.textAlignment = MarkdownTableColumnPresentation(alignment).fieldTextAlignment
         field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
         field.crossCellHighlight = textHighlight
         field.crossCellHighlightColor = editorTheme.selectionColor.map(UIColor.init)

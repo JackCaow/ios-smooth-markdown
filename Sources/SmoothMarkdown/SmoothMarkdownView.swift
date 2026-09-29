@@ -898,49 +898,55 @@ public struct SmoothMarkdownView: View {
         let headers = Array(table.head.children)
         let rows = [headers] + table.body.children.map { Array($0.children) }
         let columnCount = max(1, rows.map(\.count).max() ?? 0)
-        let cellWidth: CGFloat = 150 + 2 * styleSheet.tableCellPadding
-        ScrollView(.horizontal) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, cells in
-                    HStack(spacing: 0) {
-                        ForEach(0..<columnCount, id: \.self) { columnIndex in
-                            Group {
-                                if cells.indices.contains(columnIndex) {
-                                    if hasCustomBuilder(cells[columnIndex]) {
-                                        customInlineView(cells[columnIndex], style: .init())
+        MarkdownTableViewport(columnCount: columnCount, padding: styleSheet.tableCellPadding) { cellWidth in
+            ScrollView(.horizontal) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, cells in
+                        HStack(spacing: 0) {
+                            ForEach(0..<columnCount, id: \.self) { columnIndex in
+                                let presentation = MarkdownTableColumnPresentation(
+                                    table.columnAlignments.indices.contains(columnIndex)
+                                        ? table.columnAlignments[columnIndex] : nil)
+                                Group {
+                                    if cells.indices.contains(columnIndex) {
+                                        if hasCustomBuilder(cells[columnIndex]) {
+                                            customInlineView(cells[columnIndex], style: .init())
+                                        } else {
+                                            inlineView(cells[columnIndex])
+                                                .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
+                                                      : (styleSheet.tableCellFont ?? .body))
+                                                .fontWeight(rowIndex == 0 ? .bold : .regular)
+                                                .markdownTextSelection(overrideSelectable ?? selectable)
+                                        }
                                     } else {
-                                        inlineView(cells[columnIndex])
-                                            .font(rowIndex == 0 ? (styleSheet.tableHeaderFont ?? .body)
-                                                  : (styleSheet.tableCellFont ?? .body))
-                                            .fontWeight(rowIndex == 0 ? .bold : .regular)
-                                            .markdownTextSelection(overrideSelectable ?? selectable)
+                                        SwiftUI.Text("")
                                     }
-                                } else {
-                                    SwiftUI.Text("")
+                                }
+                                    .multilineTextAlignment(presentation.textAlignment)
+                                    .frame(width: max(1, cellWidth - 2 * styleSheet.tableCellPadding),
+                                           alignment: presentation.frameAlignment)
+                                    .padding(styleSheet.tableCellPadding)
+                                    .accessibilityAddTraits(rowIndex == 0 ? .isHeader : [])
+                                    .accessibilityHint(rowIndex == 0 ? "Column header" :
+                                        "Row \(rowIndex), column \(columnIndex + 1), \(headers.indices.contains(columnIndex) ? plainText(headers[columnIndex]) : "")")
+                            }
+                        }
+                        .background(rowIndex == 0 ? (styleSheet.tableHeaderBackgroundColor ?? Color.clear) : Color.clear)
+                        .overlay {
+                            Canvas { context, size in
+                                for segment in MarkdownTableGridLayout.segments(
+                                    border: styleSheet.resolvedTableBorder, rowIndex: rowIndex,
+                                    rowCount: rows.count, columnCount: columnCount,
+                                    columnWidth: cellWidth, rowHeight: size.height) {
+                                    var path = Path()
+                                    path.move(to: segment.start)
+                                    path.addLine(to: segment.end)
+                                    context.stroke(path, with: .color(segment.side.color),
+                                                   lineWidth: segment.side.width)
                                 }
                             }
-                                .frame(width: 150, alignment: .leading)
-                                .padding(styleSheet.tableCellPadding)
-                                .accessibilityAddTraits(rowIndex == 0 ? .isHeader : [])
-                                .accessibilityHint(rowIndex == 0 ? "Column header" :
-                                    "Row \(rowIndex), column \(columnIndex + 1), \(headers.indices.contains(columnIndex) ? plainText(headers[columnIndex]) : "")")
+                            .allowsHitTesting(false)
                         }
-                    }
-                    .background(rowIndex == 0 ? (styleSheet.tableHeaderBackgroundColor ?? Color.clear) : Color.clear)
-                    .overlay {
-                        Canvas { context, size in
-                            for segment in MarkdownTableGridLayout.segments(
-                                border: styleSheet.resolvedTableBorder, rowIndex: rowIndex,
-                                rowCount: rows.count, columnCount: columnCount,
-                                columnWidth: cellWidth, rowHeight: size.height) {
-                                var path = Path()
-                                path.move(to: segment.start)
-                                path.addLine(to: segment.end)
-                                context.stroke(path, with: .color(segment.side.color),
-                                               lineWidth: segment.side.width)
-                            }
-                        }
-                        .allowsHitTesting(false)
                     }
                 }
             }
