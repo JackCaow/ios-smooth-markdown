@@ -12,6 +12,7 @@ struct EnhancedCodeBlockView: View {
     let onCopy: ((String, String?) -> Void)?
     let styleSheet: MarkdownStyleSheet
     let selectable: Bool
+    let onSelectSurroundingContent: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var copied = false
@@ -31,18 +32,16 @@ struct EnhancedCodeBlockView: View {
                     }
                     Spacer(minLength: 0)
                     if options.showCopyButton {
-                        Button(action: copyCode) {
-                            Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(copied ? Color.green : (styleSheet.linkColor ?? Color.secondary))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 5)
-                                .background(copied ? Color.green.opacity(0.16) : (styleSheet.linkColor ?? Color.secondary).opacity(0.1),
-                                            in: RoundedRectangle(cornerRadius: 4))
-                                .frame(minWidth: 44, minHeight: 44)
+                        if let onSelectSurroundingContent {
+                            copyButton.contextMenu {
+                                Button("Select surrounding content", action: onSelectSurroundingContent)
+                            }
+                            .accessibilityAction(named: Text("Select surrounding content")) {
+                                onSelectSurroundingContent()
+                            }
+                        } else {
+                            copyButton
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(copied ? "Copied!" : "Copy code")
                     }
                 }
                 .padding(.horizontal, 8)
@@ -70,6 +69,21 @@ struct EnhancedCodeBlockView: View {
                 }
         }
         .onDisappear { resetTask?.cancel() }
+    }
+
+    private var copyButton: some View {
+        Button(action: copyCode) {
+            Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(copied ? Color.green : (styleSheet.linkColor ?? Color.secondary))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(copied ? Color.green.opacity(0.16) : (styleSheet.linkColor ?? Color.secondary).opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 4))
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "Copied!" : "Copy code")
     }
 
     private func copyCode() {

@@ -114,8 +114,10 @@ public struct SmoothMarkdownView: View {
         MarkdownSyntax.parse(source, useCache: usesParseCache)
     }
 
-    private func block(_ node: Markup, alignment: TextAlignment? = nil) -> AnyView {
-        AnyView(blockContent(node, alignment: alignment))
+    private func block(_ node: Markup, alignment: TextAlignment? = nil,
+                       onSelectSurroundingContent: (() -> Void)? = nil) -> AnyView {
+        AnyView(blockContent(node, alignment: alignment,
+                             onSelectSurroundingContent: onSelectSurroundingContent))
     }
 
     @ViewBuilder
@@ -171,16 +173,17 @@ public struct SmoothMarkdownView: View {
             }
         }
         ForEach(Array(ReaderMathSelectionGroup.group(items, enableHTML: enableHTML,
-                                                     plugins: plugins).enumerated()), id: \.offset) { _, group in
+                                                     plugins: plugins,
+                                                     allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton).enumerated()), id: \.offset) { _, group in
             switch group {
             case let .legacy(legacy): readerGroup(legacy)
             case let .math(latex): standaloneBlockMath(latex)
             case let .bridge(items):
                 if let document = ReaderBlockRangeDocument(items, enableHTML: enableHTML, plugins: plugins) {
                     ReaderBlockRangeView(document: document, enableHTML: enableHTML, plugins: plugins,
-                                         spacing: styleSheet.blockSpacing) { segment in
+                                         spacing: styleSheet.blockSpacing) { segment, beginSelection in
                         if case let .displayMath(latex) = segment.kind { return AnyView(blockMath(latex)) }
-                        return renderReaderBlockSegment(segment)
+                        return renderReaderBlockSegment(segment, beginSelection: beginSelection)
                     }
                 }
             }
@@ -196,7 +199,8 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(ReaderSelectionGroup.group(Array(parse(source).children),
                                                       enableHTML: enableHTML, plugins: plugins,
                                                       enabled: enableCrossBlockSelection && !voiceOverEnabled &&
-                                                          (selectable || onTextLongPress != nil)).enumerated()), id: \.offset) { _, group in
+                                                          (selectable || onTextLongPress != nil),
+                                                      allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton).enumerated()), id: \.offset) { _, group in
                 readerGroup(group)
             }
             #else
@@ -239,7 +243,11 @@ public struct SmoothMarkdownView: View {
         }
     }
 
-    private func renderReaderBlockSegment(_ segment: ReaderBlockRangeDocument.Segment) -> AnyView {
+    private func renderReaderBlockSegment(_ segment: ReaderBlockRangeDocument.Segment,
+                                          beginSelection: @escaping () -> Void) -> AnyView {
+        if segment.isCode, let node = segment.nodes.first {
+            return block(node, onSelectSurroundingContent: beginSelection)
+        }
         if segment.isBridge, let node = segment.nodes.first { return block(node) }
         guard let node = segment.nodes.first else { return AnyView(EmptyView()) }
         if let document = ReaderSelectionDocument.compose(segment.nodes,
@@ -288,7 +296,8 @@ public struct SmoothMarkdownView: View {
     }
 
     @ViewBuilder
-    private func blockContent(_ node: Markup, alignment: TextAlignment? = nil) -> some View {
+    private func blockContent(_ node: Markup, alignment: TextAlignment? = nil,
+                              onSelectSurroundingContent: (() -> Void)? = nil) -> some View {
         if let heading = node as? Heading {
             inlineView(heading)
                 .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
@@ -320,7 +329,8 @@ public struct SmoothMarkdownView: View {
             } else {
                 EnhancedCodeBlockView(code: code.code, language: code.language,
                                       options: codeBlockOptions, onCopy: onCodeCopy,
-                                      styleSheet: styleSheet, selectable: selectable)
+                                      styleSheet: styleSheet, selectable: selectable,
+                                      onSelectSurroundingContent: onSelectSurroundingContent)
             }
         } else if let quote = node as? BlockQuote {
             blockquote {

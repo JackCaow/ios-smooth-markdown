@@ -2,15 +2,16 @@
 import SwiftUI
 import UIKit
 
-/// Keeps SwiftUI images and tables in their original layout while exposing a
-/// block range that can cross them.
+/// Keeps SwiftUI non-text blocks in their original layout while exposing a
+/// block range that can cross them. Code uses its existing Copy button's menu
+/// so a context menu on the text does not steal character-selection gestures.
 @available(iOS 17.0, *)
 struct ReaderBlockRangeView: View {
     let document: ReaderBlockRangeDocument
     let enableHTML: Bool
     let plugins: ParserPluginRegistry?
     let spacing: CGFloat
-    let renderSegment: (ReaderBlockRangeDocument.Segment) -> AnyView
+    let renderSegment: (ReaderBlockRangeDocument.Segment, @escaping () -> Void) -> AnyView
 
     @State private var selecting = false
     @State private var anchor: Int?
@@ -26,8 +27,10 @@ struct ReaderBlockRangeView: View {
             ForEach(document.segments.indices, id: \.self) { index in
                 let segment = document.segments[index]
                 Group {
-                    if segment.isBridge && !selecting {
-                        renderSegment(segment)
+                    if segment.isCode && !selecting {
+                        renderSegment(segment, beginSelection)
+                    } else if segment.isBridge && !selecting {
+                        renderSegment(segment, beginSelection)
                             .contextMenu {
                                 Button("Select surrounding content") { beginSelection() }
                             }
@@ -35,7 +38,7 @@ struct ReaderBlockRangeView: View {
                                 beginSelection()
                             }
                     } else {
-                        renderSegment(segment)
+                        renderSegment(segment, beginSelection)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

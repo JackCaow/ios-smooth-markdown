@@ -131,7 +131,7 @@ struct ReaderSelectionDocument {
 }
 
 /// A block range across content that must retain its SwiftUI rendering.
-/// Images contribute no text; tables and display math contribute copyable text.
+/// Images contribute no text; tables, code, and display math contribute copyable text.
 struct ReaderBlockRangeDocument {
     enum Item {
         case markup(Markup)
@@ -139,11 +139,12 @@ struct ReaderBlockRangeDocument {
     }
 
     struct Segment {
-        enum Kind: Equatable { case text, image, table, displayMath(String) }
+        enum Kind: Equatable { case text, image, table, code(String), displayMath(String) }
         let nodes: [Markup]
         let kind: Kind
         var isImage: Bool { kind == .image }
         var isBridge: Bool { kind != .text }
+        var isCode: Bool { if case .code = kind { return true }; return false }
     }
 
     let segments: [Segment]
@@ -168,6 +169,9 @@ struct ReaderBlockRangeDocument {
                 if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
                     flushText()
                     result.append(.init(nodes: [node], kind: .image))
+                } else if let code = node as? Markdown.CodeBlock {
+                    flushText()
+                    result.append(.init(nodes: [node], kind: .code(code.code)))
                 } else if node is Markdown.Table,
                           Self.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
                     flushText()
@@ -188,6 +192,7 @@ struct ReaderBlockRangeDocument {
         for segment in segments[range] {
             switch segment.kind {
             case .image: continue
+            case let .code(source): parts.append(source)
             case let .displayMath(latex): parts.append(latex)
             case .table:
                 guard let node = segment.nodes.first,
@@ -199,7 +204,13 @@ struct ReaderBlockRangeDocument {
                 parts.append(text)
             }
         }
-        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+        guard !parts.isEmpty else { return nil }
+        return parts.dropFirst().reduce(into: parts[0]) { copied, part in
+            // Swift-Markdown code blocks usually end in a newline. Do not add
+            // another separator before the next visible block.
+            if !copied.hasSuffix("\n") && !part.hasPrefix("\n") { copied += "\n" }
+            copied += part
+        }
     }
 
     static func tableText(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> String? {
@@ -219,15 +230,15 @@ struct ReaderBlockRangeDocument {
     }
 }
 
-/// Groups display math with adjacent supported reader blocks without turning
-/// a fenced code block or an unsupported node into a copyable range.
+/// Groups display math with adjacent supported reader blocks while keeping
+/// unsupported nodes as boundaries.
 enum ReaderMathSelectionGroup {
     case legacy(ReaderSelectionGroup)
     case math(String)
     case bridge([ReaderBlockRangeDocument.Item])
 
     static func group(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
-                      plugins: ParserPluginRegistry?) -> [ReaderMathSelectionGroup] {
+                      plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false) -> [ReaderMathSelectionGroup] {
         var output: [ReaderMathSelectionGroup] = []
         var pending: [ReaderBlockRangeDocument.Item] = []
         func flush() {
@@ -246,7 +257,8 @@ enum ReaderMathSelectionGroup {
                     return nil
                 }
                 output.append(contentsOf: ReaderSelectionGroup.group(nodes, enableHTML: enableHTML,
-                                                                      plugins: plugins).map(Self.legacy))
+                                                                      plugins: plugins,
+                                                                      allowCodeBlocks: allowCodeBlocks).map(Self.legacy))
             }
             pending.removeAll()
         }
@@ -257,6 +269,7 @@ enum ReaderMathSelectionGroup {
             case let .markup(node):
                 if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                     ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) ||
+                    (allowCodeBlocks && node is Markdown.CodeBlock) ||
                     ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
                     pending.append(item)
                 } else {
@@ -292,14 +305,19 @@ enum ReaderSelectionGroup {
         return false
     }
 
-    static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?, enabled: Bool = true) -> [ReaderSelectionGroup] {
+    static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?,
+                      enabled: Bool = true, allowCodeBlocks: Bool = false) -> [ReaderSelectionGroup] {
         guard enabled else { return nodes.map(ReaderSelectionGroup.individual) }
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
         func flush() {
-            let hasBridge = pending.contains { isStandaloneImage($0, enableHTML: enableHTML) || $0 is Markdown.Table }
+            let hasBridge = pending.contains {
+                isStandaloneImage($0, enableHTML: enableHTML) || $0 is Markdown.Table ||
+                    (allowCodeBlocks && $0 is Markdown.CodeBlock)
+            }
             let hasCopyable = pending.contains {
-                ReaderSelectionDocument.isSelectable($0, enableHTML: enableHTML, plugins: plugins) || $0 is Markdown.Table
+                ReaderSelectionDocument.isSelectable($0, enableHTML: enableHTML, plugins: plugins) ||
+                    $0 is Markdown.Table || (allowCodeBlocks && $0 is Markdown.CodeBlock)
             }
             if hasBridge && hasCopyable && pending.count > 1 { result.append(.blockBridge(pending)) }
             else if pending.count > 1 && !hasBridge { result.append(.selectable(pending)) }
@@ -314,6 +332,7 @@ enum ReaderSelectionGroup {
         for node in nodes {
             if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                 isStandaloneImage(node, enableHTML: enableHTML) ||
+                (allowCodeBlocks && node is Markdown.CodeBlock) ||
                 ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML, plugins: plugins) != nil {
                 pending.append(node)
             } else {

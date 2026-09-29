@@ -229,6 +229,56 @@ final class ReaderSelectionDocumentTests: XCTestCase {
         XCTAssertEqual(document.copiedText(in: 0...1, enableHTML: false, plugins: nil), "Before\nx+y")
     }
 
+    func testBuiltinCodeJoinsProseTableAndMathRangeWithoutExtraNewline() {
+        let source = "Before\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\n```swift\nlet answer = 42\n```\n\n$$x+y$$\n\nAfter"
+        let groups = ReaderMathSelectionGroup.group(mathItems(source), enableHTML: false, plugins: nil,
+                                                    allowCodeBlocks: true)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .bridge(items) = groups[0],
+              let document = ReaderBlockRangeDocument(items, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected prose-table-code-math range")
+        }
+        XCTAssertEqual(document.segments.count, 5)
+        guard case let .code(code) = document.segments[2].kind else {
+            return XCTFail("Expected original code segment")
+        }
+        XCTAssertEqual(code, "let answer = 42\n")
+        XCTAssertEqual(document.copiedText(in: 2...2, enableHTML: false, plugins: nil), code)
+        XCTAssertEqual(document.copiedText(in: 0...4, enableHTML: false, plugins: nil),
+                       "Before\nName\tValue\nAlpha\t42\nlet answer = 42\nx+y\nAfter")
+    }
+
+    func testCodeBoundaryCanBeKeptForCustomBuilderOrHiddenCopyButton() {
+        let source = "Before\n\n```swift\nlet answer = 42\n```\n\nAfter"
+        let nodes = Array(MarkdownSyntax.parse(source).children)
+        let bridged = ReaderSelectionGroup.group(nodes, enableHTML: false, plugins: nil,
+                                                 allowCodeBlocks: true)
+        XCTAssertEqual(bridged.count, 1)
+        guard case .blockBridge = bridged[0] else { return XCTFail("Expected default-code bridge") }
+
+        let separate = ReaderSelectionGroup.group(nodes, enableHTML: false, plugins: nil,
+                                                  allowCodeBlocks: false)
+        XCTAssertEqual(separate.count, 3)
+        guard case let .individual(code) = separate[1], code is Markdown.CodeBlock else {
+            return XCTFail("Expected code to stay independent when host owns it")
+        }
+    }
+
+    func testBuiltinCodeAndImageShareRangeWhileImageAltIsOmitted() {
+        let source = "Before\n\n![Picture](https://example.com/picture.png)\n\n```swift\nlet answer = 42\n```\n\nAfter"
+        let nodes = Array(MarkdownSyntax.parse(source).children)
+        let groups = ReaderSelectionGroup.group(nodes, enableHTML: false, plugins: nil,
+                                                allowCodeBlocks: true)
+        XCTAssertEqual(groups.count, 1)
+        guard case let .blockBridge(blocks) = groups[0],
+              let document = ReaderBlockRangeDocument(blocks, enableHTML: false, plugins: nil) else {
+            return XCTFail("Expected image and code in one range")
+        }
+        XCTAssertEqual(document.segments.count, 4)
+        XCTAssertEqual(document.copiedText(in: 0...3, enableHTML: false, plugins: nil),
+                       "Before\nlet answer = 42\nAfter")
+    }
+
     func testStandaloneDisplayMathHasItsOwnCopyEndpoint() {
         let groups = ReaderMathSelectionGroup.group([.displayMath("a\\frac{1}{2}")],
                                                     enableHTML: false, plugins: nil)
