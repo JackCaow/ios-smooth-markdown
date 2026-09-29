@@ -67,6 +67,26 @@ The older `--accessibility-fixture`, `--inline-editor-fixture`, `--list-editor-f
 
 The public components include `SmoothMarkdownView`, `StreamMarkdownView`, `MarkdownEditorController`, and `SmoothMarkdownEditor` on iOS. Set `SmoothMarkdownView(scrollable: false)` inside a host-owned vertical scroll view such as the chat list to keep one vertical scroll owner. The reader and stream views accept `onImageTapWithMetadata`, which receives the original source, alt text, and title for Markdown, HTML, inline, remote, and bundled images; the existing URL-only `onImageTap` remains available. If both callbacks are set, both run. A host may supply `imageBuilder: (source, alt, title) -> AnyView` on either reader to replace safe image content while keeping the same tap and accessibility wrapper; unsafe image sources never reach that callback. HTML is disabled by default. `CodeBlockOptions` controls the copy button, language tag, and highlighting. The optional `onCodeCopy` callback receives the exact copied code and its language. Initial highlighting covers Swift, Kotlin, Java, Dart, JavaScript, TypeScript, Python, JSON, and shell scripts; unknown languages render as plain code. Pass a new `streamID` when replacing an active async sequence so the view resets its accumulated document. Swift Markdown parses GFM to a markup tree; SwiftUI renders each block directly. The [Flutter source and tests](https://github.com/JackCaow/flutter-smooth-markdown) remain the behavior reference.
 
+To replace a parsed block while keeping native rendering for every other block, register a `MarkdownWidgetBuilder` and pass the registry to `SmoothMarkdownView` or `StreamMarkdownView`:
+
+```swift
+import Markdown
+import SwiftUI
+
+struct CustomHeading: MarkdownWidgetBuilder {
+    func canBuild(_ node: Markup) -> Bool { node is Heading }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView {
+        AnyView(Text("Custom heading").foregroundColor(.purple))
+    }
+}
+
+let builders = BuilderRegistry()
+builders.register("header", builder: CustomHeading())
+SmoothMarkdownView(markdown: "# Hello\n\nNormal paragraph", builderRegistry: builders)
+```
+
+Registry lookup checks the exact Flutter-compatible block key first (`header`, `paragraph`, `code_block`, `blockquote`, `list`, `table`, `horizontal_rule`, `html_block`), then calls `canBuild` on remaining registered builders in insertion order. Other parsed block types use their Swift type name as the key, such as `ListItem`. A rejected or unregistered node uses the next capable builder or its native renderer. `context.renderBlock` renders nested children through the same registry. Custom block views form separate native selection surfaces; their selection and copy behavior belongs to the host view. Inline markup, pre-parsed math, footnote and details wrappers, and parser-plugin output do not currently pass through this block registry.
+
 `MarkdownStyleSheet` provides host-theme defaults and `light()`, `dark()`, `github(dark:)`, and `vscode(dark:)` presets. Change its public properties to customize colors, fonts, and spacing:
 
 ```swift
