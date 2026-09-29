@@ -81,8 +81,7 @@ final class DemoExamplesUITests: XCTestCase {
     func testBasicFormattingInlineCodeBackgroundScreenshotOnPhysicalDevice() {
         let app = XCUIApplication()
         app.launch()
-        choose("language-en", in: app)
-        choose("example-basic-formatting", in: app)
+        XCTAssertTrue(app.buttons["open-examples"].waitForExistence(timeout: 10))
         XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
         let code = app.textViews.matching(NSPredicate(
             format: "label CONTAINS %@ OR label CONTAINS %@",
