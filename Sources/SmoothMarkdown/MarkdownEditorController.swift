@@ -179,7 +179,9 @@ public final class MarkdownEditorController: ObservableObject {
         }.joined()
     }
 
-    /// Complex source-only, list, and table blocks stay copyable but are not deleted yet.
+    /// A complete top-level range is deletable only when the remaining source
+    /// reparses into the same blocks with the same trivia. This includes lists,
+    /// tables, and custom blocks when deleting them cannot merge neighbours.
     public func canDeleteSemanticBlockRange(from startID: String, to endID: String) -> Bool {
         deletionMarkdown(from: startID, to: endID) != nil
     }
@@ -201,12 +203,6 @@ public final class MarkdownEditorController: ObservableObject {
     private func deletionMarkdown(from startID: String, to endID: String) -> String? {
         let document = semanticDocument
         guard let range = semanticBlockRange(in: document, from: startID, to: endID) else { return nil }
-        for block in document.blocks[range] {
-            switch block.kind {
-            case .paragraph, .heading, .fencedCode, .horizontalRule: break
-            case .list, .table, .plugin, .raw: return nil
-            }
-        }
         var kept = document.blocks.enumerated().compactMap { range.contains($0.offset) ? nil : $0.element }
         if range.lowerBound == 0, !kept.isEmpty {
             let first = kept[0]
@@ -217,7 +213,9 @@ public final class MarkdownEditorController: ObservableObject {
                                                                trailingTrivia: document.trailingTrivia).toMarkdown()
         let reparsed = codec.parse(updated)
         guard reparsed.toMarkdown() == updated, reparsed.blocks.count == kept.count,
-              zip(reparsed.blocks, kept).allSatisfy({ $0.0.kind == $0.1.kind && $0.0.source == $0.1.source }) else {
+              (kept.isEmpty || reparsed.trailingTrivia == document.trailingTrivia),
+              zip(reparsed.blocks, kept).allSatisfy({ $0.0.kind == $0.1.kind &&
+                  $0.0.source == $0.1.source && $0.0.leadingTrivia == $0.1.leadingTrivia }) else {
             return nil
         }
         return updated == text ? nil : updated
