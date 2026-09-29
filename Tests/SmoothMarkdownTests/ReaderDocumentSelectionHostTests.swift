@@ -1,10 +1,131 @@
 #if os(iOS)
+import SwiftUI
 import UIKit
 import XCTest
 @testable import SmoothMarkdown
 
 @available(iOS 17.0, *)
 final class ReaderDocumentSelectionHostTests: XCTestCase {
+    func testInlineMathDetailsAndFootnoteShareContinuousHostAndCurrentCopyState() throws {
+        let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
+            forResource: "ReaderRichHost", withExtension: "md")), encoding: .utf8)
+        let reader = SmoothMarkdownView(markdown: source, selectable: true)
+        let closed = try XCTUnwrap(reader.wholeDocumentSelection)
+        let summary = try XCTUnwrap(closed.projection.document.segments.first {
+            $0.kind == .detailsSummary
+        })
+        XCTAssertEqual(closed.selection.selectionText, closed.projection.attributedText.string)
+        XCTAssertTrue(closed.projection.attachments.contains {
+            if case let .formula(latex) = $0.content { return latex == "x+y" }
+            return false
+        })
+        XCTAssertTrue(closed.projection.document.segments.contains { $0.kind == .footnote })
+        let closedCopy = try XCTUnwrap(closed.projection.copiedText(in: NSRange(
+            location: 0, length: closed.projection.attributedText.length)))
+        XCTAssertTrue(closedCopy.contains("Before x+y and reference[1]."))
+        XCTAssertTrue(closedCopy.contains("Show details"))
+        XCTAssertTrue(closedCopy.contains("[1]: Definition with bold text."))
+        XCTAssertFalse(closedCopy.contains("Hidden"))
+
+        let opened = try XCTUnwrap(reader.wholeDocumentSelection(expansion: [summary.id: true]))
+        XCTAssertEqual(opened.projection.document.segments.first { $0.kind == .detailsSummary }?.id,
+                       summary.id)
+        XCTAssertEqual(opened.selection.selectionText, opened.projection.attributedText.string)
+        let openCopy = try XCTUnwrap(opened.projection.copiedText(in: NSRange(
+            location: 0, length: opened.projection.attributedText.length)))
+        XCTAssertTrue(openCopy.contains("Hidden a+b body."))
+
+        let host = ReaderDocumentSelectionTextView()
+        host.disclosureExpanded = [summary.id: false]
+        var toggledID: String?
+        host.onDisclosureTap = { toggledID = $0 }
+        let attachments = Dictionary(uniqueKeysWithValues: closed.projection.attachments.map {
+            ($0.id, CGSize(width: 50, height: 24))
+        })
+        let views = Dictionary(uniqueKeysWithValues: closed.projection.attachments.map {
+            ($0.id, UIView())
+        })
+        XCTAssertTrue(host.apply(closed.projection, availableWidth: 300,
+                                 measuredAttachments: attachments, hostedViews: views))
+        let disclosure = try XCTUnwrap(host.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityIdentifier == "reader-disclosure-0" })
+        XCTAssertEqual(disclosure.accessibilityValue, "Collapsed")
+        disclosure.sendActions(for: .touchUpInside)
+        XCTAssertEqual(toggledID, summary.id)
+    }
+
+    func testComplexFootnoteDefinitionKeepsLegacyRenderer() {
+        let source = "Before[^1].\n\n[^1]: First paragraph.\n    # Second block\n\nAfter."
+        XCTAssertNil(SmoothMarkdownView(markdown: source, selectable: true).wholeDocumentSelection)
+    }
+
+    func testMultipleDetailsKeepIndependentExpansionAndStableSummaryIDs() throws {
+        let source = """
+        Before.
+
+        <details>
+        <summary>First</summary>
+        First body.
+        </details>
+
+        Between.
+
+        <details open>
+        <summary>Second</summary>
+        Second body.
+        </details>
+
+        After.
+        """
+        let reader = SmoothMarkdownView(markdown: source, selectable: true)
+        let initial = try XCTUnwrap(reader.wholeDocumentSelection)
+        let ids = initial.projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
+        XCTAssertEqual(ids.count, 2)
+        let initialCopy = try XCTUnwrap(initial.projection.copiedText(in: NSRange(
+            location: 0, length: initial.projection.attributedText.length)))
+        XCTAssertFalse(initialCopy.contains("First body."))
+        XCTAssertTrue(initialCopy.contains("Second body."))
+        let switched = try XCTUnwrap(reader.wholeDocumentSelection(expansion: [ids[0]: true, ids[1]: false]))
+        XCTAssertEqual(switched.projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id), ids)
+        XCTAssertEqual(switched.selection.selectionText, switched.projection.attributedText.string)
+        let switchedCopy = try XCTUnwrap(switched.projection.copiedText(in: NSRange(
+            location: 0, length: switched.projection.attributedText.length)))
+        XCTAssertTrue(switchedCopy.contains("First body."))
+        XCTAssertFalse(switchedCopy.contains("Second body."))
+    }
+
+    func testCollapsedDetailsWithCustomCodeBodyKeepsInteractiveLegacyRenderer() {
+        let source = """
+        Before.
+
+        <details>
+        <summary>Code</summary>
+        ```swift
+        print(1)
+        ```
+        </details>
+
+        After.
+        """
+        let reader = SmoothMarkdownView(markdown: source,
+                                        codeBuilder: { _, _ in AnyView(Text("Custom")) },
+                                        selectable: true)
+        XCTAssertNil(reader.wholeDocumentSelection)
+    }
+
+    func testDetailsSummaryLinkKeepsLinkActionMetadata() throws {
+        let reader = SmoothMarkdownView(markdown: """
+        <details>
+        <summary>See [site](https://example.com)</summary>
+        Body.
+        </details>
+        """, selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        let summary = try XCTUnwrap(candidate.selection.lines.first { $0.kind == .detailsSummary })
+        XCTAssertEqual(summary.runs.first { $0.style.link != nil }?.style.link,
+                       URL(string: "https://example.com"))
+    }
+
     func testMeasuredAttachmentHasTextKitSizeAndSemanticCopyAcrossIt() {
         let projection = ReaderTextKitProjection(document: .init(
             markdown: "Before $x+y$ after.\n\nSecond 😀 paragraph."))

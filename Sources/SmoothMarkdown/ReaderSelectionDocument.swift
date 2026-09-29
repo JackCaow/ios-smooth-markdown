@@ -13,15 +13,17 @@ struct ReaderSelectionDocument {
         let style: InlineContent.Style
         let code: Bool
         var image: SafeHTML.ImageSpec? = nil
+        var formula: String? = nil
         var keycap = false
         var htmlUnderline = false
         var highlighted = false
         /// Rendered `[label]` from a Markdown `[^label]` reference.
         var footnoteReference = false
+        var footnoteDefinitionLabel = false
     }
 
     struct Line: Equatable {
-        enum Kind: Equatable { case paragraph, heading(Int), list, quote, rule }
+        enum Kind: Equatable { case paragraph, heading(Int), list, quote, rule, detailsSummary, footnoteDefinition }
         let kind: Kind
         let runs: [Run]
         let indent: Int
@@ -46,7 +48,7 @@ struct ReaderSelectionDocument {
                line.runs.allSatisfy({ $0.image != nil || $0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
                 return nil
             }
-            return line.runs.filter { $0.image == nil }.map(\.text).joined()
+            return line.runs.filter { $0.image == nil }.map { $0.formula ?? $0.text }.joined()
         }.joined(separator: "\n")
     }
 
@@ -61,27 +63,30 @@ struct ReaderSelectionDocument {
                                                               upperUTF16: upperUTF16) else { return nil }
         let lower = lowerUTF16 ?? 0
         let upper = upperUTF16 ?? selectionText.utf16.count
-        var removedOffsets: [Int] = []
+        var replacements: [(offset: Int, text: String)] = []
         var offset = 0
         for (index, line) in lines.enumerated() {
             if index > 0 { offset += 1 }
             for run in line.runs {
                 if run.keycap {
-                    if (lower..<upper).contains(offset) { removedOffsets.append(offset - lower) }
+                    if (lower..<upper).contains(offset) { replacements.append((offset - lower, "")) }
                     offset += 1 + run.text.utf16.count
-                    if (lower..<upper).contains(offset) { removedOffsets.append(offset - lower) }
+                    if (lower..<upper).contains(offset) { replacements.append((offset - lower, "")) }
                     offset += 1
                 } else {
                     if run.image != nil, (lower..<upper).contains(offset) {
-                        removedOffsets.append(offset - lower)
+                        replacements.append((offset - lower, ""))
+                    } else if let formula = run.formula, (lower..<upper).contains(offset) {
+                        replacements.append((offset - lower, formula))
                     }
                     offset += run.text.utf16.count
                 }
             }
         }
         let copied = NSMutableString(string: slice)
-        for position in removedOffsets.reversed() {
-            copied.deleteCharacters(in: NSRange(location: position, length: 1))
+        for replacement in replacements.reversed() {
+            copied.replaceCharacters(in: NSRange(location: replacement.offset, length: 1),
+                                     with: replacement.text)
         }
         return copied as String
     }
@@ -103,6 +108,27 @@ struct ReaderSelectionDocument {
                 lines.append(.init(kind: .paragraph,
                                    runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
                                                 style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case let .detailsSummary(details) = item {
+                guard visualBlockAnchors else { return nil }
+                let summary = MarkdownSyntax.parse(details.summary, enableHTML: enableHTML).child(at: 0)
+                let runs = summary.flatMap { inlineRuns($0, enableHTML: enableHTML, plugins: plugins) }
+                    ?? [.init(text: "Details", style: .init(), code: false)]
+                lines.append(.init(kind: .detailsSummary, runs: runs, indent: 0,
+                                   quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case let .footnoteDefinition(definition) = item {
+                guard visualBlockAnchors else { return nil }
+                let parsed = MarkdownSyntax.parse(definition.content, enableHTML: enableHTML)
+                guard Array(parsed.children).count == 1, let content = parsed.child(at: 0) as? Paragraph,
+                      let contentRuns = inlineRuns(content, enableHTML: enableHTML,
+                                                   plugins: plugins) else { return nil }
+                let label = Run(text: "[\(definition.label)]: ", style: .init(), code: false,
+                                footnoteDefinitionLabel: true)
+                lines.append(.init(kind: .footnoteDefinition, runs: [label] + contentRuns,
                                    indent: 0, quoteDepth: 0, quoteIDs: []))
                 continue
             }
@@ -129,7 +155,9 @@ struct ReaderSelectionDocument {
                                            indent: 0, quoteIDs: [], nextQuoteID: &nextQuoteID) else { return nil }
             // The legacy prose view has no image host. Only the measured
             // whole-document TextKit path may consume image anchors.
-            if !visualBlockAnchors && part.contains(where: { $0.runs.contains { $0.image != nil } }) {
+            if !visualBlockAnchors && part.contains(where: { $0.runs.contains {
+                $0.image != nil || $0.formula != nil
+            } }) {
                 return nil
             }
             lines.append(contentsOf: part)
@@ -223,7 +251,7 @@ struct ReaderSelectionDocument {
     }
 
     static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?,
-                                   allowImages: Bool = false) -> [Run]? {
+                                   allowVisualAttachments: Bool = false) -> [Run]? {
         var output: [Run] = []
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
@@ -241,10 +269,14 @@ struct ReaderSelectionDocument {
                 output.append(.init(text: "[\(label)]", style: .init(), code: false,
                                     footnoteReference: true))
             case let .image(image):
-                guard allowImages, ImageSource.parse(image.source) != nil else { return nil }
+                guard allowVisualAttachments, ImageSource.parse(image.source) != nil else { return nil }
                 output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
                                     style: .init(), code: false, image: image))
-            case .math, .plugin, .custom: return nil
+            case let .math(latex):
+                guard allowVisualAttachments else { return nil }
+                output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
+                                    style: .init(), code: false, formula: latex))
+            case .plugin, .custom: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count
@@ -266,7 +298,7 @@ struct ReaderSelectionDocument {
     }
 
     private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
-        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins, allowImages: true)
+        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins, allowVisualAttachments: true)
     }
 
     /// Table cells and other inline containers also need the same native keycap path.
@@ -284,6 +316,8 @@ struct ReaderBlockRangeDocument {
     enum Item {
         case markup(Markup)
         case displayMath(String)
+        case detailsSummary(DetailsSyntax.Block)
+        case footnoteDefinition(FootnoteSyntax.Definition)
     }
 
     struct Segment {
@@ -313,6 +347,8 @@ struct ReaderBlockRangeDocument {
             case let .displayMath(latex):
                 flushText()
                 result.append(.init(nodes: [], kind: .displayMath(latex)))
+            case .detailsSummary, .footnoteDefinition:
+                return nil
             case let .markup(node):
                 if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
                     flushText()
@@ -447,6 +483,8 @@ enum ReaderMathSelectionGroup {
                 } else {
                     pending.append(item)
                 }
+            case .detailsSummary, .footnoteDefinition:
+                flush()
             case let .markup(node):
                 if hasCustomBuilder(node) {
                     flush()
