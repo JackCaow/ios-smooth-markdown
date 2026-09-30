@@ -29,4 +29,10 @@ final class NativeMarkdownMarkupTests: XCTestCase {
         XCTAssertTrue(item.child(at: 1) is UnorderedList)
         XCTAssertTrue(item.child(at: 2) is Paragraph)
     }
+
+    func testImageAltUsesNestedPlainText() throws {
+        let paragraph = try XCTUnwrap(MarkdownSyntax.parse("![**bold** `code`](asset.png)").child(at: 0))
+        let image = try XCTUnwrap(paragraph.child(at: 0) as? Markdown.Image)
+        XCTAssertEqual(image.alt, "bold code")
+    }
 }

@@ -150,7 +150,14 @@ public enum Markdown {
     public final class Image: Markup {
         public let source: String?
         public let title: String?
-        public var alt: String { children.map { ($0 as? Text)?.string ?? $0.format() }.joined() }
+        public var alt: String {
+            func plain(_ node: Markup) -> String {
+                if let text = node as? Text { return text.string }
+                if let code = node as? InlineCode { return code.code }
+                return node.children.map(plain).joined()
+            }
+            return children.map(plain).joined()
+        }
         public init(source: String?, title: String? = nil, children: [Markup] = [], range: Range<SourceLocation>? = nil, rawSource: String? = nil) {
             self.source = source; self.title = title
             super.init(children, range: range, source: rawSource)
