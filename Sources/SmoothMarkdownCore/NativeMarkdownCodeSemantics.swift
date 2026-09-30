@@ -1,7 +1,7 @@
 import Foundation
 
-enum NativeMarkdownCodeSemantics {
-    static func text(source: String, fenced: Bool) -> String {
+public enum NativeMarkdownCodeSemantics {
+    public static func text(source: String, fenced: Bool) -> String {
         var lines = source.replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }

@@ -88,18 +88,19 @@ enum CodeSyntaxHighlighter {
         return tokens
     }
 
-    static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool) -> AttributedString {
+    static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool, colors: MarkdownSyntaxColors? = nil) -> AttributedString {
         guard enabled else { return AttributedString(code) }
+        let palette = colors ?? (dark ? MarkdownSyntaxColors.dark() : MarkdownSyntaxColors.light())
         var result = AttributedString()
         for token in tokenize(code, language: language) {
             var fragment = AttributedString(token.text)
             switch token.kind {
             case .plain: break
-            case .keyword: fragment.foregroundColor = dark ? Color(red: 0.78, green: 0.56, blue: 1) : Color(red: 0.53, green: 0.21, blue: 0.73)
-            case .string: fragment.foregroundColor = dark ? Color(red: 0.95, green: 0.62, blue: 0.55) : Color(red: 0.65, green: 0.16, blue: 0.19)
-            case .comment: fragment.foregroundColor = dark ? Color(red: 0.54, green: 0.69, blue: 0.58) : Color(red: 0.26, green: 0.48, blue: 0.29)
-            case .number: fragment.foregroundColor = dark ? Color(red: 0.55, green: 0.75, blue: 1) : Color(red: 0.16, green: 0.38, blue: 0.69)
-            case .literal: fragment.foregroundColor = dark ? Color(red: 0.43, green: 0.82, blue: 0.82) : Color(red: 0.07, green: 0.49, blue: 0.52)
+            case .keyword: fragment.foregroundColor = palette.keyword
+            case .string: fragment.foregroundColor = palette.string
+            case .comment: fragment.foregroundColor = palette.comment
+            case .number: fragment.foregroundColor = palette.number
+            case .literal: fragment.foregroundColor = palette.literal
             }
             result += fragment
         }

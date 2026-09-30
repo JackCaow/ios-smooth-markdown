@@ -101,7 +101,7 @@ enum SVGWebKitConfiguration {
         // `device-width` is the full iPhone width even inside a small WKWebView.
         // Match the actual view width so both badges and resized SVGs use one CSS pixel per point.
         let width = max(1, Int((viewportWidth ?? svg.size.width).rounded()))
-        return "<html><head><meta name='viewport' content='width=\(width),initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(markup)</body></html>"
+        return "<html><head><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'\"><meta name='viewport' content='width=\(width),initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(markup)</body></html>"
     }
 
     static func makeView() -> WKWebView {

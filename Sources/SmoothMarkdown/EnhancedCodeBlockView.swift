@@ -27,11 +27,10 @@ struct StandardCodeBlockView: View {
                                                  copy: copyCode,
                                                  accessibilityIdentifier: "reader-code-actions")
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
+                .padding(styleSheet.designTokens.code.headerPadding)
             }
             #endif
-            ScrollView(.horizontal) {
+            ScrollView(.horizontal, showsIndicators: styleSheet.designTokens.code.showScrollbar) {
                 Text(code)
                     .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
                     .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
@@ -69,6 +68,7 @@ struct StandardCodeBlockView: View {
 }
 
 struct EnhancedCodeBlockView: View {
+    @Environment(\.markdownStrings) private var strings
     let code: String
     let language: String?
     let options: CodeBlockOptions
@@ -87,22 +87,17 @@ struct EnhancedCodeBlockView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if (options.showLanguageTag && !(language?.isEmpty ?? true)) || options.showCopyButton {
-                HStack(spacing: 8) {
+                HStack(spacing: styleSheet.designTokens.code.headerSpacing) {
                     if options.showLanguageTag, let language, !language.isEmpty {
-                        Text(language.uppercased())
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(styleSheet.linkColor ?? Color.accentColor)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background((styleSheet.linkColor ?? Color.accentColor).opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                        languageBadge(language)
                     }
                     Spacer(minLength: 0)
                     if options.showCopyButton {
                         if let onSelectSurroundingContent {
                             copyButton.contextMenu {
-                                Button("Select surrounding content", action: onSelectSurroundingContent)
+                                Button(strings.selectSurroundingContent, action: onSelectSurroundingContent)
                             }
-                            .accessibilityAction(named: Text("Select surrounding content")) {
+                            .accessibilityAction(named: Text(strings.selectSurroundingContent)) {
                                 onSelectSurroundingContent()
                             }
                         } else {
@@ -117,8 +112,7 @@ struct EnhancedCodeBlockView: View {
                     }
                     #endif
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
+                .padding(styleSheet.designTokens.code.headerPadding)
             }
             #if os(iOS)
             if !options.showCopyButton && (!options.showLanguageTag || language?.isEmpty != false),
@@ -129,14 +123,13 @@ struct EnhancedCodeBlockView: View {
                                                  copy: copyCode,
                                                  accessibilityIdentifier: "reader-code-actions")
                 }
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
+                .padding(styleSheet.designTokens.code.headerPadding)
             }
             #endif
-            ScrollView(.horizontal) {
+            ScrollView(.horizontal, showsIndicators: styleSheet.designTokens.code.showScrollbar) {
                 Text(CodeSyntaxHighlighter.attributed(code, language: language,
                                                       dark: styleSheet.darkCodeHighlighting ?? (colorScheme == .dark),
-                                                      enabled: options.enableSyntaxHighlighting))
+                                                      enabled: options.enableSyntaxHighlighting, colors: styleSheet.designTokens.code.syntaxColors))
                     .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
                     .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
                     .fixedSize(horizontal: true, vertical: false)
@@ -163,19 +156,35 @@ struct EnhancedCodeBlockView: View {
         .onDisappear { resetTask?.cancel() }
     }
 
+    private func languageBadge(_ language: String) -> some View {
+        let tokens = styleSheet.designTokens.code
+        let foreground = tokens.languageColor ?? styleSheet.linkColor ?? Color.accentColor
+        let background = tokens.languageBackgroundColor ?? foreground.opacity(tokens.languageBackgroundAlpha)
+        return Text(language.uppercased())
+            .font(tokens.languageFont ?? .caption2.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(tokens.languagePadding)
+            .background(background, in: RoundedRectangle(cornerRadius: tokens.languageCornerRadius))
+    }
+
     private var copyButton: some View {
-        Button(action: copyCode) {
-            Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(copied ? Color.green : (styleSheet.linkColor ?? Color.secondary))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
-                .background(copied ? Color.green.opacity(0.16) : (styleSheet.linkColor ?? Color.secondary).opacity(0.1),
-                            in: RoundedRectangle(cornerRadius: 4))
+        let tokens = styleSheet.designTokens.code
+        let normalColor = tokens.copyColor ?? styleSheet.linkColor ?? Color.secondary
+        let foreground = copied ? tokens.copiedColor : normalColor
+        let background = copied
+            ? (tokens.copiedBackgroundColor ?? tokens.copiedColor.opacity(tokens.copiedBackgroundAlpha))
+            : (tokens.copyBackgroundColor ?? normalColor.opacity(tokens.copyBackgroundAlpha))
+        let title = copied ? (tokens.copiedLabel ?? strings.copied) : (tokens.copyLabel ?? strings.copy)
+        return Button(action: copyCode) {
+            Label(title, systemImage: copied ? "checkmark" : "doc.on.doc")
+                .font(tokens.copyFont ?? .caption.weight(.medium))
+                .foregroundStyle(foreground)
+                .padding(tokens.copyPadding)
+                .background(background, in: RoundedRectangle(cornerRadius: tokens.copyCornerRadius))
                 .frame(minWidth: 44, minHeight: 44)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(copied ? "Copied!" : "Copy code")
+        .accessibilityLabel(title)
     }
 
     private func copyCode() {
@@ -191,7 +200,7 @@ struct EnhancedCodeBlockView: View {
         copied = true
         resetTask?.cancel()
         resetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(max(0, styleSheet.designTokens.code.copyFeedbackSeconds) * 1_000_000_000))
             guard !Task.isCancelled else { return }
             copied = false
         }

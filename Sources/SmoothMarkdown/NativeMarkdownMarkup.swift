@@ -1,3 +1,6 @@
+#if canImport(SmoothMarkdownCore)
+import SmoothMarkdownCore
+#endif
 import Foundation
 
 /// Locations follow CommonMark's one-based UTF-8 byte columns.

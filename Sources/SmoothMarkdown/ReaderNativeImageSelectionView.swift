@@ -15,6 +15,9 @@ struct ReaderNativeImageItem {
 
 @available(iOS 17.0, *)
 struct ReaderNativeImageSelectionContainer: View {
+    @Environment(\.markdownResources) private var resources
+    @Environment(\.markdownStrings) private var strings
+    @State private var loadedResourceIdentity: String?
     let document: ReaderBlockRangeDocument
     let styleSheet: MarkdownStyleSheet
     let enableHTML: Bool
@@ -59,7 +62,7 @@ struct ReaderNativeImageSelectionContainer: View {
                                                onLinkTap: onLinkTap,
                                                imageContents: contents.map { content in
                     AnyView(content.contextMenu {
-                        Button("Select surrounding content") { usingWholeBlockSelection = true }
+                        Button(strings.selectSurroundingContent) { usingWholeBlockSelection = true }
                     })
                 }, imageItems: imageItems, naturalImageSizes: naturalImageSizes)
             } else {
@@ -69,7 +72,7 @@ struct ReaderNativeImageSelectionContainer: View {
                                      onSelectionFinished: nil, renderSegment: fallbackSegment)
             }
         }
-        .task(id: remoteKeys) { await loadRemoteImages() }
+        .task(id: remoteKeys.map { $0.url.absoluteString }.joined() + resources.requestIdentity) { await loadRemoteImages() }
     }
 
     private func fallbackSegment(_ segment: ReaderBlockRangeDocument.Segment,
@@ -84,6 +87,10 @@ struct ReaderNativeImageSelectionContainer: View {
     }
 
     private func loadRemoteImages() async {
+        if loadedResourceIdentity != resources.requestIdentity {
+            remoteResults = [:]
+            loadedResourceIdentity = resources.requestIdentity
+        }
         remoteResults = remoteResults.filter { remoteKeys.contains($0.key) }
         failedAt = failedAt.filter { remoteKeys.contains($0.key) }
         let now = Date()
@@ -98,7 +105,7 @@ struct ReaderNativeImageSelectionContainer: View {
         await withTaskGroup(of: (ReaderRemoteImageKey, ReaderRemoteImageResolution).self) { group in
             func enqueue(_ key: ReaderRemoteImageKey) {
                 group.addTask {
-                    let result = await ReaderRemoteImageLoader.fetch(key)
+                    let result = await ReaderRemoteImageLoader.fetch(key, options: resources)
                     switch result {
                     case let .data(data): return (key, ReaderRemoteImageResolution.decode(data, key: key))
                     case .failure: return (key, .failure)
@@ -129,6 +136,8 @@ struct ReaderNativeImageSelectionContainer: View {
 /// long-press recognizer extends UIKit's selectedRange past the image line.
 @available(iOS 17.0, *)
 struct ReaderNativeImageSelectionView: UIViewRepresentable {
+    @Environment(\.markdownResources) private var resources
+    @Environment(\.markdownStrings) private var strings
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderBlockRangeDocument
@@ -193,7 +202,11 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
         configure(view, availableWidth: view.bounds.width > 0 ? view.bounds.width : nil)
-        view.setImageOverlays(contents: imageContents)
+        view.setImageOverlays(contents: imageContents.map { AnyView($0
+            .environment(\.markdownResources, resources)
+            .environment(\.markdownStrings, strings)
+            .environment(\.markdownDesignTokens, styleSheet.designTokens)
+            .environment(\.readerTextSelectionMenuBuilder, textSelectionMenuBuilder)) })
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: ReaderNativeImageTextView,

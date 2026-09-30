@@ -130,6 +130,7 @@ public final class MarkdownEditorController: ObservableObject {
     }
     private let historyLimit: Int
     private let plugins: ParserPluginRegistry?
+    private var pluginChanges: AnyCancellable?
     private var undoStack: [Snapshot] = []
     private var redoStack: [Snapshot] = []
     private var transactionDepth = 0
@@ -141,7 +142,10 @@ public final class MarkdownEditorController: ObservableObject {
         self.selection = NSRange(location: (text as NSString).length, length: 0)
         self.savedText = text
         self.historyLimit = max(0, historyLimit)
-        self.plugins = plugins?.copy()
+        self.plugins = plugins
+        self.pluginChanges = plugins?.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     public var isDirty: Bool { text != savedText }
@@ -151,7 +155,7 @@ public final class MarkdownEditorController: ObservableObject {
 
     /// A source-preserving semantic snapshot for supported top-level blocks.
     public var semanticDocument: MarkdownDocument { codec.parse(text) }
-    /// A snapshot of the editor's opt-in syntax registry for its preview.
+    /// A current snapshot of the editor's live opt-in registry for its preview.
     public var parserPlugins: ParserPluginRegistry? { plugins?.copy() }
     private var codec: MarkdownDocumentCodec { MarkdownDocumentCodec(plugins: plugins) }
 

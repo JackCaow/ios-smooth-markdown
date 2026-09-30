@@ -44,6 +44,7 @@ enum ReaderPluginSelectionText {
 /// Its suggested Copy action uses the same text supplied to the host builder.
 @available(iOS 17.0, *)
 struct ReaderSelectionActionsButton: UIViewRepresentable {
+    @Environment(\.markdownStrings) private var strings
     let selectedText: String
     let builder: ReaderTextSelectionMenuBuilder
     let copy: () -> Void
@@ -57,17 +58,17 @@ struct ReaderSelectionActionsButton: UIViewRepresentable {
     }
 
     func updateUIView(_ button: UIButton, context: Context) {
-        button.configuration?.title = "Actions"
+        button.configuration?.title = strings.actions
         button.accessibilityIdentifier = accessibilityIdentifier
-        button.accessibilityLabel = "Selection actions"
-        button.menu = Self.menu(selectedText: selectedText, builder: builder, copy: copy)
+        button.accessibilityLabel = strings.selectionActions
+        button.menu = Self.menu(selectedText: selectedText, builder: builder, copy: copy, copyLabel: strings.copy)
         button.showsMenuAsPrimaryAction = true
         button.isEnabled = !selectedText.isEmpty
     }
 
     static func menu(selectedText: String, builder: ReaderTextSelectionMenuBuilder,
-                     copy: @escaping () -> Void) -> UIMenu {
-        let suggestedCopy = UIAction(title: "Copy", image: UIImage(systemName: "doc.on.doc")) { _ in copy() }
+                     copy: @escaping () -> Void, copyLabel: String = "Copy") -> UIMenu {
+        let suggestedCopy = UIAction(title: copyLabel, image: UIImage(systemName: "doc.on.doc")) { _ in copy() }
         return builder(selectedText, [suggestedCopy]) ?? UIMenu(children: [suggestedCopy])
     }
 }

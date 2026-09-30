@@ -49,6 +49,8 @@ struct NaturalImageLayout: Layout {
 /// AsyncImage does not expose its decoded pixel size to the layout. Decode once
 /// here so a remote bitmap can take the same natural-size path as a bundle image.
 struct RemoteBitmapView: View {
+    @Environment(\.markdownResources) private var resources
+    @Environment(\.markdownDesignTokens) private var designTokens
     let url: URL
     let width: CGFloat?
     let height: CGFloat?
@@ -69,22 +71,26 @@ struct RemoteBitmapView: View {
                     bitmapView(bitmap).resizable().scaledToFit()
                 }
             } else if failed {
-                if url.pathExtension.lowercased() == "svg" {
+                if let error = resources.error {
+                    error(url, fallback)
+                } else if url.pathExtension.lowercased() == "svg" {
                     SwiftUI.Text(fallback)
                 } else {
                     RemoteBitmapFailureView(label: fallback)
                 }
             } else {
-                ProgressView()
+                if let placeholder = resources.placeholder { placeholder(url, fallback) } else {
+                ProgressView().frame(minWidth: designTokens.imagePlaceholderMinSize, minHeight: designTokens.imagePlaceholderMinSize)
+                }
             }
         }
-        .task(id: url) {
+        .task(id: url.absoluteString + resources.requestIdentity) {
             bitmap = nil
             svg = nil
             failed = false
             #if os(iOS)
             let key = ReaderRemoteImageKey(url: url, svg: url.pathExtension.lowercased() == "svg")
-            let fetched = await ReaderRemoteImageLoader.fetch(key)
+            let fetched = await ReaderRemoteImageLoader.fetch(key, options: resources)
             guard !Task.isCancelled else { return }
             switch fetched {
             case let .data(data):
@@ -97,14 +103,11 @@ struct RemoteBitmapView: View {
             }
             #else
             do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let response = response as? HTTPURLResponse,
-                      (200..<300).contains(response.statusCode) else {
-                    failed = true
-                    return
-                }
+                let request = MarkdownResourceRequest(url: url, headers: resources.headers, cachePolicy: resources.cachePolicy)
+                let data = try await MarkdownResourceDataCache.shared.load(request, loader: resources.loader, identity: resources.cacheIdentity)
+                guard !Task.isCancelled else { return }
                 if data.count <= ReaderRemoteImagePolicy.maxSVGBytes,
-                   let decoded = SVG(data: data, baseURL: response.url) {
+                   let decoded = SVG(data: data, baseURL: url) {
                     svg = decoded
                 } else if data.count <= ReaderRemoteImagePolicy.maxBitmapBytes,
                           let decoded = NativeBitmap(data: data) {

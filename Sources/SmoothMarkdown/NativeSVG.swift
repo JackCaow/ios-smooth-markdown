@@ -468,6 +468,8 @@ private struct SVGStyle {
 }
 
 struct SVGView: View {
+    @Environment(\.markdownResources) private var resources
+    @State private var webKitSVG: SVG?
     let svg: SVG
     let forceNative: Bool
     @State private var loadedImages: [String: CGImage] = [:]
@@ -481,7 +483,10 @@ struct SVGView: View {
     var body: some View {
         Group {
             if svg.needsWebKit && !forceNative {
-                SVGWebKitView(svg: svg)
+                SVGWebKitView(svg: webKitSVG ?? svg)
+                    .task(id: svg.sourceData.hashValue.description + resources.requestIdentity) {
+                        webKitSVG = await SVGResourceResolver.resolve(svg, options: resources)
+                    }
             } else {
                 nativeCanvas
             }
@@ -499,10 +504,14 @@ struct SVGView: View {
                                       preserveAspectRatio: svg.preserveAspectRatio))
             for node in svg.nodes { draw(node, in: &context, style: SVGStyle()) }
         }
-        .task {
+        .task(id: svg.sourceData.hashValue.description + resources.requestIdentity) {
+            loadedImages = [:]
             for (href, url) in svg.externalImages {
                 if Task.isCancelled { return }
-                if let image = await SVGExternalImageLoader.fetch(url) { loadedImages[href] = image }
+                if let image = await SVGExternalImageLoader.fetch(url, options: resources) {
+                    guard !Task.isCancelled else { return }
+                    loadedImages[href] = image
+                }
             }
         }
     }
@@ -713,6 +722,25 @@ private final class SVGImageBox: NSObject {
 }
 
 enum SVGExternalImageLoader {
+    static func fetch(_ url: URL, options: MarkdownResourceOptions) async -> CGImage? {
+        let data: Data
+        if url.isFileURL {
+            guard let local = try? Data(contentsOf: url), local.count <= 2 * 1024 * 1024 else { return nil }
+            data = local
+        } else {
+            let request = MarkdownResourceRequest(url: url, headers: options.headers, cachePolicy: options.cachePolicy)
+            guard let remote = try? await MarkdownResourceDataCache.shared.load(request, loader: options.loader, identity: options.cacheIdentity),
+                  remote.count <= 2 * 1024 * 1024, !Task.isCancelled else { return nil }
+            data = remote
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as NSDictionary?,
+              let width = props[kCGImagePropertyPixelWidth] as? Int,
+              let height = props[kCGImagePropertyPixelHeight] as? Int,
+              ReaderRemoteImagePolicy.acceptsPixelSize(width: width, height: height) else { return nil }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
+
     private static let cache: NSCache<NSURL, SVGImageBox> = {
         let cache = NSCache<NSURL, SVGImageBox>()
         cache.totalCostLimit = 32 * 1024 * 1024

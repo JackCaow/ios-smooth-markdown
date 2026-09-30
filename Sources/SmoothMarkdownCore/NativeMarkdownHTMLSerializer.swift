@@ -1,30 +1,30 @@
 import Foundation
 
 /// HTML export from the library-owned CommonMark/GFM tree.
-enum NativeMarkdownHTMLSerializer {
-    static func format(_ source: String, enableGFM: Bool = true) -> String {
+public enum NativeMarkdownHTMLSerializer {
+    public static func format(_ source: String, enableGFM: Bool = true) -> String {
         render(NativeMarkdownASTParser(enableGFM: enableGFM).parse(source))
     }
 
-    static func escape(_ value: String) -> String {
+    public static func escape(_ value: String) -> String {
         value.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
-    static func destination(_ value: String) -> String {
+    public static func destination(_ value: String) -> String {
         let allowed = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#@!$&'()*+,;=%")
         return escape(value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value)
     }
 
-    static func plainText(_ node: NativeMarkdownNode) -> String {
+    public static func plainText(_ node: NativeMarkdownNode) -> String {
         if let text = node.semanticText { return text }
         if node.kind == .softBreak || node.kind == .hardBreak { return "\n" }
         return node.children.map(plainText).joined()
     }
 
-    static func render(_ node: NativeMarkdownNode) -> String {
+    public static func render(_ node: NativeMarkdownNode) -> String {
         render(node, tightList: false)
     }
 

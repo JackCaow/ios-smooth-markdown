@@ -2,6 +2,13 @@ import SwiftUI
 
 /// Appends incoming chunks and renders the accumulated Markdown document.
 public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Element == String {
+    @Environment(\.markdownResources) private var inheritedResources
+    @Environment(\.markdownStrings) private var inheritedStrings
+    private let configuredResources: MarkdownResourceOptions?
+    private let configuredStrings: MarkdownStrings?
+    /// Effective values inherit the host environment unless an explicit override was supplied.
+    public var resourceOptions: MarkdownResourceOptions { configuredResources ?? inheritedResources }
+    public var strings: MarkdownStrings { configuredStrings ?? inheritedStrings }
     public let chunks: Chunks
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
@@ -50,7 +57,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         /// Flutter-style image callback. Receives the original source, alt text, and title.
         onTapImage: ((String, String?, String?) -> Void)? = nil,
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
-        codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        codeBlockOptions: CodeBlockOptions? = nil,
         codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onTextLongPress: ((@escaping () -> Void) -> Void)? = nil,
@@ -64,8 +71,12 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true,
         loadingView: AnyView? = nil,
-        errorBuilder: ((Error) -> AnyView)? = nil
+        errorBuilder: ((Error) -> AnyView)? = nil,
+        resourceOptions: MarkdownResourceOptions? = nil,
+        strings: MarkdownStrings? = nil
     ) {
+        self.configuredResources = resourceOptions
+        self.configuredStrings = strings
         self.chunks = chunks
         self.streamID = streamID
         self.throttleMillis = throttleMillis
@@ -83,7 +94,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.imageBuilder = imageBuilder
         self.onError = onError
         self.onComplete = onComplete
-        self.codeBlockOptions = codeBlockOptions
+        self.codeBlockOptions = codeBlockOptions ?? CodeBlockOptions(showCopyButton: useEnhancedComponents, showLanguageTag: useEnhancedComponents, enableSyntaxHighlighting: useEnhancedComponents)
         self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
         self.onTextLongPress = onTextLongPress
@@ -117,9 +128,11 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                                    selectable: selectable,
                                    selectionController: selectionController,
                                    enableCrossBlockSelection: enableCrossBlockSelection,
-                                   scrollable: scrollable)
+                                   scrollable: scrollable, resourceOptions: resourceOptions, strings: strings)
             }
         }
+        .environment(\.markdownResources, resourceOptions)
+        .environment(\.markdownStrings, strings)
         .task(id: taskIdentity) {
             guard !Task.isCancelled else { return }
             accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)

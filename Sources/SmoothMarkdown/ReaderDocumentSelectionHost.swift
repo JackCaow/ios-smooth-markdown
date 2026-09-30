@@ -14,6 +14,7 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
     private var dragAnchorUTF16: Int?
     var onDisclosureTap: ((String) -> Void)?
     var disclosureExpanded: [String: Bool] = [:]
+    var strings = MarkdownStrings()
     private var disclosureButtons: [String: UIButton] = [:]
     private var disclosureIDs: [String] = []
     var isLayoutValid: Bool { abs(bounds.width - measuredWidth) < 0.5 }
@@ -160,7 +161,8 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
             button.setImage(UIImage(systemName: disclosureExpanded[summary.id] == true
                                     ? "chevron.down" : "chevron.right"), for: .normal)
             button.accessibilityLabel = summary.atoms.map(\.copyText).joined()
-            button.accessibilityValue = disclosureExpanded[summary.id] == true ? "Expanded" : "Collapsed"
+            button.accessibilityValue = disclosureExpanded[summary.id] == true ? strings.expanded : strings.collapsed
+            button.accessibilityHint = strings.detailsToggleHint
             button.accessibilityIdentifier = "reader-disclosure-\(index)"
             disclosureButtons[summary.id] = button
         }
@@ -253,6 +255,9 @@ final class ReaderDocumentSelectionTextView: QuoteTextView, UIGestureRecognizerD
 /// their measured TextKit attachment positions and copy through the projection.
 @available(iOS 17.0, *)
 struct ReaderWholeDocumentSelectionContainer: View {
+    @Environment(\.markdownResources) private var resources
+    @Environment(\.markdownStrings) private var strings
+    @State private var loadedResourceIdentity: String?
     let selectionDocument: ReaderSelectionDocument
     let projection: ReaderTextKitProjection
     let styleSheet: MarkdownStyleSheet
@@ -300,17 +305,21 @@ struct ReaderWholeDocumentSelectionContainer: View {
                                          onDisclosureTap: { id in
                                              expansion[id] = !(disclosureExpanded[id] ?? false)
                                          })
-            .task(id: remoteKeys) { await loadRemoteImages() }
+            .task(id: remoteKeys.map { $0.url.absoluteString }.joined() + resources.requestIdentity) { await loadRemoteImages() }
     }
 
     private func loadRemoteImages() async {
+        if loadedResourceIdentity != resources.requestIdentity {
+            remoteResults = [:]
+            loadedResourceIdentity = resources.requestIdentity
+        }
         remoteResults = remoteResults.filter { remoteKeys.contains($0.key) }
         let missing = remoteKeys.filter { remoteResults[$0] == nil }
         var remaining = missing.makeIterator()
         await withTaskGroup(of: (ReaderRemoteImageKey, ReaderRemoteImageResolution).self) { group in
             func enqueue(_ key: ReaderRemoteImageKey) {
                 group.addTask {
-                    switch await ReaderRemoteImageLoader.fetch(key) {
+                    switch await ReaderRemoteImageLoader.fetch(key, options: resources) {
                     case let .data(data): return (key, ReaderRemoteImageResolution.decode(data, key: key))
                     case .failure: return (key, .failure)
                     case .rejected: return (key, .rejected)
@@ -334,6 +343,8 @@ struct ReaderWholeDocumentSelectionContainer: View {
 
 @available(iOS 17.0, *)
 struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
+    @Environment(\.markdownResources) private var resources
+    @Environment(\.markdownStrings) private var strings
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
@@ -355,12 +366,13 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         selectionController?.attach(view)
         view.accessibilityIdentifier = "reader-whole-document-selection"
         view.accessibilityCustomActions = [UIAccessibilityCustomAction(
-            name: "Select all reader text", target: view,
+            name: strings.selectAllReaderText, target: view,
             selector: #selector(QuoteTextView.selectAllReaderText))]
         return view
     }
 
     func updateUIView(_ view: ReaderDocumentSelectionTextView, context: Context) {
+        view.strings = strings
         if context.coordinator.selectionController !== selectionController {
             context.coordinator.selectionController?.detach(view)
             context.coordinator.selectionController = selectionController
@@ -426,6 +438,10 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
             let root = AnyView(measuredContent
                 .environment(\.dynamicTypeSize, dynamicTypeSize)
                 .environment(\.colorScheme, colorScheme)
+                .environment(\.markdownResources, resources)
+                .environment(\.markdownStrings, strings)
+                .environment(\.markdownDesignTokens, styleSheet.designTokens)
+                .environment(\.readerTextSelectionMenuBuilder, textSelectionMenuBuilder)
                 .environment(\.openURL, OpenURLAction { url in
                     guard MarkdownSyntax.isSafeLink(url) else { return .discarded }
                     if let onLinkTap { onLinkTap(url); return .handled }
@@ -445,24 +461,10 @@ struct ReaderWholeDocumentSelectionView: UIViewRepresentable {
         guard view.apply(projection, availableWidth: width, measuredAttachments: measured, hostedViews: hosted,
                          styledText: built.text) else { return }
         view.hostedControllers = controllers
-        let decoration = styleSheet.resolvedBlockquoteDecoration
         view.quoteRegions = built.quoteRegions
         view.ruleRegions = built.ruleRegions
         view.headingRegions = built.headingRegions
-        view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
-        view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
-        view.ruleThickness = styleSheet.horizontalRuleThickness
-        view.enhancedBlockquotes = sourceView.useEnhancedComponents
-        view.quoteBarColor = sourceView.useEnhancedComponents
-            ? (view.tintColor ?? UIColor.systemBlue).withAlphaComponent(0.6)
-                                                           : UIColor(decoration.borderColor ?? .accentColor)
-        view.quoteBackgroundColor = sourceView.useEnhancedComponents ? nil : decoration.backgroundColor.map(UIColor.init)
-        view.quoteBorderWidth = sourceView.useEnhancedComponents ? 4 : decoration.borderWidth
-        let basePadding = styleSheet.blockquotePadding
-        view.quotePadding = sourceView.useEnhancedComponents
-            ? EdgeInsets(top: basePadding.top, leading: basePadding.leading + 36,
-                         bottom: basePadding.bottom, trailing: basePadding.trailing)
-            : basePadding
+        renderer.applyDecorationStyles(to: view)
     }
 }
 #endif

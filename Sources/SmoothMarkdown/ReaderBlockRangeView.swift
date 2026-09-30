@@ -7,6 +7,7 @@ import UIKit
 /// menu use the same semantic range text without taking text gestures.
 @available(iOS 17.0, *)
 struct ReaderBlockRangeView: View {
+    @Environment(\.markdownStrings) private var strings
     @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderBlockRangeDocument
     let enableHTML: Bool
@@ -65,9 +66,9 @@ struct ReaderBlockRangeView: View {
                     } else if segment.isBridge && !selecting {
                         renderSegment(segment, beginSelection, nil)
                             .contextMenu {
-                                Button("Select surrounding content") { beginSelection() }
+                                Button(strings.selectSurroundingContent) { beginSelection() }
                             }
-                            .accessibilityAction(named: Text("Select surrounding content")) {
+                            .accessibilityAction(named: Text(strings.selectSurroundingContent)) {
                                 beginSelection()
                             }
                     } else {
@@ -88,12 +89,12 @@ struct ReaderBlockRangeView: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Select block \(index + 1)")
+                        .accessibilityLabel("\(strings["Select block"]) \(index + 1)")
                         .accessibilityIdentifier("reader-image-range-block-\(index)")
                     }
                 }
                 if selecting && !segment.isBridge {
-                    Button("Select entire block") {
+                    Button(strings.selectEntireBlock) {
                         selectEndpoint(.init(block: index, utf16: nil))
                     }
                     .font(.caption)
@@ -103,12 +104,12 @@ struct ReaderBlockRangeView: View {
             }
             if selecting {
                 HStack(spacing: 12) {
-                    Text(anchor == nil ? "Tap text or choose first block" : focus == nil
-                         ? "Tap text or choose last block" : "Range selected")
+                    Text(anchor == nil ? strings.selectFirstBlock : focus == nil
+                         ? strings.selectLastBlock : strings.rangeSelected)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Button("Copy") {
+                    Button(strings.copy) {
                         copySelection()
                     }
                     .disabled(selectedCopyText == nil)
@@ -119,7 +120,7 @@ struct ReaderBlockRangeView: View {
                                                      copy: copySelection,
                                                      accessibilityIdentifier: "reader-range-actions")
                     }
-                    Button("Cancel") { reset() }
+                    Button(strings.cancel) { reset() }
                         .accessibilityIdentifier("reader-image-range-cancel")
                 }
                 .font(.caption)

@@ -1,8 +1,8 @@
 import Foundation
 
 /// A source-preserving tree owned by SmoothMarkdown. The source ranges use UTF-16 offsets.
-struct NativeMarkdownNode: Equatable {
-    enum Kind: Equatable {
+public struct NativeMarkdownNode: Equatable {
+    public enum Kind: Equatable {
         case document, paragraph, heading(Int), fencedCode(String), indentedCode, table, tableRow, tableCell
         case list(ordered: Bool), listItem(checked: Bool?), blockQuote, thematicBreak
         case text, strong, emphasis, strikethrough, inlineCode, inlineMath
@@ -12,17 +12,17 @@ struct NativeMarkdownNode: Equatable {
         case link(String), image(String), htmlBlock, raw
     }
 
-    let kind: Kind
-    let source: String
-    let sourceRange: NSRange
-    let children: [NativeMarkdownNode]
-    let title: String?
-    let isTight: Bool?
-    let listStart: Int?
-    let literalText: String?
-    let tableAlignments: [String?]
+    public let kind: Kind
+    public let source: String
+    public let sourceRange: NSRange
+    public let children: [NativeMarkdownNode]
+    public let title: String?
+    public let isTight: Bool?
+    public let listStart: Int?
+    public let literalText: String?
+    public let tableAlignments: [String?]
 
-    var semanticText: String? {
+    public var semanticText: String? {
         switch kind {
         case .text: literalText ?? NativeMarkdownTextDecoder.decode(source)
         case .inlineCode: literalText ?? NativeMarkdownTextDecoder.codeSpan(source)
@@ -33,7 +33,7 @@ struct NativeMarkdownNode: Equatable {
         }
     }
 
-    init(kind: Kind, source: String, sourceRange: NSRange,
+    public init(kind: Kind, source: String, sourceRange: NSRange,
          children: [NativeMarkdownNode] = [], title: String? = nil,
          isTight: Bool? = nil, listStart: Int? = nil, literalText: String? = nil,
          tableAlignments: [String?] = []) {
@@ -50,7 +50,7 @@ struct NativeMarkdownNode: Equatable {
 }
 
 /// Source-preserving CommonMark/GFM block scanner, independent of the editor codec.
-struct NativeMarkdownASTParser {
+public struct NativeMarkdownASTParser {
     private struct Reference {
         let destination: String
         let title: String?
@@ -70,9 +70,9 @@ struct NativeMarkdownASTParser {
 
     private let enableGFM: Bool
 
-    init(enableGFM: Bool = true) { self.enableGFM = enableGFM }
+    public init(enableGFM: Bool = true) { self.enableGFM = enableGFM }
 
-    func parse(_ source: String) -> NativeMarkdownNode {
+    public func parse(_ source: String) -> NativeMarkdownNode {
         let lines = sourceLines(source)
         let references = referenceDefinitions(in: scan(lines, source: source, references: [:]))
         return .init(kind: .document, source: source,

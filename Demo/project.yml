@@ -37,6 +37,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     dependencies:
       - package: SmoothMarkdown
+        product: SmoothMarkdown
   SmoothMarkdownDemoUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -54,6 +55,12 @@ targets:
     platform: iOS
     sources:
       - SmoothMarkdownDemoTests
+      - ../Tests/SmoothMarkdownTests/MarkdownTypographyTests.swift
+      - ../Tests/SmoothMarkdownTests/MarkdownPluginTokensTests.swift
+      - ../Tests/SmoothMarkdownTests/MarkdownDesignTokensTests.swift
+      - ../Tests/SmoothMarkdownTests/PublicLibraryConfigurationTests.swift
+      - ../Tests/SmoothMarkdownTests/MarkdownResourcesTests.swift
+      - ../Tests/SmoothMarkdownTests/MarkdownEditorParserPluginTests.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jackcaow.smoothmarkdown.demo.tests

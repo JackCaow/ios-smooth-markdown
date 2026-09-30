@@ -4,10 +4,14 @@ import PackageDescription
 let package = Package(
     name: "ios-smooth-markdown",
     platforms: [.iOS(.v17), .macOS(.v14)],
-    products: [.library(name: "SmoothMarkdown", targets: ["SmoothMarkdown"])],
+    products: [
+        .library(name: "SmoothMarkdownCore", targets: ["SmoothMarkdownCore"]),
+        .library(name: "SmoothMarkdown", targets: ["SmoothMarkdown"])
+    ],
     dependencies: [],
     targets: [
-        .target(name: "SmoothMarkdown"),
+        .target(name: "SmoothMarkdownCore"),
+        .target(name: "SmoothMarkdown", dependencies: ["SmoothMarkdownCore"]),
         .testTarget(name: "SmoothMarkdownTests", dependencies: ["SmoothMarkdown"], resources: [.process("Fixtures")])
     ]
 )

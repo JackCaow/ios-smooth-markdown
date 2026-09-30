@@ -14,7 +14,15 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = '17.0'
   spec.swift_version = '5.9'
   spec.module_name = 'SmoothMarkdown'
-  spec.source_files = 'Sources/SmoothMarkdown/**/*.swift'
-  spec.frameworks = 'SwiftUI', 'UIKit', 'WebKit', 'CoreText', 'CoreGraphics'
+  spec.default_subspec = 'UI'
+  spec.subspec 'Core' do |core|
+    core.source_files = 'Sources/SmoothMarkdownCore/**/*.swift'
+    core.frameworks = 'Foundation'
+  end
+  spec.subspec 'UI' do |ui|
+    ui.dependency 'SmoothMarkdown/Core'
+    ui.source_files = 'Sources/SmoothMarkdown/**/*.swift'
+    ui.frameworks = 'SwiftUI', 'UIKit', 'WebKit', 'CoreText', 'CoreGraphics'
+  end
   spec.static_framework = true
 end

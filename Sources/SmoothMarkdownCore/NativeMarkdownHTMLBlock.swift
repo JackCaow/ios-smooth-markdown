@@ -1,7 +1,7 @@
 import Foundation
 
-enum NativeMarkdownHTMLBlock {
-    enum End {
+public enum NativeMarkdownHTMLBlock {
+    public enum End {
         case blank
         case marker(String, insensitive: Bool)
 
@@ -14,7 +14,7 @@ enum NativeMarkdownHTMLBlock {
         }
     }
 
-    static func end(for line: String, interruptingParagraph: Bool = false) -> End? {
+    public static func end(for line: String, interruptingParagraph: Bool = false) -> End? {
         let body = String(line.drop(while: { $0 == " " }))
         guard line.count - body.count <= 3, body.hasPrefix("<") else { return nil }
         if body.range(of: #"^<(?:script|pre|style|textarea)(?:[ \t>]|$)"#,

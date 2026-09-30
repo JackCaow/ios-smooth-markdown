@@ -1,7 +1,7 @@
 import Foundation
 
 /// Resolves CommonMark delimiter runs after code spans and link labels have been tokenized.
-enum NativeMarkdownEmphasisParser {
+public enum NativeMarkdownEmphasisParser {
     private final class Token {
         var node: NativeMarkdownNode?
         weak var previous: Token?
@@ -28,7 +28,7 @@ enum NativeMarkdownEmphasisParser {
         }
     }
 
-    static func resolve(_ nodes: [NativeMarkdownNode], source: String, offset: Int) -> [NativeMarkdownNode] {
+    public static func resolve(_ nodes: [NativeMarkdownNode], source: String, offset: Int) -> [NativeMarkdownNode] {
         let text = source as NSString
         let characters = Array(source)
         var positions = [Int: Int]()

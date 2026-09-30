@@ -38,6 +38,12 @@ jobs:
         env:
           COMMONMARK_SPEC_JSON: ${{ runner.temp }}/commonmark-spec.json
         run: swift test --parallel
+      - name: Verify independent public consumers and API declarations
+        working-directory: ios-smooth-markdown
+        run: |
+          swift run --package-path Consumers/Smoke CoreConsumer
+          swift run --package-path Consumers/Smoke ReaderConsumer
+          python3 tools/check_public_api.py
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Demo project
@@ -49,3 +55,12 @@ jobs:
       - name: Build Demo for iOS devices
         working-directory: ios-smooth-markdown
         run: xcodebuild build -project Demo/SmoothMarkdownDemo.xcodeproj -scheme SmoothMarkdownDemo -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+
+      - name: Validate CocoaPods Core and UI subspecs
+        working-directory: ios-smooth-markdown
+        run: pod lib lint SmoothMarkdown.podspec --allow-warnings --skip-tests
+      - name: Run public configuration rendering tests
+        working-directory: ios-smooth-markdown
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPhone")))')
+          xcodebuild test -project Demo/SmoothMarkdownDemo.xcodeproj -scheme SmoothMarkdownDemo -destination "platform=iOS Simulator,id=$DEVICE_ID" -only-testing:SmoothMarkdownDemoTests/DesignTokenRenderingTests -only-testing:SmoothMarkdownDemoTests/PublicLibraryConfigurationTests -only-testing:SmoothMarkdownDemoTests/MarkdownResourcesTests -only-testing:SmoothMarkdownDemoTests/PublicLibraryRuntimeTests -only-testing:SmoothMarkdownDemoTests/MarkdownEditorParserPluginTests CODE_SIGNING_ALLOWED=NO

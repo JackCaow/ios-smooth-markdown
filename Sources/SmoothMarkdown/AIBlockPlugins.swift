@@ -225,6 +225,9 @@ private enum AIBlockSyntax {
 }
 
 private struct ThinkingCard: View {
+    @Environment(\.markdownStrings) private var strings
+    @Environment(\.markdownDesignTokens) private var designTokens
+    private var tokens: MarkdownPluginPanelTokens { designTokens.plugins.thinking }
     let block: ThinkingBlock
     let headerText: String
     let expandedHeaderText: String
@@ -240,30 +243,37 @@ private struct ThinkingCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button { expanded.toggle() } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkle.magnifyingglass")
-                    Text(expanded ? expandedHeaderText : headerText).font(.subheadline.weight(.medium))
+                HStack(spacing: tokens.iconSpacing) {
+                    Image(systemName: "sparkle.magnifyingglass").font(tokens.iconFont).foregroundColor(tokens.accentColor)
+                    Text(expanded ? (expandedHeaderText == "Thinking" ? strings.thinking : expandedHeaderText) : (headerText == "Thinking..." ? strings.thinkingInProgress : headerText)).font(tokens.titleFont ?? .subheadline.weight(.medium)).foregroundColor(tokens.titleColor)
                     Spacer()
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(tokens.iconFont).foregroundColor(tokens.accentColor)
                 }
-                .padding(12)
-                .frame(minHeight: 44)
+                .padding(tokens.headerPadding)
+                .background(tokens.headerBackgroundColor ?? .clear)
+                .frame(minHeight: tokens.minimumControlSize)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("thinking-card-toggle")
-            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityValue(expanded ? strings.expanded : strings.collapsed)
             if expanded {
-                Text(block.content).font(.body).textSelection(.enabled)
+                Rectangle().fill(tokens.borderColor ?? Color.secondary.opacity(0.35)).frame(height: tokens.dividerThickness)
+                Text(block.content).font(tokens.contentFont ?? .body).foregroundColor(tokens.contentColor).textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    .padding(tokens.contentPadding)
             }
         }
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(tokens.backgroundColor ?? Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: tokens.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: tokens.cornerRadius).stroke(tokens.borderColor ?? Color.secondary.opacity(0.35), lineWidth: tokens.borderWidth))
+        .padding(tokens.outerPadding)
     }
 }
 
 private struct ArtifactCard: View {
+    @Environment(\.markdownStrings) private var strings
+    @Environment(\.markdownDesignTokens) private var designTokens
+    private var tokens: MarkdownPluginPanelTokens { designTokens.plugins.artifact }
     let block: ArtifactBlock
     let showCopyButton: Bool
     let onTap: ((ArtifactBlock) -> Void)?
@@ -272,36 +282,38 @@ private struct ArtifactCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: icon).foregroundColor(.accentColor)
-                VStack(alignment: .leading, spacing: 2) {
-                    if let title = block.title { Text(title).font(.subheadline.weight(.medium)) }
-                    Text(typeLabel).font(.caption2.weight(.semibold)).foregroundColor(.accentColor)
+            HStack(spacing: tokens.iconSpacing) {
+                Image(systemName: icon).font(tokens.iconFont).foregroundColor(tokens.accentColor ?? .accentColor)
+                VStack(alignment: .leading, spacing: tokens.metadataSpacing) {
+                    if let title = block.title { Text(title).font(tokens.titleFont ?? .subheadline.weight(.medium)).foregroundColor(tokens.titleColor) }
+                    Text(typeLabel).font(tokens.metadataFont ?? .caption2.weight(.semibold)).foregroundColor(tokens.metadataColor ?? tokens.accentColor ?? .accentColor)
                 }
                 Spacer()
                 if showCopyButton {
                     Button { copy() } label: {
-                        Label(copied ? "Copied!" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
-                            .frame(minWidth: 44, minHeight: 44)
+                        Label(copied ? strings.copied : strings.copy, systemImage: copied ? "checkmark" : "doc.on.doc")
+                            .frame(minWidth: tokens.minimumControlSize, minHeight: tokens.minimumControlSize)
                     }
-                        .buttonStyle(.plain).font(.caption)
-                        .accessibilityLabel(copied ? "Copied!" : "Copy artifact")
+                        .buttonStyle(.plain).font(tokens.statusFont ?? .caption)
+                        .accessibilityLabel(copied ? strings.copied : strings.copyArtifact)
                 }
             }
-            .padding(12)
-            .background(Color.secondary.opacity(0.08))
-            Divider()
+            .padding(tokens.headerPadding)
+            .background(tokens.headerBackgroundColor ?? Color.secondary.opacity(0.08))
+            Rectangle().fill(tokens.borderColor ?? Color.secondary.opacity(0.35)).frame(height: tokens.dividerThickness)
             ScrollView {
-                Text(block.content).font(.system(.body, design: .monospaced))
+                Text(block.content).font(tokens.contentFont ?? .system(.body, design: .monospaced)).foregroundColor(tokens.contentColor)
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(tokens.contentPadding)
             }
-            .frame(maxHeight: 400)
+            .frame(maxHeight: tokens.maximumContentHeight)
             .contentShape(Rectangle())
             .onTapGesture { onTap?(block) }
         }
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.35)))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(tokens.backgroundColor ?? .clear)
+        .overlay(RoundedRectangle(cornerRadius: tokens.cornerRadius).stroke(tokens.borderColor ?? Color.secondary.opacity(0.35), lineWidth: tokens.borderWidth))
+        .clipShape(RoundedRectangle(cornerRadius: tokens.cornerRadius))
+        .padding(tokens.outerPadding)
         .onDisappear { resetTask?.cancel() }
     }
 
@@ -319,13 +331,13 @@ private struct ArtifactCard: View {
 
     private var typeLabel: String {
         switch block.type {
-        case .code: block.language?.uppercased() ?? "CODE"
-        case .document: "DOCUMENT"
+        case .code: block.language?.uppercased() ?? strings.code
+        case .document: strings.document
         case .html: "HTML"
         case .svg: "SVG"
-        case .component: "COMPONENT"
-        case .mermaid: "DIAGRAM"
-        case .custom: block.customType?.uppercased() ?? "ARTIFACT"
+        case .component: strings.component
+        case .mermaid: strings.diagram
+        case .custom: block.customType?.uppercased() ?? strings.artifact
         }
     }
 
@@ -339,7 +351,7 @@ private struct ArtifactCard: View {
         copied = true
         resetTask?.cancel()
         resetTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(min(tokens.copyFeedbackSeconds, 86_400) * 1_000_000_000))
             guard !Task.isCancelled else { return }
             copied = false
         }
@@ -347,6 +359,9 @@ private struct ArtifactCard: View {
 }
 
 private struct ToolCallCard: View {
+    @Environment(\.markdownStrings) private var strings
+    @Environment(\.markdownDesignTokens) private var designTokens
+    private var tokens: MarkdownPluginPanelTokens { designTokens.plugins.toolCall }
     let block: ToolCallBlock
     let showParameters: Bool
     let showResult: Bool
@@ -361,49 +376,56 @@ private struct ToolCallCard: View {
                 if hasDetails { expanded.toggle() }
                 onTap?(block)
             } label: {
-                HStack(spacing: 8) {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
-                    Image(systemName: "wrench.and.screwdriver").foregroundColor(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(block.toolName).font(.system(.subheadline, design: .monospaced))
-                        if let id = block.toolId { Text("ID: \(id)").font(.caption2).foregroundColor(.secondary) }
+                HStack(spacing: tokens.iconSpacing) {
+                    Circle().fill(statusColor).frame(width: tokens.statusIndicatorSize, height: tokens.statusIndicatorSize)
+                    Image(systemName: "wrench.and.screwdriver").font(tokens.iconFont).foregroundColor(tokens.accentColor ?? tokens.metadataColor ?? .secondary)
+                    VStack(alignment: .leading, spacing: tokens.metadataSpacing) {
+                        Text(block.toolName).font(tokens.titleFont ?? .system(.subheadline, design: .monospaced)).foregroundColor(tokens.titleColor)
+                        if let id = block.toolId { Text("\(strings.identifier): \(id)").font(tokens.metadataFont ?? .caption2).foregroundColor(tokens.metadataColor ?? .secondary).padding(tokens.metadataPadding) }
                     }
                     Spacer()
-                    Text(block.status.rawValue.capitalized).font(.caption.weight(.medium)).foregroundColor(statusColor)
+                    Text(statusLabel).font(tokens.statusFont ?? .caption.weight(.medium)).foregroundColor(statusColor)
                     if hasDetails { Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption) }
                 }
-                .padding(12)
-                .frame(minHeight: 44)
+                .padding(tokens.headerPadding)
+                .background(tokens.headerBackgroundColor ?? .clear)
+                .frame(minHeight: tokens.minimumControlSize)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+            .accessibilityValue(expanded ? strings.expanded : strings.collapsed)
             if expanded {
-                Divider()
-                if showParameters, let parameters = block.parameters { section("Parameters", parameters) }
-                if showResult, let result = block.result { section("Result", result) }
-                if let error = block.errorMessage { section("Error", error) }
+                Rectangle().fill(tokens.borderColor ?? Color.secondary.opacity(0.25)).frame(height: tokens.dividerThickness)
+                if showParameters, let parameters = block.parameters { section(strings.parameters, parameters) }
+                if showResult, let result = block.result { section(strings.result, result) }
+                if let error = block.errorMessage { section(strings.error, error) }
             }
         }
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.secondary.opacity(0.25)))
+        .background(tokens.backgroundColor ?? Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: tokens.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: tokens.cornerRadius).stroke(tokens.borderColor ?? Color.secondary.opacity(0.25), lineWidth: tokens.borderWidth))
+        .padding(tokens.outerPadding)
     }
 
     private func section(_ heading: String, _ content: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(heading).font(.caption.weight(.semibold)).foregroundColor(.secondary)
-            Text(content).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+        VStack(alignment: .leading, spacing: tokens.sectionSpacing) {
+            Text(heading).font(tokens.metadataFont ?? .caption.weight(.semibold)).foregroundColor(tokens.metadataColor ?? .secondary)
+            Text(content).font(tokens.contentFont ?? .system(.body, design: .monospaced)).foregroundColor(tokens.contentColor).textSelection(.enabled)
         }
-        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading).padding(tokens.contentPadding)
     }
 
-    private var statusColor: Color {
+    private var statusLabel: String {
         switch block.status {
-        case .running: Color(red: 0.96, green: 0.62, blue: 0.04)
-        case .completed: Color(red: 0.06, green: 0.73, blue: 0.51)
-        case .failed: .red
-        case .cancelled: .gray
-        case .pending: .blue
+        case .running: strings.running
+        case .completed: strings.completed
+        case .failed: strings.failed
+        case .cancelled: strings.cancelled
+        case .pending: strings.pending
         }
+    }
+    private var statusColor: Color {
+        if let color = tokens.statusColors[block.status] { return color }
+        return tokens.accentColor ?? .accentColor
+
     }
 }

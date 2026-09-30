@@ -3,14 +3,22 @@ import Foundation
 /// Produces standards-based MathML from the locally parsed TeX subset.
 /// The output contains markup only and is embedded into a fixed, offline HTML shell.
 enum NativeMathML {
-    static func html(_ latex: String, size: Int = 20, display: Bool, colorHex: String = "#111111") -> String {
+    static func html(_ latex: String, size: Int = 20, display: Bool, colorHex: String = "#111111", fontFamily: String = "serif") -> String {
         let math = markup(NativeMathParser.parse(latex), display: display)
         return """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
         <style>html,body{margin:0;padding:0;background:transparent}#formula{display:inline-block;
-        color:\(colorHex);font-family:serif;font-size:\(size)px;line-height:normal;white-space:nowrap}</style></head>
+        color:\(colorHex);font-family:\(cssFontFamily(fontFamily));font-size:\(size)px;line-height:normal;white-space:nowrap}</style></head>
         <body><div id="formula"><math xmlns="http://www.w3.org/1998/Math/MathML" display="\(display ? "block" : "inline")">\(math)</math></div></body></html>
         """
+    }
+
+    static func cssFontFamily(_ value: String) -> String {
+        if ["serif", "sans-serif", "monospace"].contains(value) { return value }
+        return "\"" + value.unicodeScalars.map { scalar in
+            if CharacterSet.alphanumerics.contains(scalar) || scalar == " " || scalar == "-" || scalar == "_" { return String(scalar) }
+            return "\\" + String(scalar.value, radix: 16) + " "
+        }.joined() + "\""
     }
 
     static func markup(_ node: NativeMathNode, display: Bool) -> String {

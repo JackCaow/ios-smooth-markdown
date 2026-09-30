@@ -65,69 +65,15 @@ enum ReaderRemoteImageFetchResult: Sendable {
     case rejected
 }
 
-private final class ReaderRemoteImageRedirectGuard: NSObject, URLSessionTaskDelegate {
-    let original: URL
-
-    init(original: URL) { self.original = original }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask,
-                    willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest,
-                    completionHandler: @escaping (URLRequest?) -> Void) {
-        guard let next = request.url,
-              ReaderRemoteImagePolicy.permitsRedirect(from: original, to: next) else {
-            completionHandler(nil)
-            return
-        }
-        completionHandler(request)
-    }
-}
-
 enum ReaderRemoteImageLoader {
-    private static let session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.urlCache = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.httpMaximumConnectionsPerHost = ReaderRemoteImagePolicy.maxConcurrentRequests
-        configuration.httpShouldSetCookies = false
-        return URLSession(configuration: configuration)
-    }()
-
-    static func fetch(_ key: ReaderRemoteImageKey) async -> ReaderRemoteImageFetchResult {
+    static func fetch(_ key: ReaderRemoteImageKey, options: MarkdownResourceOptions = .init()) async -> ReaderRemoteImageFetchResult {
         guard case .remote? = ImageSource.parse(key.url.absoluteString) else { return .rejected }
-        let request = URLRequest(url: key.url, cachePolicy: .reloadIgnoringLocalCacheData,
-                                 timeoutInterval: 20)
         do {
-            let (bytes, response) = try await session.bytes(
-                for: request, delegate: ReaderRemoteImageRedirectGuard(original: key.url))
-            guard let response = response as? HTTPURLResponse,
-                  (200..<300).contains(response.statusCode),
-                  let finalURL = response.url,
-                  ReaderRemoteImagePolicy.permitsRedirect(from: key.url, to: finalURL) else {
-                bytes.task.cancel()
-                return .failure
-            }
-            guard ReaderRemoteImagePolicy.acceptsContentLength(
-                response.expectedContentLength, svg: key.svg) else {
-                bytes.task.cancel()
-                return .rejected
-            }
-            let limit = ReaderRemoteImagePolicy.maxBytes(svg: key.svg)
-            var data = Data()
-            if response.expectedContentLength > 0 {
-                data.reserveCapacity(min(limit, Int(response.expectedContentLength)))
-            }
-            for try await byte in bytes {
-                if data.count >= limit {
-                    bytes.task.cancel()
-                    return .rejected
-                }
-                data.append(byte)
-            }
+            let request = MarkdownResourceRequest(url: key.url, headers: options.headers, cachePolicy: options.cachePolicy)
+            let data = try await MarkdownResourceDataCache.shared.load(request, loader: options.loader, identity: options.cacheIdentity)
+            guard ReaderRemoteImagePolicy.acceptsPayloadBytes(data.count, svg: key.svg) else { return .rejected }
             return .data(data)
-        } catch {
-            return .failure
-        }
+        } catch { return .failure }
     }
 }
 #endif

@@ -25,7 +25,7 @@ public struct MentionPlugin: InlineParserPlugin {
     }
 
     public func render(_ match: InlinePluginMatch) -> AnyView {
-        AnyView(SwiftUI.Text(match.text).foregroundColor(.blue).accessibilityLabel("Mention \(match.text)"))
+        AnyView(MarkdownPluginInlineText(text: match.text, mention: true))
     }
 }
 
@@ -53,7 +53,7 @@ public struct HashtagPlugin: InlineParserPlugin {
     }
 
     public func render(_ match: InlinePluginMatch) -> AnyView {
-        AnyView(SwiftUI.Text(match.text).foregroundColor(.blue).accessibilityLabel("Hashtag \(match.text)"))
+        AnyView(MarkdownPluginInlineText(text: match.text, mention: false))
     }
 }
 
@@ -322,22 +322,7 @@ public struct AdmonitionPlugin: BlockParserPlugin {
     public func render(_ match: BlockPluginMatch) -> AnyView {
         let type = match.attributes["type"] ?? "custom"
         let title = match.attributes["title"].flatMap { $0.isEmpty ? nil : $0 } ?? type.capitalized
-        let color: Color = switch type {
-        case "tip": .green
-        case "warning": .orange
-        case "danger": .red
-        case "important": .purple
-        default: .blue
-        }
-        return AnyView(VStack(alignment: .leading, spacing: 6) {
-            SwiftUI.Text(title).bold().foregroundColor(color)
-            if !match.content.isEmpty { SwiftUI.Text(match.content) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(color.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
-        .overlay(alignment: .leading) { Rectangle().fill(color).frame(width: 3) }
-        .accessibilityElement(children: .combine))
+        return AnyView(MarkdownAdmonitionCard(type: type, title: title, content: match.content))
     }
 
     private func startMatch(_ line: String) -> (String, String)? {

@@ -1,14 +1,14 @@
 import Foundation
 
-enum NativeMarkdownReferenceParser {
-    struct Definition {
-        let label: String
-        let destination: String
-        let title: String?
-        let lineCount: Int
+public enum NativeMarkdownReferenceParser {
+    public struct Definition {
+        public let label: String
+        public let destination: String
+        public let title: String?
+        public let lineCount: Int
     }
 
-    static func parse(_ source: String) -> Definition? {
+    public static func parse(_ source: String) -> Definition? {
         let chars = Array(source)
         var cursor = 0
         func horizontal(_ character: Character) -> Bool { character == " " || character == "\t" }
