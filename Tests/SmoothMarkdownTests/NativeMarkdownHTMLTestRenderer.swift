@@ -34,7 +34,7 @@ enum NativeMarkdownHTMLTestRenderer {
         case .emphasis: return "<em>" + content + "</em>"
         case .softBreak: return "\n"
         case .hardBreak: return "<br />\n"
-        case .inlineHTML: return node.source
+        case .inlineHTML: return node.semanticText ?? node.source
         case let .link(url): return "<a href=\"" + destination(url) + "\"" + title + ">" + content + "</a>"
         case let .image(url):
             return "<img src=\"" + destination(url) + "\" alt=\"" + escape(plainText(node)) + "\"" + title + " />"
@@ -45,7 +45,9 @@ enum NativeMarkdownHTMLTestRenderer {
             let attribute = language.isEmpty ? "" : " class=\"language-" + escape(language) + "\""
             return "<pre><code" + attribute + ">" + escape(node.semanticText ?? "") + "</code></pre>\n"
         case .indentedCode: return "<pre><code>" + escape(node.semanticText ?? "") + "</code></pre>\n"
-        case .htmlBlock: return node.source.hasSuffix("\n") ? node.source : node.source + "\n"
+        case .htmlBlock:
+            let html = node.semanticText ?? node.source
+            return html.hasSuffix("\n") ? html : html + "\n"
         case .table:
             func row(_ row: NativeMarkdownNode, header: Bool) -> String {
                 let tag = header ? "th" : "td"
