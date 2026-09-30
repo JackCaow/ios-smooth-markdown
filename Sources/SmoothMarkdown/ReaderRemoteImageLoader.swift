@@ -1,7 +1,6 @@
 #if os(iOS)
 import Foundation
 import ImageIO
-import SwiftDraw
 import UIKit
 
 struct ReaderRemoteImageKey: Hashable, Sendable {
