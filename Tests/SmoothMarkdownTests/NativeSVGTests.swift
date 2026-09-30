@@ -35,6 +35,11 @@ final class NativeSVGTests: XCTestCase {
         XCTAssertFalse(basic?.needsWebKit ?? true)
     }
 
+    func testPrefixedSVGElementsParse() {
+        let source = "<s:svg xmlns:s='http://www.w3.org/2000/svg' width='20' height='10'><s:rect width='20' height='10'/></s:svg>"
+        XCTAssertEqual(SVG(data: Data(source.utf8))?.size, CGSize(width: 20, height: 10))
+    }
+
     func testMissingBundleResourceReturnsNil() {
         XCTAssertNil(SVG(named: "missing.svg", in: .module))
     }
@@ -68,9 +73,35 @@ private final class SVGImageMockProtocol: URLProtocol {
 
 @MainActor
 final class NativeSVGPixelTests: XCTestCase {
+    func testWebKitHTMLSupportsPrefixedAndLatin1SVG() throws {
+        let source = "<?xml version='1.0' encoding='ISO-8859-1'?><s:svg xmlns:s='http://www.w3.org/2000/svg' width='20' height='10'><s:text x='0' y='8'>café</s:text></s:svg>"
+        let data = try XCTUnwrap(source.data(using: .isoLatin1))
+        let svg = try XCTUnwrap(SVG(data: data))
+        let html = try XCTUnwrap(SVGWebKitConfiguration.html(for: svg))
+        XCTAssertTrue(html.contains("<svg "))
+        XCTAssertTrue(html.contains("<text "))
+        XCTAssertTrue(html.contains("café"))
+        XCTAssertTrue(html.contains("viewBox=\"0 0 20.0 10.0\""))
+    }
+
+    func testWebKitHTMLSupportsSelfClosingRoot() throws {
+        let svg = try XCTUnwrap(SVG(data: Data("<svg width='20' height='10' stroke-dasharray='2 2'/>".utf8)))
+        XCTAssertNotNil(SVGWebKitConfiguration.html(for: svg))
+    }
+
+    func testCSSNamedGreenUsesExactSRGBValue() {
+        let named = bitmap("<svg width='100' height='100'><rect width='100' height='100' fill='green'/></svg>")
+        let hex = bitmap("<svg width='100' height='100'><rect width='100' height='100' fill='#008000'/></svg>")
+        let namedColor = named?.colorAt(x: 50, y: 50)?.usingColorSpace(.deviceRGB)
+        let hexColor = hex?.colorAt(x: 50, y: 50)?.usingColorSpace(.deviceRGB)
+        XCTAssertEqual(namedColor?.redComponent ?? -1, hexColor?.redComponent ?? -2, accuracy: 0.001)
+        XCTAssertEqual(namedColor?.greenComponent ?? -1, hexColor?.greenComponent ?? -2, accuracy: 0.001)
+        XCTAssertEqual(namedColor?.blueComponent ?? -1, hexColor?.blueComponent ?? -2, accuracy: 0.001)
+    }
+
     private func bitmap(_ source: String, width: Int = 100, height: Int = 100) -> NSBitmapImageRep? {
         guard let svg = SVG(data: Data(source.utf8)) else { return nil }
-        let renderer = ImageRenderer(content: SVGView(svg: svg).frame(width: CGFloat(width), height: CGFloat(height)))
+        let renderer = ImageRenderer(content: SVGView(svg: svg, forceNative: true).frame(width: CGFloat(width), height: CGFloat(height)))
         renderer.proposedSize = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
         guard let data = renderer.nsImage?.tiffRepresentation else { return nil }
         return NSBitmapImageRep(data: data)
@@ -87,7 +118,7 @@ final class NativeSVGPixelTests: XCTestCase {
         let loaded = expectation(description: "SVG loaded")
         guardDelegate.onFinished = { loaded.fulfill() }
         webView.navigationDelegate = guardDelegate
-        webView.loadHTMLString(try! XCTUnwrap(SVGWebKitConfiguration.html(for: svg.sourceData)),
+        webView.loadHTMLString(try! XCTUnwrap(SVGWebKitConfiguration.html(for: svg)),
                                baseURL: URL(string: "https://svg.invalid/")!)
         await fulfillment(of: [loaded], timeout: 10)
         let image: NSImage? = await withCheckedContinuation { continuation in
@@ -110,7 +141,7 @@ final class NativeSVGPixelTests: XCTestCase {
         let loaded = expectation(description: "WOFF2 SVG loaded")
         guardDelegate.onFinished = { loaded.fulfill() }
         webView.navigationDelegate = guardDelegate
-        webView.loadHTMLString(try XCTUnwrap(SVGWebKitConfiguration.html(for: svg.sourceData)),
+        webView.loadHTMLString(try XCTUnwrap(SVGWebKitConfiguration.html(for: svg)),
                                baseURL: url)
         await fulfillment(of: [loaded], timeout: 10)
         let image: NSImage? = await withCheckedContinuation { continuation in

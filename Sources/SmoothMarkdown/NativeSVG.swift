@@ -99,6 +99,9 @@ private enum SVGCompatibility {
             if !known.contains(node.name) || node.attributes.keys.contains(where: { !attributes.contains($0) }) {
                 complex = true
             }
+            // These features render more faithfully in WebKit than the bounded Canvas fast path.
+            if ["style", "text", "tspan", "linearGradient", "radialGradient", "clipPath",
+                "mask", "pattern", "filter"].contains(node.name) { complex = true }
             if node.name == "style" {
                 if node.text.contains("@font-face") || node.text.contains("@import") ||
                     node.text.contains("@media") || node.text.contains("url(") { complex = true }
@@ -194,7 +197,8 @@ private final class SVGXMLBuilder: NSObject, XMLParserDelegate {
                 qualifiedName qName: String?, attributes: [String: String]) {
         count += 1
         guard count <= 10000, stack.count < 128 else { valid = false; parser.abortParsing(); return }
-        let node = SVGNode(name: elementName, attributes: attributes)
+        let node = SVGNode(name: String(elementName.split(separator: ":").last ?? Substring(elementName)),
+                           attributes: attributes)
         if let parent = stack.last { parent.children.append(node); parent.content.append(.node(node)) }
         else if root == nil { root = node }
         else { valid = false; parser.abortParsing(); return }
@@ -448,16 +452,16 @@ private struct SVGStyle {
             return Color(.sRGB, red: channels[0], green: channels[1], blue: channels[2], opacity: alpha)
         }
         switch value {
-        case "black": return .black
-        case "white": return .white
-        case "red": return .red
-        case "green": return .green
-        case "blue": return .blue
-        case "gray", "grey": return .gray
-        case "yellow": return .yellow
-        case "orange": return .orange
-        case "purple": return .purple
-        case "transparent": return .clear
+        case "black": return Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 1)
+        case "white": return Color(.sRGB, red: 1, green: 1, blue: 1, opacity: 1)
+        case "red": return Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1)
+        case "green": return Color(.sRGB, red: 0, green: 128 / 255, blue: 0, opacity: 1)
+        case "blue": return Color(.sRGB, red: 0, green: 0, blue: 1, opacity: 1)
+        case "gray", "grey": return Color(.sRGB, red: 128 / 255, green: 128 / 255, blue: 128 / 255, opacity: 1)
+        case "yellow": return Color(.sRGB, red: 1, green: 1, blue: 0, opacity: 1)
+        case "orange": return Color(.sRGB, red: 1, green: 165 / 255, blue: 0, opacity: 1)
+        case "purple": return Color(.sRGB, red: 128 / 255, green: 0, blue: 128 / 255, opacity: 1)
+        case "transparent": return Color(.sRGB, red: 0, green: 0, blue: 0, opacity: 0)
         default: return nil
         }
     }
@@ -465,12 +469,18 @@ private struct SVGStyle {
 
 struct SVGView: View {
     let svg: SVG
+    let forceNative: Bool
     @State private var loadedImages: [String: CGImage] = [:]
     func resizable() -> Self { self }
 
+    init(svg: SVG, forceNative: Bool = false) {
+        self.svg = svg
+        self.forceNative = forceNative
+    }
+
     var body: some View {
         Group {
-            if svg.needsWebKit {
+            if svg.needsWebKit && !forceNative {
                 SVGWebKitView(svg: svg)
             } else {
                 nativeCanvas

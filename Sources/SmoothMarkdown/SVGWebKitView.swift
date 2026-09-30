@@ -29,7 +29,7 @@ struct SVGWebKitView: UIViewRepresentable {
     func makeCoordinator() -> SVGWebKitNavigationGuard { SVGWebKitNavigationGuard() }
 
     private func load(into webView: WKWebView) {
-        if let html = SVGWebKitConfiguration.html(for: svg.sourceData) {
+        if let html = SVGWebKitConfiguration.html(for: svg) {
             webView.loadHTMLString(html, baseURL: svg.baseURL ?? URL(string: "https://svg.invalid/")!)
         }
     }
@@ -57,7 +57,7 @@ struct SVGWebKitView: NSViewRepresentable {
     func makeCoordinator() -> SVGWebKitNavigationGuard { SVGWebKitNavigationGuard() }
 
     private func load(into webView: WKWebView) {
-        if let html = SVGWebKitConfiguration.html(for: svg.sourceData) {
+        if let html = SVGWebKitConfiguration.html(for: svg) {
             webView.loadHTMLString(html, baseURL: svg.baseURL ?? URL(string: "https://svg.invalid/")!)
         }
     }
@@ -65,12 +65,31 @@ struct SVGWebKitView: NSViewRepresentable {
 #endif
 
 enum SVGWebKitConfiguration {
-    static func html(for data: Data) -> String? {
-        guard let source = String(data: data, encoding: .utf8),
-              let start = source.range(of: "<svg"),
-              let end = source.range(of: "</svg>", options: .backwards) else { return nil }
-        let svg = source[start.lowerBound..<end.upperBound]
-        return "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(svg)</body></html>"
+    static func html(for svg: SVG) -> String? {
+        let bytes = svg.sourceData
+        let looksUTF16 = bytes.starts(with: [0xFF, 0xFE]) || bytes.starts(with: [0xFE, 0xFF])
+            || bytes.prefix(32).contains(0)
+        guard let source = looksUTF16 ? String(data: bytes, encoding: .utf16)
+                : (String(data: bytes, encoding: .utf8) ?? String(data: bytes, encoding: .isoLatin1)),
+              let start = source.range(of: #"<([A-Za-z_][\w.-]*:)?svg(?=[\s/>])"#,
+                                       options: .regularExpression),
+              let rootEnd = source[start.lowerBound...].firstIndex(of: ">") else { return nil }
+        let rootName = String(source[source.index(after: start.lowerBound)..<start.upperBound])
+        let closing = "</\(rootName)>"
+        let end = source.range(of: closing, options: .backwards)?.upperBound
+            ?? (source[start.upperBound...].range(of: "/>")?.upperBound)
+        guard let end else { return nil }
+        var markup = String(source[start.lowerBound..<end])
+        if let prefixEnd = rootName.firstIndex(of: ":") {
+            let prefix = rootName[..<prefixEnd]
+            markup = markup.replacingOccurrences(of: #"<(/?)"# + NSRegularExpression.escapedPattern(for: String(prefix)) + #":(?=[A-Za-z_])"#,
+                                                 with: "<$1", options: .regularExpression)
+        }
+        if let rootEnd = markup.firstIndex(of: ">"), !markup[..<rootEnd].contains("viewBox") {
+            let width = svg.size.width, height = svg.size.height
+            markup.insert(contentsOf: " viewBox=\"0 0 \(width) \(height)\"", at: rootEnd)
+        }
+        return "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(markup)</body></html>"
     }
 
     static func makeView() -> WKWebView {
