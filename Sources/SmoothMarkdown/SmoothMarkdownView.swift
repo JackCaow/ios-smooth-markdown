@@ -1008,19 +1008,7 @@ public struct SmoothMarkdownView: View {
                 url: tapURL, image: image, label: label, inline: inline)
         }
         switch source {
-        case let .remote(url, svg: true):
-            return accessibleImage(
-                AsyncSVGView(url: url) { phase in
-                    switch phase {
-                    case .success(let svg):
-                        NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
-                            SVGView(svg: svg).resizable().scaledToFit()
-                        }
-                    case .failure: SwiftUI.Text(label)
-                    case .empty: ProgressView()
-                    }
-                }, url: url, image: image, label: label, inline: inline)
-        case let .remote(url, svg: false):
+        case let .remote(url, _):
             return accessibleImage(
                 RemoteBitmapView(url: url, width: width, height: height, fallback: label),
                 url: url, image: image, label: label, inline: inline)

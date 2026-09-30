@@ -707,29 +707,6 @@ struct SVGView: View {
     }
 }
 
-struct AsyncSVGView<Content: View>: View {
-    let url: URL
-    @ViewBuilder let content: (AsyncSVGPhase) -> Content
-    @State private var phase: AsyncSVGPhase = .empty
-
-    var body: some View {
-        content(phase).task(id: url) {
-            phase = .empty
-            do {
-                guard url.scheme == "https" || url.scheme == "http" else { phase = .failure; return }
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
-                      let svg = SVG(data: data, baseURL: response.url) else { phase = .failure; return }
-                phase = .success(svg)
-            } catch { phase = .failure }
-        }
-    }
-}
-
-enum AsyncSVGPhase {
-    case empty, success(SVG), failure
-}
-
 private final class SVGImageBox: NSObject {
     let image: CGImage
     init(_ image: CGImage) { self.image = image }

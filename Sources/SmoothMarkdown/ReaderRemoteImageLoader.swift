@@ -36,8 +36,8 @@ enum ReaderRemoteImageResolution: @unchecked Sendable {
     static func decode(_ data: Data?, key: ReaderRemoteImageKey) -> Self {
         guard let data else { return .failure }
         guard ReaderRemoteImagePolicy.acceptsPayloadBytes(data.count, svg: key.svg) else { return .rejected }
-        if key.svg {
-            guard let image = SVG(data: data, baseURL: key.url) else { return .failure }
+        if data.count <= ReaderRemoteImagePolicy.maxSVGBytes,
+           let image = SVG(data: data, baseURL: key.url) {
             let size = image.size
             guard size.width.isFinite, size.height.isFinite,
                   size.width > 0, size.height > 0,
@@ -47,6 +47,7 @@ enum ReaderRemoteImageResolution: @unchecked Sendable {
                     width: Int(ceil(size.width)), height: Int(ceil(size.height))) else { return .rejected }
             return .svg(image)
         }
+        if key.svg { return .failure }
         let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
         guard let source = CGImageSourceCreateWithData(data as CFData, options as CFDictionary),
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as NSDictionary?,
