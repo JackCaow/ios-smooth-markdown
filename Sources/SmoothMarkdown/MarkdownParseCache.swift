@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Occupancy of the reader's bounded Markdown parse cache.
 public struct MarkdownCacheStatistics: Equatable {

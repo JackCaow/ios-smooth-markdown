@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 enum MarkdownSyntax {
     static func parse(_ source: String, useCache: Bool = true, enableHTML: Bool = false) -> Document {

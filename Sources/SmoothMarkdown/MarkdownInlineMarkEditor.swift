@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Inline source edits supported by paragraph and ATX heading rows in Blocks mode.
 public enum MarkdownInlineMark: Equatable {
