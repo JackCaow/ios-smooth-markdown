@@ -121,7 +121,7 @@ struct MermaidGalleryView: View {
                 if let diagram = MermaidParser.parse(example.code) {
                     InteractiveMermaidDiagramView(diagram: diagram, theme: isDark ? .dark : .light,
                                                   onNodeTap: showNodeFeedback)
-                        .frame(height: 600)
+                        .frame(height: diagramHeight(for: example))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -197,6 +197,14 @@ struct MermaidGalleryView: View {
         feedbackTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
             if !Task.isCancelled { nodeFeedback = nil }
+        }
+    }
+
+    private func diagramHeight(for example: MermaidGalleryExample) -> CGFloat {
+        switch example.category {
+        case "pie", "gantt", "timeline", "kanban", "radar", "xy": 360
+        case "sequence": 480
+        default: 600
         }
     }
 

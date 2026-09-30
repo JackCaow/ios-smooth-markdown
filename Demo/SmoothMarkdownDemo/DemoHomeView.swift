@@ -246,6 +246,8 @@ struct DemoHomeView: View {
         featureContent(feature)
         .navigationTitle(feature.pageTitle(in: language))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Color(uiColor: .systemBackground), for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .navigationBarBackButtonHidden()
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -321,7 +323,7 @@ private struct DemoNavigationOverlay: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .ignoresSafeArea()
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 

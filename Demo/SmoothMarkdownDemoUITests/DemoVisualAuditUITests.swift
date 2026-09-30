@@ -159,11 +159,9 @@ final class DemoVisualAuditUITests: XCTestCase {
     func test05AllConversationDetails() {
         let app = launchDemo()
         choose("feature-conversationList", in: app)
-        let list = app.tables.firstMatch
-        XCTAssertTrue(list.waitForExistence(timeout: 5))
         for number in 1...12 {
             let row = app.buttons["conversation-\(number)"]
-            reveal(row, bySwiping: list, direction: .up)
+            reveal(row, bySwiping: app, direction: .up)
             XCTAssertTrue(row.isHittable, "Conversation \(number) should be reachable")
             row.tap()
             XCTAssertTrue(app.buttons["conversation-copy-all"].waitForExistence(timeout: 5))

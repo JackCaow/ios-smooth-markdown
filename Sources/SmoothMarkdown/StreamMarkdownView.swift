@@ -90,7 +90,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     }
 
     public var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             if activeIdentity == taskIdentity, let streamError, let errorBuilder {
                 errorBuilder(streamError)
             } else if activeIdentity != taskIdentity || accumulator.visibleText.isEmpty {
