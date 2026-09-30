@@ -119,7 +119,7 @@ The string-based tap callbacks align with Flutter and Android. Existing URL-base
 
 ## Run the demo
 
-The iOS demo contains the Flutter example's Markdown samples, streaming and chat pages, Mermaid gallery, editor, themes, and localization fixtures. From the repository root:
+The iOS demo contains the Flutter example's Markdown samples, streaming and chat pages, Mermaid gallery, editor, themes, and localization fixtures. Install XcodeGen, then from the repository root:
 
 ```sh
 cd Demo
