@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import ImageIO
 import SwiftUI
 #if canImport(FoundationXML)
 import FoundationXML
@@ -11,6 +12,8 @@ struct SVG {
     fileprivate let viewBox: CGRect
     fileprivate let nodes: [SVGNode]
     fileprivate let gradients: [String: SVGGradient]
+    fileprivate let definitions: [String: SVGNode]
+    fileprivate let cssRules: [SVGRule]
 
     init?(data: Data) {
         guard data.count <= 2 * 1024 * 1024 else { return nil }
@@ -27,10 +30,16 @@ struct SVG {
         self.viewBox = viewBox.width > 0 ? viewBox : CGRect(origin: .zero, size: size)
         self.nodes = root.children
         var gradients: [String: SVGGradient] = [:]
+        var definitions: [String: SVGNode] = [:]
         root.walk { node in
-            if let id = node.attributes["id"], let gradient = SVGGradient(node) { gradients[id] = gradient }
+            if let id = node.attributes["id"] {
+                definitions[id] = node
+                if let gradient = SVGGradient(node) { gradients[id] = gradient }
+            }
         }
         self.gradients = gradients
+        self.definitions = definitions
+        self.cssRules = root.children.filter { $0.name == "style" }.flatMap { SVGRule.parse($0.text) }
     }
 
     init?(named name: String, in bundle: Bundle) {
@@ -120,13 +129,41 @@ private final class SVGXMLBuilder: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { nil }
 }
 
+private struct SVGRule {
+    let selector: String
+    let declarations: [String: String]
+
+    static func parse(_ source: String) -> [Self] {
+        guard let regex = try? NSRegularExpression(pattern: #"([^{}]+)\{([^}]*)\}"#) else { return [] }
+        let ns = source as NSString
+        return regex.matches(in: source, range: NSRange(location: 0, length: ns.length)).flatMap { match in
+            let declarations = SVGStyle.declarations(ns.substring(with: match.range(at: 2)))
+            return ns.substring(with: match.range(at: 1)).split(separator: ",").map {
+                Self(selector: $0.trimmingCharacters(in: .whitespacesAndNewlines), declarations: declarations)
+            }
+        }
+    }
+
+    func matches(_ node: SVGNode) -> Bool {
+        if selector.hasPrefix("#") { return node.attributes["id"] == String(selector.dropFirst()) }
+        if selector.hasPrefix(".") { return (node.attributes["class"] ?? "").split(separator: " ").contains(Substring(selector.dropFirst())) }
+        if let dot = selector.firstIndex(of: ".") {
+            return node.name == String(selector[..<dot]) &&
+                (node.attributes["class"] ?? "").split(separator: " ").contains(Substring(selector[selector.index(after: dot)...]))
+        }
+        return node.name == selector
+    }
+}
+
 private struct SVGGradient {
     let stops: [Gradient.Stop]
     let start: UnitPoint
     let end: UnitPoint
+    let radial: Bool
+    let radius: CGFloat
 
     init?(_ node: SVGNode) {
-        guard node.name == "linearGradient" else { return nil }
+        guard node.name == "linearGradient" || node.name == "radialGradient" else { return nil }
         let stops = node.children.compactMap { child -> Gradient.Stop? in
             guard child.name == "stop" else { return nil }
             let style = SVGStyle.attributes(child.attributes)
@@ -139,6 +176,8 @@ private struct SVGGradient {
         self.stops = stops
         self.start = UnitPoint(x: Self.fraction(node.attributes["x1"] ?? "0"), y: Self.fraction(node.attributes["y1"] ?? "0"))
         self.end = UnitPoint(x: Self.fraction(node.attributes["x2"] ?? "100%"), y: Self.fraction(node.attributes["y2"] ?? "0"))
+        self.radial = node.name == "radialGradient"
+        self.radius = Self.fraction(node.attributes["r"] ?? "50%")
     }
     static func fraction(_ value: String) -> CGFloat {
         let percent = value.trimmingCharacters(in: .whitespaces).hasSuffix("%")
@@ -158,16 +197,26 @@ private struct SVGStyle {
     var lineJoin: CGLineJoin = .miter
     var fillRule: FillStyle = FillStyle()
     var hidden = false
+    var fontSize: CGFloat = 16
+    var fontFamily: String?
+    var textAnchor = "start"
 
-    static func attributes(_ source: [String: String]) -> [String: String] {
-        var values: [String: String] = [:]
-        if let style = source["style"] {
-            for pair in style.split(separator: ";") {
-                let parts = pair.split(separator: ":", maxSplits: 1)
-                if parts.count == 2 { values[String(parts[0]).trimmingCharacters(in: .whitespaces)] = String(parts[1]).trimmingCharacters(in: .whitespaces) }
+    static func declarations(_ text: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for pair in text.split(separator: ";") {
+            let parts = pair.split(separator: ":", maxSplits: 1)
+            if parts.count == 2 {
+                result[String(parts[0]).trimmingCharacters(in: .whitespaces)] =
+                    String(parts[1]).trimmingCharacters(in: .whitespaces)
             }
         }
-        for (key, value) in source where key != "style" { values[key] = value }
+        return result
+    }
+
+    static func attributes(_ source: [String: String]) -> [String: String] {
+        var values = source
+        values.removeValue(forKey: "style")
+        for (key, value) in declarations(source["style"] ?? "") { values[key] = value }
         return values
     }
 
@@ -183,6 +232,9 @@ private struct SVGStyle {
         if let value = values["stroke-linecap"] { result.lineCap = value == "round" ? .round : value == "square" ? .square : .butt }
         if let value = values["stroke-linejoin"] { result.lineJoin = value == "round" ? .round : value == "bevel" ? .bevel : .miter }
         if values["fill-rule"] == "evenodd" { result.fillRule = FillStyle(eoFill: true) }
+        if let value = SVGNumbers.length(values["font-size"]), value > 0 { result.fontSize = value }
+        if let value = values["font-family"] { result.fontFamily = value.trimmingCharacters(in: CharacterSet(charactersIn: "\"' ")) }
+        if let value = values["text-anchor"] { result.textAnchor = value }
         if values["display"] == "none" || values["visibility"] == "hidden" { result.hidden = true }
         return result
     }
@@ -246,20 +298,97 @@ struct SVGView: View {
         .aspectRatio(svg.size, contentMode: .fit)
     }
 
-    private func draw(_ node: SVGNode, in context: inout GraphicsContext, style inherited: SVGStyle) {
+    private func draw(_ node: SVGNode, in context: inout GraphicsContext, style inherited: SVGStyle,
+                      visiting: Set<String> = []) {
         if node.name == "defs" || node.name == "clipPath" || node.name == "mask" { return }
-        let style = inherited.merging(node.attributes)
+        var cascaded = node.attributes
+        let inline = SVGStyle.declarations(node.attributes["style"] ?? "")
+        for rule in svg.cssRules where rule.matches(node) {
+            for (key, value) in rule.declarations { cascaded[key] = value }
+        }
+        for (key, value) in inline { cascaded[key] = value }
+        let style = inherited.merging(cascaded)
         guard !style.hidden else { return }
         var context = context
         if let transform = node.attributes["transform"] { context.transform = context.transform.concatenating(SVGTransforms.parse(transform)) }
+        let attributes = SVGStyle.attributes(cascaded)
+        if let clipID = SVGView.fragmentID(attributes["clip-path"]),
+           let clip = svg.definitions[clipID], clip.name == "clipPath" {
+            var shape = Path()
+            for child in clip.children {
+                if let childPath = SVGPaths.path(for: child) {
+                    shape.addPath(childPath, transform: SVGTransforms.parse(child.attributes["transform"] ?? ""))
+                }
+            }
+            context.clip(to: shape)
+        }
+        if let maskID = SVGView.fragmentID(attributes["mask"]),
+           let mask = svg.definitions[maskID], mask.name == "mask" {
+            context.clipToLayer { layer in
+                for child in mask.children { draw(child, in: &layer, style: SVGStyle()) }
+            }
+        }
+        if let filterID = SVGView.fragmentID(attributes["filter"]),
+           let filter = svg.definitions[filterID], filter.name == "filter",
+           let blur = filter.children.first(where: { $0.name == "feGaussianBlur" }),
+           let deviation = SVGNumbers.length(blur.attributes["stdDeviation"]), deviation > 0 {
+            context.addFilter(.blur(radius: deviation))
+        }
+        if node.name == "use" {
+            let href = node.attributes["href"] ?? node.attributes["xlink:href"] ?? ""
+            if href.hasPrefix("#") {
+                let id = String(href.dropFirst())
+                if !visiting.contains(id), let referenced = svg.definitions[id] {
+                    context.translateBy(x: SVGNumbers.length(node.attributes["x"]) ?? 0,
+                                        y: SVGNumbers.length(node.attributes["y"]) ?? 0)
+                    draw(referenced, in: &context, style: style, visiting: visiting.union([id]))
+                }
+            }
+            return
+        }
+        if node.name == "image" { drawImage(node, in: &context); return }
+        if node.name == "text" { drawText(node, in: &context, style: style); return }
         if let path = SVGPaths.path(for: node) {
             if style.fill != "none" {
-                if let id = style.fill.replacingOccurrences(of: "url(#", with: "").split(separator: ")").first.map(String.init),
-                   style.fill.hasPrefix("url(#"), let gradient = svg.gradients[id] {
+                if let id = SVGView.fragmentID(style.fill), !visiting.contains(id),
+                   let pattern = svg.definitions[id], pattern.name == "pattern",
+                   pattern.attributes["patternUnits"] == "userSpaceOnUse",
+                   let tileWidth = SVGNumbers.length(pattern.attributes["width"]),
+                   let tileHeight = SVGNumbers.length(pattern.attributes["height"]),
+                   tileWidth > 0, tileHeight > 0 {
+                    var patterned = context
+                    patterned.clip(to: path, style: style.fillRule)
+                    let bounds = path.boundingRect
+                    let firstX = floor(bounds.minX / tileWidth) * tileWidth
+                    let firstY = floor(bounds.minY / tileHeight) * tileHeight
+                    let cols = min(128, max(0, Int(ceil((bounds.maxX - firstX) / tileWidth))))
+                    let rows = min(128, max(0, Int(ceil((bounds.maxY - firstY) / tileHeight))))
+                    if cols * rows <= 2048 {
+                        for row in 0..<rows {
+                            for col in 0..<cols {
+                                var tile = patterned
+                                tile.translateBy(x: firstX + CGFloat(col) * tileWidth,
+                                                 y: firstY + CGFloat(row) * tileHeight)
+                                for child in pattern.children { draw(child, in: &tile, style: SVGStyle(), visiting: visiting.union([id])) }
+                            }
+                        }
+                    }
+                } else if let id = SVGView.fragmentID(style.fill), let gradient = svg.gradients[id] {
                     let bounds = path.boundingRect
                     let start = CGPoint(x: bounds.minX + bounds.width * gradient.start.x, y: bounds.minY + bounds.height * gradient.start.y)
                     let end = CGPoint(x: bounds.minX + bounds.width * gradient.end.x, y: bounds.minY + bounds.height * gradient.end.y)
-                    context.fill(path, with: .linearGradient(Gradient(stops: gradient.stops), startPoint: start, endPoint: end), style: style.fillRule)
+                    if gradient.radial {
+                        let cx = SVGGradient.fraction(svg.definitions[id]?.attributes["cx"] ?? "50%")
+                        let cy = SVGGradient.fraction(svg.definitions[id]?.attributes["cy"] ?? "50%")
+                        let center = CGPoint(x: bounds.minX + bounds.width * cx, y: bounds.minY + bounds.height * cy)
+                        let radius = max(bounds.width, bounds.height) * gradient.radius
+                        context.fill(path, with: .radialGradient(Gradient(stops: gradient.stops),
+                                                                center: center, startRadius: 0,
+                                                                endRadius: radius), style: style.fillRule)
+                    } else {
+                        context.fill(path, with: .linearGradient(Gradient(stops: gradient.stops),
+                                                                startPoint: start, endPoint: end), style: style.fillRule)
+                    }
                 } else if let color = SVGStyle.color(style.fill) {
                     context.fill(path, with: .color(color.opacity(style.opacity * style.fillOpacity)), style: style.fillRule)
                 }
@@ -271,7 +400,45 @@ struct SVGView: View {
                                                   lineJoin: style.lineJoin == .round ? .round : style.lineJoin == .bevel ? .bevel : .miter))
             }
         }
-        for child in node.children { draw(child, in: &context, style: style) }
+        for child in node.children { draw(child, in: &context, style: style, visiting: visiting) }
+    }
+
+    private static func fragmentID(_ value: String?) -> String? {
+        guard let value, value.hasPrefix("url(#"), value.hasSuffix(")") else { return nil }
+        return String(value.dropFirst(5).dropLast())
+    }
+
+    private func drawText(_ node: SVGNode, in context: inout GraphicsContext, style: SVGStyle) {
+        let content = node.text + node.children.filter { $0.name == "tspan" }.map(\.text).joined()
+        guard !content.isEmpty, let color = SVGStyle.color(style.fill) else { return }
+        let font: Font = style.fontFamily.map { .custom($0, size: style.fontSize) } ?? .system(size: style.fontSize)
+        let text = Text(content).font(font).foregroundColor(color.opacity(style.opacity * style.fillOpacity))
+        let x = SVGNumbers.length(node.attributes["x"]) ?? 0
+        let y = SVGNumbers.length(node.attributes["y"]) ?? 0
+        let anchorX: CGFloat = style.textAnchor == "middle" ? 0.5 : style.textAnchor == "end" ? 1 : 0
+        context.draw(text, at: CGPoint(x: x, y: y), anchor: UnitPoint(x: anchorX, y: 1))
+    }
+
+    private func drawImage(_ node: SVGNode, in context: inout GraphicsContext) {
+        let a = node.attributes
+        let href = a["href"] ?? a["xlink:href"] ?? ""
+        guard href.hasPrefix("data:image/"), let comma = href.firstIndex(of: ","),
+              href[..<comma].lowercased().hasSuffix(";base64"),
+              let data = Data(base64Encoded: String(href[href.index(after: comma)...])),
+              data.count <= 2 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
+              let width = SVGNumbers.length(a["width"]), let height = SVGNumbers.length(a["height"]),
+              width > 0, height > 0 else { return }
+        var rect = CGRect(x: SVGNumbers.length(a["x"]) ?? 0,
+                          y: SVGNumbers.length(a["y"]) ?? 0, width: width, height: height)
+        if a["preserveAspectRatio"] != "none" {
+            let ratio = min(width / CGFloat(image.width), height / CGFloat(image.height))
+            let fitted = CGSize(width: CGFloat(image.width) * ratio, height: CGFloat(image.height) * ratio)
+            rect = CGRect(x: rect.midX - fitted.width / 2, y: rect.midY - fitted.height / 2,
+                          width: fitted.width, height: fitted.height)
+        }
+        context.draw(Image(decorative: image, scale: 1), in: rect)
     }
 }
 
