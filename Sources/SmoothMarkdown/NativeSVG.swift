@@ -16,6 +16,9 @@ struct SVG {
     fileprivate let cssRules: [SVGRule]
     fileprivate let preserveAspectRatio: String
     fileprivate let externalImages: [String: URL]
+    let sourceData: Data
+    let baseURL: URL?
+    let needsWebKit: Bool
 
     init?(data: Data, baseURL: URL? = nil) {
         guard data.count <= 2 * 1024 * 1024 else { return nil }
@@ -29,6 +32,9 @@ struct SVG {
         guard let width, let height, width.isFinite, height.isFinite,
               width > 0, height > 0, width <= 16384, height <= 16384 else { return nil }
         self.size = CGSize(width: width, height: height)
+        self.sourceData = data
+        self.baseURL = baseURL
+        self.needsWebKit = SVGCompatibility.requiresWebKit(root)
         self.viewBox = viewBox.width > 0 ? viewBox : CGRect(origin: .zero, size: size)
         self.preserveAspectRatio = root.attributes["preserveAspectRatio"] ?? "xMidYMid meet"
         self.nodes = root.children
@@ -68,6 +74,56 @@ struct SVG {
     }
 }
 
+private enum SVGCompatibility {
+    static func requiresWebKit(_ root: SVGNode) -> Bool {
+        let known: Set<String> = ["svg", "g", "defs", "path", "rect", "circle", "ellipse", "line",
+                                  "polyline", "polygon", "text", "tspan", "style", "linearGradient",
+                                  "radialGradient", "stop", "use", "image", "clipPath", "mask", "pattern",
+                                  "filter", "feGaussianBlur", "title", "desc", "metadata"]
+        let attributes: Set<String> = ["xmlns", "xmlns:xlink", "version", "id", "class", "style", "viewBox",
+                                       "preserveAspectRatio", "width", "height", "x", "y", "x1", "y1", "x2",
+                                       "y2", "cx", "cy", "r", "rx", "ry", "points", "d", "fill", "stroke",
+                                       "stroke-width", "stroke-linecap", "stroke-linejoin", "fill-rule",
+                                       "opacity", "fill-opacity", "stroke-opacity", "display", "visibility",
+                                       "transform", "gradientTransform", "gradientUnits", "href", "xlink:href",
+                                       "offset", "stop-color", "stop-opacity", "fx", "fy", "fr", "patternUnits",
+                                       "patternContentUnits", "clip-path", "mask", "filter", "stdDeviation",
+                                       "font-family", "font-size", "text-anchor", "dx", "dy", "xml:space"]
+        let supportedStyle: Set<String> = ["fill", "stroke", "stroke-width", "stroke-linecap",
+                                           "stroke-linejoin", "fill-rule", "opacity", "fill-opacity",
+                                           "stroke-opacity", "display", "visibility", "font-family",
+                                           "font-size", "text-anchor", "stop-color", "stop-opacity",
+                                           "clip-path", "mask", "filter"]
+        var complex = false
+        root.walk { node in
+            if !known.contains(node.name) || node.attributes.keys.contains(where: { !attributes.contains($0) }) {
+                complex = true
+            }
+            if node.name == "style" {
+                if node.text.contains("@font-face") || node.text.contains("@import") ||
+                    node.text.contains("@media") || node.text.contains("url(") { complex = true }
+                if SVGRule.parse(node.text).contains(where: { !$0.declarations.keys.allSatisfy(supportedStyle.contains) }) {
+                    complex = true
+                }
+            }
+            if !SVGStyle.declarations(node.attributes["style"] ?? "").keys.allSatisfy(supportedStyle.contains) {
+                complex = true
+            }
+            if node.attributes["patternTransform"] != nil || node.attributes["clipPathUnits"] != nil ||
+                node.attributes["maskUnits"] != nil || node.attributes["maskContentUnits"] != nil {
+                complex = true
+            }
+            if node.name == "path", SVGPathData.parse(node.attributes["d"] ?? "") == nil { complex = true }
+            if node.name == "filter" && node.children.contains(where: { $0.name != "feGaussianBlur" }) { complex = true }
+            for key in ["fill", "stroke", "stop-color"] {
+                guard let color = node.attributes[key], color != "none", !color.hasPrefix("url(#") else { continue }
+                if SVGStyle.color(color) == nil { complex = true }
+            }
+        }
+        return complex
+    }
+}
+
 private enum SVGNumbers {
     static func list(_ value: String) -> [CGFloat] {
         let scanner = Scanner(string: value.replacingOccurrences(of: ",", with: " "))
@@ -99,10 +155,16 @@ private enum SVGNumbers {
     }
 }
 
+private enum SVGContent {
+    case text(String)
+    case node(SVGNode)
+}
+
 private final class SVGNode {
     let name: String
     let attributes: [String: String]
     var children: [SVGNode] = []
+    var content: [SVGContent] = []
     var text = ""
     init(name: String, attributes: [String: String]) {
         self.name = name
@@ -133,7 +195,7 @@ private final class SVGXMLBuilder: NSObject, XMLParserDelegate {
         count += 1
         guard count <= 10000, stack.count < 128 else { valid = false; parser.abortParsing(); return }
         let node = SVGNode(name: elementName, attributes: attributes)
-        if let parent = stack.last { parent.children.append(node) }
+        if let parent = stack.last { parent.children.append(node); parent.content.append(.node(node)) }
         else if root == nil { root = node }
         else { valid = false; parser.abortParsing(); return }
         stack.append(node)
@@ -141,7 +203,13 @@ private final class SVGXMLBuilder: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, didEndElement elementName: String, namespaceURI: String?, qualifiedName qName: String?) {
         if !stack.isEmpty { stack.removeLast() }
     }
-    func parser(_ parser: XMLParser, foundCharacters string: String) { stack.last?.text += string }
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        guard let node = stack.last else { return }
+        node.text += string
+        if case let .text(previous)? = node.content.last {
+            node.content[node.content.count - 1] = .text(previous + string)
+        } else { node.content.append(.text(string)) }
+    }
     func parser(_ parser: XMLParser, resolveExternalEntityName name: String, systemID: String?) -> Data? { nil }
 }
 
@@ -236,6 +304,44 @@ private struct SVGGradient {
                 + (horizontal ? viewport.minX : viewport.minY) : SVGNumbers.length(raw) ?? fraction
         }
         return (horizontal ? bounds.minX + bounds.width * fraction : bounds.minY + bounds.height * fraction)
+    }
+
+    func drawRadial(path: Path, bounds: CGRect, viewport: CGRect,
+                    opacity: Double, in context: inout GraphicsContext) {
+        let colors: [CGColor] = stops.map { stop in
+            let resolved = stop.color.resolve(in: EnvironmentValues())
+            return CGColor(red: CGFloat(resolved.red), green: CGFloat(resolved.green),
+                           blue: CGFloat(resolved.blue), alpha: CGFloat(resolved.opacity) * opacity)
+        }
+        let locations = stops.map(\.location)
+        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                        colors: colors as CFArray, locations: locations) else { return }
+        let objectBox = units != "userSpaceOnUse"
+        let radiusFraction = Self.fraction(r)
+        let rx = objectBox ? bounds.width * radiusFraction :
+            (r.hasSuffix("%") ? viewport.width * radiusFraction : SVGNumbers.length(r) ?? 0)
+        let ry = objectBox ? bounds.height * radiusFraction : rx
+        guard rx > 0, ry > 0 else { return }
+        let center = CGPoint(x: coordinate(cx, horizontal: true, bounds: bounds, viewport: viewport),
+                             y: coordinate(cy, horizontal: false, bounds: bounds, viewport: viewport))
+        let focal = CGPoint(x: coordinate(fx, horizontal: true, bounds: bounds, viewport: viewport),
+                            y: coordinate(fy, horizontal: false, bounds: bounds, viewport: viewport))
+        let firstRadius = objectBox ? min(bounds.width, bounds.height) * Self.fraction(fr) :
+            (fr.hasSuffix("%") ? viewport.width * Self.fraction(fr) : SVGNumbers.length(fr) ?? 0)
+        context.withCGContext { cg in
+            cg.saveGState()
+            cg.addPath(path.cgPath)
+            cg.clip()
+            cg.translateBy(x: center.x, y: center.y)
+            cg.concatenate(transform)
+            cg.scaleBy(x: rx, y: ry)
+            let start = CGPoint(x: (focal.x - center.x) / rx, y: (focal.y - center.y) / ry)
+            cg.drawRadialGradient(gradient, startCenter: start,
+                                  startRadius: firstRadius / max(rx, ry),
+                                  endCenter: .zero, endRadius: 1,
+                                  options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+            cg.restoreGState()
+        }
     }
 
     func shading(bounds: CGRect, viewport: CGRect) -> GraphicsContext.Shading {
@@ -363,6 +469,17 @@ struct SVGView: View {
     func resizable() -> Self { self }
 
     var body: some View {
+        Group {
+            if svg.needsWebKit {
+                SVGWebKitView(svg: svg)
+            } else {
+                nativeCanvas
+            }
+        }
+        .aspectRatio(svg.size, contentMode: .fit)
+    }
+
+    private var nativeCanvas: some View {
         Canvas { context, canvasSize in
             guard svg.viewBox.width > 0, svg.viewBox.height > 0 else { return }
             var context = context
@@ -372,7 +489,6 @@ struct SVGView: View {
                                       preserveAspectRatio: svg.preserveAspectRatio))
             for node in svg.nodes { draw(node, in: &context, style: SVGStyle()) }
         }
-        .aspectRatio(svg.size, contentMode: .fit)
         .task {
             for (href, url) in svg.externalImages {
                 if Task.isCancelled { return }
@@ -485,8 +601,13 @@ struct SVGView: View {
                         }
                     }
                 } else if let id = SVGView.fragmentID(style.fill), let gradient = svg.gradients[id] {
-                    context.fill(path, with: gradient.shading(bounds: path.boundingRect, viewport: svg.viewBox),
-                                 style: style.fillRule)
+                    if gradient.radial {
+                        gradient.drawRadial(path: path, bounds: path.boundingRect, viewport: svg.viewBox,
+                                            opacity: style.opacity * style.fillOpacity, in: &context)
+                    } else {
+                        context.fill(path, with: gradient.shading(bounds: path.boundingRect, viewport: svg.viewBox),
+                                     style: style.fillRule)
+                    }
                 } else if let color = SVGStyle.color(style.fill) {
                     context.fill(path, with: .color(color.opacity(style.opacity * style.fillOpacity)), style: style.fillRule)
                 }
@@ -507,14 +628,45 @@ struct SVGView: View {
     }
 
     private func drawText(_ node: SVGNode, in context: inout GraphicsContext, style: SVGStyle) {
-        let content = node.text + node.children.filter { $0.name == "tspan" }.map(\.text).joined()
-        guard !content.isEmpty, let color = SVGStyle.color(style.fill) else { return }
-        let font: Font = style.fontFamily.map { .custom($0, size: style.fontSize) } ?? .system(size: style.fontSize)
-        let text = Text(content).font(font).foregroundColor(color.opacity(style.opacity * style.fillOpacity))
-        let x = SVGNumbers.length(node.attributes["x"]) ?? 0
-        let y = SVGNumbers.length(node.attributes["y"]) ?? 0
+        var cursor = CGPoint(x: SVGNumbers.length(node.attributes["x"]) ?? 0,
+                             y: SVGNumbers.length(node.attributes["y"]) ?? 0)
         let anchorX: CGFloat = style.textAnchor == "middle" ? 0.5 : style.textAnchor == "end" ? 1 : 0
-        context.draw(text, at: CGPoint(x: x, y: y), anchor: UnitPoint(x: anchorX, y: 1))
+        let fullText = node.content.map { item -> String in
+            switch item { case let .text(value): value; case let .node(child): child.text }
+        }.joined()
+        if anchorX > 0 {
+            let font: Font = style.fontFamily.map { .custom($0, size: style.fontSize) } ?? .system(size: style.fontSize)
+            let width = context.resolve(Text(fullText).font(font)).measure(in: CGSize(width: 100_000, height: 100_000)).width
+            cursor.x -= width * anchorX
+        }
+        drawTextContent(node, in: &context, style: style, cursor: &cursor, applyPosition: false)
+    }
+
+    private func drawTextContent(_ node: SVGNode, in context: inout GraphicsContext,
+                                 style: SVGStyle, cursor: inout CGPoint,
+                                 applyPosition: Bool = true) {
+        let style = style.merging(node.attributes)
+        if applyPosition {
+            if let x = SVGNumbers.length(node.attributes["x"]) { cursor.x = x }
+            if let y = SVGNumbers.length(node.attributes["y"]) { cursor.y = y }
+            cursor.x += SVGNumbers.length(node.attributes["dx"]) ?? 0
+            cursor.y += SVGNumbers.length(node.attributes["dy"]) ?? 0
+        }
+        guard let color = SVGStyle.color(style.fill) else { return }
+        let font: Font = style.fontFamily.map { .custom($0, size: style.fontSize) } ?? .system(size: style.fontSize)
+        for item in node.content {
+            switch item {
+            case let .text(value):
+                guard !value.isEmpty else { continue }
+                let text = Text(value).font(font).foregroundColor(color.opacity(style.opacity * style.fillOpacity))
+                let resolved = context.resolve(text)
+                context.draw(resolved, at: cursor, anchor: .bottomLeading)
+                cursor.x += resolved.measure(in: CGSize(width: 100_000, height: 100_000)).width
+            case let .node(child) where child.name == "tspan":
+                drawTextContent(child, in: &context, style: style, cursor: &cursor)
+            case .node: break
+            }
+        }
     }
 
     private func drawImage(_ node: SVGNode, in context: inout GraphicsContext) {

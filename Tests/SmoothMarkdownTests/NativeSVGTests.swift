@@ -28,6 +28,13 @@ final class NativeSVGTests: XCTestCase {
         XCTAssertGreaterThan(path.boundingRect.height, 40)
     }
 
+    func testUnsupportedPaintFeaturesRouteToSystemWebKit() {
+        let svg = SVG(data: Data("<svg width='20' height='20'><path d='M0 0 L20 20' stroke='red' stroke-dasharray='2 2'/></svg>".utf8))
+        XCTAssertTrue(svg?.needsWebKit ?? false)
+        let basic = SVG(data: Data("<svg width='20' height='20'><rect width='20' height='20' fill='red'/></svg>".utf8))
+        XCTAssertFalse(basic?.needsWebKit ?? true)
+    }
+
     func testMissingBundleResourceReturnsNil() {
         XCTAssertNil(SVG(named: "missing.svg", in: .module))
     }
@@ -36,6 +43,7 @@ final class NativeSVGTests: XCTestCase {
 #if os(macOS)
 import AppKit
 import SwiftUI
+import WebKit
 
 private final class SVGImageMockProtocol: URLProtocol {
     static let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")!
@@ -66,6 +74,56 @@ final class NativeSVGPixelTests: XCTestCase {
         renderer.proposedSize = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
         guard let data = renderer.nsImage?.tiffRepresentation else { return nil }
         return NSBitmapImageRep(data: data)
+    }
+
+    func testWebKitFallbackRendersStyledSVGSnapshot() async {
+        let source = "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><style>@font-face { font-family: Demo; src: local('Helvetica'); } .mark { fill: red; }</style><rect class='mark' width='40' height='40'/></svg>"
+        let svg = SVG(data: Data(source.utf8))!
+        XCTAssertTrue(svg.needsWebKit)
+        let webView = SVGWebKitConfiguration.makeView()
+        XCTAssertFalse(webView.configuration.defaultWebpagePreferences.allowsContentJavaScript)
+        webView.frame = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let guardDelegate = SVGWebKitNavigationGuard()
+        let loaded = expectation(description: "SVG loaded")
+        guardDelegate.onFinished = { loaded.fulfill() }
+        webView.navigationDelegate = guardDelegate
+        webView.loadHTMLString(try! XCTUnwrap(SVGWebKitConfiguration.html(for: svg.sourceData)),
+                               baseURL: URL(string: "https://svg.invalid/")!)
+        await fulfillment(of: [loaded], timeout: 10)
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            webView.takeSnapshot(with: nil) { image, _ in continuation.resume(returning: image) }
+        }
+        let bitmap = image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:))
+        let color = bitmap?.colorAt(x: 20, y: 20)?.usingColorSpace(.deviceRGB)
+        XCTAssertGreaterThan(color?.redComponent ?? 0, color?.blueComponent ?? 1)
+        XCTAssertNotNil(bitmap?.colorAt(x: 80, y: 80))
+    }
+
+    func testWebKitRendersSwiftDrawWOFF2Fixture() async throws {
+        // Fixture from SwiftDraw 0.29.0's DOM tests (zlib license).
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "swiftdraw-fontface-ttf", withExtension: "svg"))
+        let svg = try XCTUnwrap(SVG(data: Data(contentsOf: url), baseURL: url))
+        XCTAssertTrue(svg.needsWebKit)
+        let webView = SVGWebKitConfiguration.makeView()
+        webView.frame = CGRect(x: 0, y: 0, width: 500, height: 60)
+        let guardDelegate = SVGWebKitNavigationGuard()
+        let loaded = expectation(description: "WOFF2 SVG loaded")
+        guardDelegate.onFinished = { loaded.fulfill() }
+        webView.navigationDelegate = guardDelegate
+        webView.loadHTMLString(try XCTUnwrap(SVGWebKitConfiguration.html(for: svg.sourceData)),
+                               baseURL: url)
+        await fulfillment(of: [loaded], timeout: 10)
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            webView.takeSnapshot(with: nil) { image, _ in continuation.resume(returning: image) }
+        }
+        let bitmap = try XCTUnwrap(image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "/tmp/native-svg-woff2.png"))
+        var darkPixels = 0
+        for y in 15..<55 { for x in 40..<470 {
+            if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+               color.redComponent < 0.5 { darkPixels += 1 }
+        } }
+        XCTAssertGreaterThan(darkPixels, 100)
     }
 
     func testExternalImageUsesURLSessionAndCache() async {
@@ -167,6 +225,22 @@ final class NativeSVGPixelTests: XCTestCase {
         let image = bitmap(source)
         XCTAssertGreaterThan(image?.colorAt(x: 50, y: 50)?.alphaComponent ?? 0, 0.9)
         XCTAssertLessThan(image?.colorAt(x: 10, y: 10)?.alphaComponent ?? 1, 0.1)
+    }
+
+    func testTspanPositionAndStyleRender() {
+        let source = "<svg width='100' height='100'><text x='10' y='60' font-size='28' fill='red'>A<tspan x='70' y='60' fill='blue'>B</tspan></text></svg>"
+        let image = bitmap(source)
+        var left = 0, right = 0
+        if let image {
+            for y in 30..<70 { for x in 10..<40 {
+                if (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 { left += 1 }
+            } }
+            for y in 30..<70 { for x in 70..<100 {
+                if (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.1 { right += 1 }
+            } }
+        }
+        XCTAssertGreaterThan(left, 10)
+        XCTAssertGreaterThan(right, 10)
     }
 
     func testGradientInheritanceUserSpaceAndTransform() {
