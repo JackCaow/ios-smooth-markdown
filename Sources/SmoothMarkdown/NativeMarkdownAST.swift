@@ -36,201 +36,335 @@ struct NativeMarkdownNode: Equatable {
     }
 }
 
-/// The first native AST pass reuses the editor's source-preserving block scanner.
-/// It deliberately keeps unrecognized blocks as raw nodes, rather than dropping source.
+/// Source-preserving CommonMark/GFM block scanner, independent of the editor codec.
 struct NativeMarkdownASTParser {
     private struct Reference {
         let destination: String
         let title: String?
     }
 
+    private struct Line {
+        let text: String
+        let raw: String
+        let start: Int
+        var end: Int { start + (raw as NSString).length }
+        var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+
     init() {}
 
     func parse(_ source: String) -> NativeMarkdownNode {
-        let document = MarkdownDocumentCodec().parse(source)
-        let references = referenceDefinitions(in: document)
-        var blocks: [NativeMarkdownNode] = []
+        let lines = sourceLines(source)
+        let references = referenceDefinitions(in: lines)
+        return .init(kind: .document, source: source,
+                     sourceRange: NSRange(location: 0, length: (source as NSString).length),
+                     children: scan(lines, source: source, references: references))
+    }
+
+    private func sourceLines(_ source: String) -> [Line] {
+        let parts = source.components(separatedBy: "\n")
+        var offset = 0
+        return parts.enumerated().map { index, part in
+            let raw = part + (index + 1 < parts.count ? "\n" : "")
+            let line = Line(text: part.hasSuffix("\r") ? String(part.dropLast()) : part,
+                            raw: raw, start: offset)
+            offset += (raw as NSString).length
+            return line
+        }
+    }
+
+    private func scan(_ lines: [Line], source: String,
+                      references: [String: Reference]) -> [NativeMarkdownNode] {
+        var result: [NativeMarkdownNode] = []
         var index = 0
-        while index < document.blocks.count {
-            let block = document.blocks[index]
-            guard let range = document.sourceRange(of: block.id) else { index += 1; continue }
-            if index + 1 < document.blocks.count {
-                let next = document.blocks[index + 1]
-                if case let .paragraph(markdown) = block.kind,
-                   case .horizontalRule = next.kind,
-                   next.leadingTrivia.isEmpty,
-                   next.source.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .range(of: #"^ {0,3}-{3,}$"#, options: .regularExpression) != nil,
-                   let nextRange = document.sourceRange(of: next.id),
-                   NSMaxRange(range) == nextRange.location {
-                    let combined = (source as NSString).substring(with: NSRange(
-                        location: range.location, length: NSMaxRange(nextRange) - range.location))
-                    blocks.append(.init(kind: .heading(2), source: combined,
-                                        sourceRange: NSRange(location: range.location,
-                                                             length: (combined as NSString).length),
-                                        children: inline(markdown, offset: range.location, references: references)))
-                    index += 2
+        func node(_ kind: NativeMarkdownNode.Kind, _ first: Int, _ limit: Int,
+                  _ children: [NativeMarkdownNode] = []) -> NativeMarkdownNode {
+            let start = lines[first].start
+            let end = lines[limit - 1].end
+            let range = NSRange(location: start, length: end - start)
+            return .init(kind: kind, source: (source as NSString).substring(with: range),
+                         sourceRange: range, children: children)
+        }
+        while index < lines.count {
+            if lines[index].isBlank { index += 1; continue }
+            let start = index
+            let text = lines[index].text
+            if let definition = referenceDefinition(text), !definition.label.hasPrefix("^") {
+                result.append(node(.referenceDefinition(definition.label, definition.destination), start, start + 1))
+                index += 1; continue
+            }
+            if let label = footnoteLabel(text) {
+                index += 1
+                while index < lines.count, !lines[index].isBlank,
+                      (lines[index].text.hasPrefix("    ") || lines[index].text.hasPrefix("\t")) { index += 1 }
+                result.append(node(.footnoteDefinition(label), start, index)); continue
+            }
+            if let fence = fenceOpen(text) {
+                index += 1
+                while index < lines.count, !fenceClose(lines[index].text, marker: fence.marker, count: fence.count) {
+                    index += 1
+                }
+                if index < lines.count { index += 1 }
+                result.append(node(.fencedCode(fence.info), start, index)); continue
+            }
+            if text.trimmingCharacters(in: .whitespaces).hasPrefix("$$") {
+                index += 1
+                while index < lines.count, !lines[index].text.contains("$$") { index += 1 }
+                if index < lines.count { index += 1 }
+                result.append(node(.blockMath, start, index)); continue
+            }
+            if let heading = heading(text) {
+                let body = heading.body
+                let offset = lines[start].start + (heading.prefix as NSString).length
+                result.append(node(.heading(heading.level), start, start + 1,
+                                   inline(body, offset: offset, references: references)))
+                index += 1; continue
+            }
+            if isThematic(text) {
+                result.append(node(.thematicBreak, start, start + 1)); index += 1; continue
+            }
+            if isTable(at: index, lines: lines) {
+                index += 2
+                while index < lines.count, !lines[index].isBlank, lines[index].text.contains("|") {
+                    index += 1
+                }
+                let rowIndices = [start] + Array((start + 2)..<index)
+                let rows = rowIndices.map { rowIndex -> NativeMarkdownNode in
+                    let row = lines[rowIndex]
+                    let cells = tableCells(row, references: references)
+                    return .init(kind: .tableRow, source: row.text,
+                                 sourceRange: NSRange(location: row.start, length: (row.text as NSString).length),
+                                 children: cells)
+                }
+                result.append(node(.table, start, index, rows)); continue
+            }
+            if listMarker(text) != nil {
+                let parsed = list(at: index, lines: lines, source: source, references: references)
+                result.append(parsed.node)
+                index = parsed.next; continue
+            }
+            if quotePrefix(text) != nil {
+                index += 1
+                while index < lines.count, !lines[index].isBlank,
+                      (quotePrefix(lines[index].text) != nil || !interruptsParagraph(at: index, lines: lines)) {
+                    index += 1
+                }
+                let paragraphs = (start..<index).compactMap { cursor -> NativeMarkdownNode? in
+                    let line = lines[cursor]
+                    guard let prefix = quotePrefix(line.text) else { return nil }
+                    let body = String(line.text.dropFirst(prefix.count))
+                    guard !body.isEmpty else { return nil }
+                    let offset = line.start + (prefix as NSString).length
+                    return .init(kind: .paragraph, source: body,
+                                 sourceRange: NSRange(location: offset, length: (body as NSString).length),
+                                 children: inline(body, offset: offset, references: references))
+                }
+                result.append(node(.blockQuote, start, index, paragraphs)); continue
+            }
+            if text.hasPrefix("    ") || text.hasPrefix("\t") {
+                index += 1
+                while index < lines.count,
+                      lines[index].isBlank || lines[index].text.hasPrefix("    ") || lines[index].text.hasPrefix("\t") {
+                    index += 1
+                }
+                result.append(node(.indentedCode, start, index)); continue
+            }
+            if htmlStart(text) {
+                index += 1
+                while index < lines.count, !lines[index].isBlank { index += 1 }
+                result.append(node(.htmlBlock, start, index)); continue
+            }
+            index += 1
+            while index < lines.count, !lines[index].isBlank,
+                  setextLevel(lines[index].text) == nil,
+                  !interruptsParagraph(at: index, lines: lines) { index += 1 }
+            if index < lines.count, let level = setextLevel(lines[index].text) {
+                let content = lines[start..<index].map(\.text).joined(separator: "\n")
+                let offset = lines[start].start
+                result.append(node(.heading(level), start, index + 1,
+                                   inline(content, offset: offset, references: references)))
+                index += 1; continue
+            }
+            let end = index
+            let content = lines[start..<end].map {
+                $0.text + ($0.raw.hasSuffix("\r\n") ? "\r" : "")
+            }.joined(separator: "\n")
+            result.append(node(.paragraph, start, end,
+                               inline(content, offset: lines[start].start, references: references)))
+        }
+        return result
+    }
+
+    private func heading(_ line: String) -> (level: Int, prefix: String, body: String)? {
+        guard let match = match(#"^( {0,3})(#{1,6})(?:[ \t]+|$)(.*)$"#, line) else { return nil }
+        let prefix = match[1] + match[2] + String(line.dropFirst(match[1].count + match[2].count)
+            .prefix(while: { $0 == " " || $0 == "\t" }))
+        let body = match[3].replacingOccurrences(of: #"[ \t]+#+[ \t]*$"#, with: "",
+                                                   options: .regularExpression)
+        return (match[2].count, prefix, body)
+    }
+
+    private func fenceOpen(_ line: String) -> (marker: Character, count: Int, info: String)? {
+        let trimmed = String(line.drop(while: { $0 == " " }))
+        guard line.count - trimmed.count <= 3, let marker = trimmed.first,
+              marker == "`" || marker == "~" else { return nil }
+        let count = trimmed.prefix(while: { $0 == marker }).count
+        guard count >= 3 else { return nil }
+        let info = String(trimmed.dropFirst(count)).trimmingCharacters(in: .whitespaces)
+        guard marker != "`" || !info.contains("`") else { return nil }
+        return (marker, count, info)
+    }
+
+    private func fenceClose(_ line: String, marker: Character, count: Int) -> Bool {
+        let trimmed = String(line.drop(while: { $0 == " " }))
+        guard line.count - trimmed.count <= 3 else { return false }
+        let run = trimmed.prefix(while: { $0 == marker }).count
+        return run >= count && trimmed.dropFirst(run).trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    private func isThematic(_ line: String) -> Bool {
+        guard let match = match(#"^ {0,3}([*_-])(?:[ \t]*\1){2,}[ \t]*$"#, line) else { return false }
+        return !match[0].isEmpty
+    }
+
+    private func setextLevel(_ line: String) -> Int? {
+        if match(#"^ {0,3}=+[ \t]*$"#, line) != nil { return 1 }
+        if match(#"^ {0,3}-+[ \t]*$"#, line) != nil { return 2 }
+        return nil
+    }
+
+    private func htmlStart(_ line: String) -> Bool {
+        match(#"^ {0,3}(?:<!--|<![A-Z]|<\?|</?(?:script|pre|style|div|table|section|details|p)(?:[ \t>/]))"#, line.lowercased()) != nil
+    }
+
+    private func footnoteLabel(_ line: String) -> String? {
+        match(#"^ {0,3}\[\^([^]]+)\]:"#, line)?[1]
+    }
+
+    private func quotePrefix(_ line: String) -> String? {
+        match(#"^( {0,3}>[ ]?)"#, line)?[1]
+    }
+
+    private func interruptsParagraph(at index: Int, lines: [Line]) -> Bool {
+        let text = lines[index].text
+        return heading(text) != nil || fenceOpen(text) != nil || isThematic(text) ||
+            quotePrefix(text) != nil || htmlStart(text) ||
+            (listMarker(text).map {
+                text.count > $0.prefix.count && (!$0.ordered || $0.number == 1)
+            } ?? false)
+    }
+
+    private func isTable(at index: Int, lines: [Line]) -> Bool {
+        guard index + 1 < lines.count, lines[index].text.contains("|") else { return false }
+        let cells = lines[index + 1].text.trimmingCharacters(in: .whitespaces)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+            .split(separator: "|", omittingEmptySubsequences: false)
+        return !cells.isEmpty && cells.allSatisfy {
+            $0.trimmingCharacters(in: .whitespaces)
+                .range(of: #"^:?-{3,}:?$"#, options: .regularExpression) != nil
+        }
+    }
+
+    private func tableCells(_ line: Line, references: [String: Reference]) -> [NativeMarkdownNode] {
+        let text = line.text as NSString
+        var spans: [NSRange] = []
+        var start = 0
+        for index in 0..<text.length where text.character(at: index) == 124 {
+            spans.append(NSRange(location: start, length: index - start))
+            start = index + 1
+        }
+        spans.append(NSRange(location: start, length: text.length - start))
+        if spans.first?.length == 0 { spans.removeFirst() }
+        if spans.last?.length == 0 { spans.removeLast() }
+        return spans.map { span in
+            var location = span.location
+            var length = span.length
+            while length > 0, [UInt16(32), 9].contains(text.character(at: location)) {
+                location += 1; length -= 1
+            }
+            while length > 0, [UInt16(32), 9].contains(text.character(at: location + length - 1)) {
+                length -= 1
+            }
+            let content = text.substring(with: NSRange(location: location, length: length))
+            let offset = line.start + location
+            return .init(kind: .tableCell, source: content,
+                         sourceRange: NSRange(location: offset, length: length),
+                         children: inline(content, offset: offset, references: references))
+        }
+    }
+
+    private func listMarker(_ line: String) -> (indent: Int, prefix: String, ordered: Bool, number: Int, style: Character)? {
+        guard let parts = match(#"^([ \t]*)([-+*]|[0-9]{1,9}[.)])([ \t]+|$)(.*)$"#, line) else { return nil }
+        let indent = parts[1].reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+        let marker = parts[2]
+        return (indent, parts[1] + marker + parts[3], marker.last == "." || marker.last == ")",
+                Int(marker.dropLast()) ?? 1, marker.last!)
+    }
+
+    private func list(at start: Int, lines: [Line], source: String,
+                      references: [String: Reference]) -> (node: NativeMarkdownNode, next: Int) {
+        let first = listMarker(lines[start].text)!
+        var index = start
+        var items: [NativeMarkdownNode] = []
+        while index < lines.count, let marker = listMarker(lines[index].text),
+              marker.indent == first.indent, marker.ordered == first.ordered,
+              marker.style == first.style {
+            let itemStart = index
+            index += 1
+            var children: [NativeMarkdownNode] = []
+            let itemLine = lines[itemStart]
+            var body = String(itemLine.text.dropFirst(marker.prefix.count))
+            let task = match(#"^\[([ xX])\][ \t]+"#, body)
+            let checked: Bool?
+            if let task {
+                checked = task[1].lowercased() == "x"
+                body = String(body.dropFirst(task[0].count))
+            } else { checked = nil }
+            let bodyOffset = itemLine.start + (marker.prefix as NSString).length +
+                (task.map { ($0[0] as NSString).length } ?? 0)
+            children += inline(body, offset: bodyOffset, references: references)
+            while index < lines.count {
+                if let nested = listMarker(lines[index].text), nested.indent > first.indent {
+                    let parsed = list(at: index, lines: lines, source: source, references: references)
+                    children.append(parsed.node)
+                    index = parsed.next
                     continue
                 }
+                if lines[index].isBlank {
+                    let next = index + 1
+                    if next < lines.count, let nextMarker = listMarker(lines[next].text),
+                       nextMarker.indent >= first.indent {
+                        index = next
+                    }
+                    break
+                }
+                if let nextMarker = listMarker(lines[index].text), nextMarker.indent <= first.indent { break }
+                if interruptsParagraph(at: index, lines: lines) { break }
+                index += 1
             }
-            blocks.append(parse(block, range: range, references: references))
-            index += 1
+            let end = lines[index - 1].end
+            let range = NSRange(location: itemLine.start, length: end - itemLine.start)
+            items.append(.init(kind: .listItem(checked: checked),
+                               source: (source as NSString).substring(with: range),
+                               sourceRange: range, children: children))
+            if index >= lines.count || listMarker(lines[index].text)?.indent != first.indent ||
+                listMarker(lines[index].text)?.style != first.style { break }
         }
-        return NativeMarkdownNode(kind: .document, source: source,
-                                  sourceRange: NSRange(location: 0, length: (source as NSString).length),
-                                  children: blocks)
+        let end = items.last.map { NSMaxRange($0.sourceRange) } ?? lines[start].end
+        let range = NSRange(location: lines[start].start, length: end - lines[start].start)
+        return (.init(kind: .list(ordered: first.ordered), source: (source as NSString).substring(with: range),
+                      sourceRange: range, children: items), index)
     }
 
-    private func parse(_ block: MarkdownDocumentBlock, range: NSRange,
-                       references: [String: Reference]) -> NativeMarkdownNode {
-        func node(_ kind: NativeMarkdownNode.Kind, _ children: [NativeMarkdownNode] = []) -> NativeMarkdownNode {
-            NativeMarkdownNode(kind: kind, source: block.source, sourceRange: range, children: children)
-        }
-        let trimmed = block.source.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let definition = referenceDefinition(trimmed), !definition.label.hasPrefix("^") {
-            return node(.referenceDefinition(definition.label, definition.destination))
-        }
-        if trimmed.hasPrefix("[^"), let close = trimmed.range(of: "]:") {
-            let label = String(trimmed[trimmed.index(trimmed.startIndex, offsetBy: 2)..<close.lowerBound])
-            if !label.isEmpty { return node(.footnoteDefinition(label)) }
-        }
-        if trimmed.hasPrefix("$$"), trimmed.hasSuffix("$$"), trimmed.count >= 4 {
-            return node(.blockMath)
-        }
-        let lines = trimmed.components(separatedBy: "\n")
-        if let last = lines.last, lines.count > 1,
-           last.range(of: #"^ {0,3}=+[ \t]*$"#, options: .regularExpression) != nil,
-           case let .paragraph(markdown) = block.kind {
-            let body = markdown.components(separatedBy: "\n").dropLast().joined(separator: "\n")
-            return node(.heading(1), inline(body, offset: bodyOffset(body, in: block.source, base: range.location),
-                                            references: references))
-        }
-        if lines.count == 2, !lines[0].contains("|"),
-           lines[1].range(of: #"^ {0,3}-{3,}[ \t]*$"#, options: .regularExpression) != nil,
-           case .table = block.kind {
-            return node(.heading(2), inline(lines[0], offset: bodyOffset(lines[0], in: block.source,
-                                                                          base: range.location),
-                                            references: references))
-        }
-        let sourceLines = block.source.components(separatedBy: "\n")
-        if !sourceLines.isEmpty, sourceLines.allSatisfy({ line in
-            line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                line.hasPrefix("    ") || line.hasPrefix("\t")
-        }) {
-            return node(.indentedCode)
-        }
-        switch block.kind {
-        case let .paragraph(markdown):
-            return node(.paragraph, inline(markdown, offset: bodyOffset(markdown, in: block.source, base: range.location), references: references))
-        case let .heading(level, markdown):
-            let body = markdown.replacingOccurrences(of: #"[ \t]+#+[ \t]*$"#, with: "",
-                                                      options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            return node(.heading(level), inline(body, offset: bodyOffset(body, in: block.source,
-                                                                         base: range.location),
-                                                references: references))
-        case let .fencedCode(_, info, _):
-            return node(.fencedCode(info.trimmingCharacters(in: .whitespacesAndNewlines)))
-        case let .table(table):
-            let rows = [table.headers] + table.rows
-            let lines = block.source.components(separatedBy: "\n")
-            return node(.table, rows.enumerated().map { rowIndex, cells in
-                let lineIndex = rowIndex == 0 ? 0 : rowIndex + 1
-                let line = lines.indices.contains(lineIndex) ? lines[lineIndex] : ""
-                let lineOffset = lines[..<min(lineIndex, lines.count)].reduce(0) {
-                    $0 + ($1 as NSString).length + 1
-                }
-                let rowRange = NSRange(location: range.location + lineOffset,
-                                       length: (line as NSString).length)
-                var searchStart = line.startIndex
-                let cellNodes = cells.map { cell -> NativeMarkdownNode in
-                    let found = line.range(of: cell, range: searchStart..<line.endIndex)
-                    let cellOffset = found.map { (String(line[..<$0.lowerBound]) as NSString).length } ?? 0
-                    if let found { searchStart = found.upperBound }
-                    let cellRange = NSRange(location: rowRange.location + cellOffset,
-                                            length: (cell as NSString).length)
-                    return NativeMarkdownNode(kind: .tableCell, source: cell, sourceRange: cellRange,
-                                              children: inline(cell, offset: cellRange.location, references: references))
-                }
-                return NativeMarkdownNode(kind: .tableRow, source: line, sourceRange: rowRange,
-                                          children: cellNodes)
-            })
-        case let .list(list):
-            return node(.list(ordered: list.items.first?.kind == .ordered),
-                        listNodes(list, source: block.source, base: range.location,
-                                  references: references))
-        case .horizontalRule: return node(.thematicBreak)
-        case .plugin, .raw:
-            if trimmed.hasPrefix("<"), trimmed.hasSuffix(">") { return node(.htmlBlock) }
-            if trimmed.hasPrefix(">") {
-                var lineOffset = 0
-                let paragraphs = block.source.components(separatedBy: "\n").compactMap { line -> NativeMarkdownNode? in
-                    defer { lineOffset += (line as NSString).length + 1 }
-                    let content = line.replacingOccurrences(of: #"^ {0,3}> ?"#, with: "", options: .regularExpression)
-                    guard !content.isEmpty else { return nil }
-                    let prefixLength = (line as NSString).length - (content as NSString).length
-                    let contentRange = NSRange(location: range.location + lineOffset + prefixLength,
-                                               length: (content as NSString).length)
-                    return NativeMarkdownNode(kind: .paragraph, source: content, sourceRange: contentRange,
-                                              children: inline(content, offset: contentRange.location, references: references))
-                }
-                return node(.blockQuote, paragraphs)
-            }
-            return node(.raw)
-        }
-    }
-
-    private func bodyOffset(_ body: String, in source: String, base: Int) -> Int {
-        guard let range = source.range(of: body) else { return base }
-        return base + (String(source[..<range.lowerBound]) as NSString).length
-    }
-
-    private func listNodes(_ list: MarkdownSourceList, source: String, base: Int,
-                           references: [String: Reference]) -> [NativeMarkdownNode] {
+    private func match(_ pattern: String, _ source: String) -> [String]? {
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let result = expression.firstMatch(in: source,
+                                                 range: NSRange(location: 0, length: (source as NSString).length))
+        else { return nil }
         let text = source as NSString
-        func width(_ indent: String) -> Int {
-            indent.reduce(0) { value, character in
-                character == "\t" ? ((value / 4) + 1) * 4 : value + 1
-            }
+        return (0..<result.numberOfRanges).map {
+            result.range(at: $0).location == NSNotFound ? "" : text.substring(with: result.range(at: $0))
         }
-        func position(_ index: Int) -> Int { list.sourceOffset(ofItemAt: index) ?? text.length }
-        func slice(_ start: Int, _ end: Int) -> String {
-            text.substring(with: NSRange(location: start, length: max(0, end - start)))
-        }
-        func nodes(from first: Int, through limit: Int) -> [NativeMarkdownNode] {
-            guard first < limit else { return [] }
-            let level = width(list.items[first].indent)
-            var result: [NativeMarkdownNode] = []
-            var index = first
-            while index < limit {
-                let item = list.items[index]
-                let start = position(index)
-                var next = index + 1
-                while next < limit && width(list.items[next].indent) > level { next += 1 }
-                let end = next < list.items.count ? position(next) : text.length
-                let prefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
-                var children = inline(item.content, offset: base + start + (prefix as NSString).length,
-                                      references: references)
-                if index + 1 < next {
-                    let childStart = position(index + 1)
-                    let last = list.items[next - 1]
-                    let childEnd = position(next - 1) + (last.source as NSString).length +
-                        last.trailingContinuations.reduce(0) { $0 + ($1.source as NSString).length }
-                    let ordered = list.items[index + 1].kind == .ordered
-                    children.append(.init(kind: .list(ordered: ordered),
-                                          source: slice(childStart, childEnd),
-                                          sourceRange: NSRange(location: base + childStart,
-                                                               length: childEnd - childStart),
-                                          children: nodes(from: index + 1, through: next)))
-                }
-                result.append(.init(kind: .listItem(checked: item.checked), source: slice(start, end),
-                                    sourceRange: NSRange(location: base + start, length: end - start),
-                                    children: children))
-                index = next
-            }
-            return result
-        }
-        return nodes(from: 0, through: list.items.count)
     }
 
     private func inline(_ source: String, offset: Int,
@@ -642,16 +776,22 @@ struct NativeMarkdownASTParser {
             .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
-    private func referenceDefinitions(in document: MarkdownDocument) -> [String: Reference] {
+    private func referenceDefinitions(in lines: [Line]) -> [String: Reference] {
         var result: [String: Reference] = [:]
-        for block in document.blocks {
-            if case .fencedCode = block.kind { continue }
-            for line in block.source.components(separatedBy: "\n") {
-                guard let definition = referenceDefinition(line), !definition.label.hasPrefix("^") else { continue }
-                let key = normalizeReference(definition.label)
-                if result[key] == nil {
-                    result[key] = Reference(destination: definition.destination, title: definition.title)
-                }
+        var fence: (marker: Character, count: Int)?
+        for line in lines {
+            if let active = fence {
+                if fenceClose(line.text, marker: active.marker, count: active.count) { fence = nil }
+                continue
+            }
+            if let open = fenceOpen(line.text) {
+                fence = (open.marker, open.count)
+                continue
+            }
+            guard let definition = referenceDefinition(line.text), !definition.label.hasPrefix("^") else { continue }
+            let key = normalizeReference(definition.label)
+            if result[key] == nil {
+                result[key] = Reference(destination: definition.destination, title: definition.title)
             }
         }
         return result
