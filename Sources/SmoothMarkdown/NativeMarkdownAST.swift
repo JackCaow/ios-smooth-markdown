@@ -284,6 +284,16 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
+        func closingBackticks(_ count: Int, after start: Int) -> Int? {
+            var cursor = start
+            while cursor < characters.count {
+                guard characters[cursor] == "`" else { cursor += 1; continue }
+                let run = characters[cursor...].prefix(while: { $0 == "`" }).count
+                if run == count { return cursor }
+                cursor += run
+            }
+            return nil
+        }
 
         while index < characters.count {
             if characters[index] == "\\", index + 1 < characters.count {
@@ -326,7 +336,7 @@ struct NativeMarkdownASTParser {
             }
             if characters[index] == "`" {
                 let run = characters[index...].prefix(while: { $0 == "`" }).count
-                if let end = closing(Array(repeating: "`", count: run), after: index + run) {
+                if let end = closingBackticks(run, after: index + run) {
                     flushPlain(until: index)
                     append(.inlineCode, start: index, end: end + run)
                     index = end + run; plainStart = index; continue

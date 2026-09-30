@@ -53,4 +53,20 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertEqual(actual, expected, "Example \(number)")
         }
     }
+
+    func testOfficialSingleCodeSpanSemantics() throws {
+        let selected: Set<Int> = [328, 329, 330, 331, 332, 333, 335, 336, 337, 339, 340]
+        for example in try examples() {
+            guard let number = example["example"] as? Int, selected.contains(number) else { continue }
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let html = try XCTUnwrap(example["html"] as? String)
+            XCTAssertTrue(html.hasPrefix("<p><code>") && html.hasSuffix("</code></p>\n"))
+            let expectedHTMLText = String(html.dropFirst(9).dropLast(12))
+            let expected = NativeMarkdownTextDecoder.decode(expectedHTMLText)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            XCTAssertEqual(paragraph.kind, .paragraph, "Example \(number)")
+            let code = try XCTUnwrap(paragraph.children.first(where: { $0.kind == .inlineCode }))
+            XCTAssertEqual(code.semanticText, expected, "Example \(number)")
+        }
+    }
 }
