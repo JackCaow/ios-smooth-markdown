@@ -71,4 +71,26 @@ final class NativeMarkdownASTParserTests: XCTestCase {
         XCTAssertEqual(tree.children[1].kind, .footnoteDefinition("note"))
         XCTAssertEqual(tree.children[2].kind, .blockMath)
     }
+
+    func testReferenceLinksResolveForwardDefinitionsAndKeepSourceRanges() {
+        let source = "😀 [one][  TARGET ] and ![icon][target] and [TARGET].\n\n[target]: https://example.com/icon.svg\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        let children = tree.children[0].children
+        XCTAssertEqual(children.map(\.kind), [
+            .text, .link("https://example.com/icon.svg"), .text,
+            .image("https://example.com/icon.svg"), .text,
+            .link("https://example.com/icon.svg"), .text,
+        ])
+        XCTAssertEqual(tree.children[1].kind,
+                       .referenceDefinition("target", "https://example.com/icon.svg"))
+        for child in children {
+            XCTAssertEqual((source as NSString).substring(with: child.sourceRange), child.source)
+        }
+    }
+
+    func testReferenceDefinitionInsideFenceDoesNotResolve() {
+        let source = "[missing]\n\n```md\n[missing]: https://example.com\n```\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children[0].children.map(\.kind), [.text])
+    }
 }
