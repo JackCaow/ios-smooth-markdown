@@ -9,6 +9,12 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         let svg = Data("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='32'></svg>".utf8)
         XCTAssertEqual(ReaderRemoteImageResolution.decode(svg, key: svgKey).naturalSize,
                        CGSize(width: 64, height: 32))
+        let extensionlessKey = ReaderRemoteImageKey(
+            url: URL(string: "https://img.shields.io/github/stars/owner/repo?style=flat")!, svg: false)
+        if case let .svg(decoded) = ReaderRemoteImageResolution.decode(svg, key: extensionlessKey) {
+            XCTAssertEqual(decoded.size, CGSize(width: 64, height: 32))
+            XCTAssertEqual(decoded.baseURL, extensionlessKey.url)
+        } else { XCTFail("An extensionless SVG response must use the vector renderer") }
         if case .failure = ReaderRemoteImageResolution.decode(Data("broken".utf8), key: svgKey) {
             // Malformed bytes are retryable after the view reappears.
         } else { XCTFail("Malformed SVG should be a retryable failure") }
@@ -24,6 +30,13 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         }
         XCTAssertEqual(ReaderRemoteImageResolution.decode(bitmap, key: bitmapKey).naturalSize,
                        CGSize(width: 20, height: 10))
+        if case .bitmap = ReaderRemoteImageResolution.decode(bitmap, key: extensionlessKey) {
+            // The response bytes, rather than a missing suffix, choose the bitmap decoder.
+        } else { XCTFail("An extensionless bitmap response must stay a bitmap") }
+        if case .rejected = ReaderRemoteImageResolution.decode(
+            Data(count: ReaderRemoteImagePolicy.maxBitmapBytes + 1), key: extensionlessKey) {
+            // The bitmap byte limit is unchanged.
+        } else { XCTFail("Oversized remote payload must be rejected") }
     }
 
     func testStyleRerenderKeepsNativeSelectionButDocumentReplacementClearsIt() {
