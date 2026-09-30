@@ -71,6 +71,40 @@ final class DetailsSyntaxTests: XCTestCase {
         XCTAssertEqual(DetailsSyntax.sections("<details>\n<summary>Default</summary>\nbody\n</details>").count, 1)
     }
 
+    func testNestedDetailsKeepsOuterSummaryAndTail() {
+        let sections = DetailsSyntax.sections("""
+        <details>
+        <summary>Outer</summary>
+        before
+        <details open>
+        <summary>Inner</summary>
+        inside
+        </details>
+        after inner
+        </details>
+        after outer
+        """)
+        guard case let .details(block)? = sections.first else { return XCTFail("Missing outer details") }
+        XCTAssertEqual(block.summary, "Outer")
+        XCTAssertEqual(block.content, "before\n<details open>\n<summary>Inner</summary>\ninside\n</details>\nafter inner")
+        XCTAssertEqual(sections.last, .markdown("after outer"))
+    }
+
+    func testClosingDetailsInsideFenceDoesNotEndBlock() {
+        let block = onlyBlock("""
+        <details>
+        <summary>Example</summary>
+        ```html
+        </details>
+        <details>
+        ```
+        tail
+        </details>
+        """)
+        XCTAssertEqual(block.summary, "Example")
+        XCTAssertEqual(block.content, "```html\n</details>\n<details>\n```\ntail")
+    }
+
     private func onlyBlock(_ source: String, file: StaticString = #filePath, line: UInt = #line) -> DetailsSyntax.Block {
         guard case let .details(block)? = DetailsSyntax.sections(source).first else {
             XCTFail("Expected details block", file: file, line: line)
