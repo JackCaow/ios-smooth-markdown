@@ -12,11 +12,11 @@ Requires **iOS 17+** and Swift Package Manager. In Xcode, use **File → Add Pac
 https://github.com/JackCaow/ios-smooth-markdown
 ```
 
-Add the **SmoothMarkdown** product to your app target. There is no version tag yet; pin a commit for a shipped app. If you maintain a `Package.swift`, add:
+Add the **SmoothMarkdown** product to your app target and select version **0.1.0** or later. If you maintain a `Package.swift`, add:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", branch: "main")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.1.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
