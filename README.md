@@ -79,9 +79,9 @@ struct ComposeView: View {
     @StateObject private var controller = MarkdownEditorController(text: "# Draft")
 
     var body: some View {
-        SmoothMarkdownEditor(controller: controller) { markdown in
+        SmoothMarkdownEditor(controller: controller, onSave: { markdown in
             print("Save:", markdown)
-        }
+        })
     }
 }
 ```
