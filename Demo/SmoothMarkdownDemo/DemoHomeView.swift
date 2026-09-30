@@ -311,6 +311,7 @@ private struct DemoNavigationOverlay: View {
                     .frame(width: min(304, geometry.size.width - 48))
                     .frame(maxHeight: .infinity)
                     .background(isDark ? Color(red: 13 / 255, green: 17 / 255, blue: 23 / 255) : .white)
+                    .clipped()
                     .transition(.move(edge: .leading))
 
                 Button(action: onClose) {
@@ -325,6 +326,7 @@ private struct DemoNavigationOverlay: View {
         }
         .ignoresSafeArea(edges: .bottom)
     }
+
 }
 
 private struct DemoNavigationDrawer: View {

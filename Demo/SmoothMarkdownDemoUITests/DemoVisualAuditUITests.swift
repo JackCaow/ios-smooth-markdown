@@ -1,7 +1,7 @@
 import XCTest
 import UIKit
 
-/// Screenshot inventory for visual review on a physical iPhone. Run this class explicitly;
+/// Screenshot inventory for visual review on iPhone hardware or simulator. Run this class explicitly;
 /// each attachment is retained in the xcresult for export to the review folder.
 final class DemoVisualAuditUITests: XCTestCase {
     private let examples = [
@@ -47,6 +47,16 @@ final class DemoVisualAuditUITests: XCTestCase {
         app.buttons["view-markdown-source"].tap()
         XCTAssertTrue(app.navigationBars["Markdown Source"].waitForExistence(timeout: 5))
         capture("home-12-source-sheet-dark", in: app)
+    }
+
+    func test08DrawerScrolledStatusBar() {
+        let app = launchDemo()
+        app.buttons["open-examples"].tap()
+        let list = navigationList(in: app)
+        XCTAssertTrue(list.waitForExistence(timeout: 5))
+        list.swipeUp()
+        list.swipeUp()
+        capture("drawer-scrolled-status-bar", in: app)
     }
 
     func test02StandaloneFeatures() {
