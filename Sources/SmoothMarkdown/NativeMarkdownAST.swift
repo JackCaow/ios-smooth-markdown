@@ -638,7 +638,8 @@ struct NativeMarkdownASTParser {
     }
 
     private func normalizeReference(_ label: String) -> String {
-        label.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+        label.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private func referenceDefinitions(in document: MarkdownDocument) -> [String: Reference] {
@@ -657,7 +658,7 @@ struct NativeMarkdownASTParser {
     }
 
     private func referenceDefinition(_ line: String) -> (label: String, destination: String, title: String?)? {
-        let pattern = #"^ {0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
+        let pattern = #"^ {0,3}\[((?:\\.|[^\\\]])+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
         guard let expression = try? NSRegularExpression(pattern: pattern),
               let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)),
               match.range(at: 1).location != NSNotFound,
