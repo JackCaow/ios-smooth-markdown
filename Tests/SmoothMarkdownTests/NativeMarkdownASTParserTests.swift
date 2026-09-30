@@ -2,6 +2,27 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class NativeMarkdownASTParserTests: XCTestCase {
+    func testQuotedLazyContinuationAndListTightness() {
+        let source = "> > 😀 foo\nbar\n\n- tight\n- item\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children.map(\.kind), [
+            .blockQuote, .list(ordered: false),
+        ])
+        XCTAssertEqual(tree.children[0].children[0].kind, .blockQuote)
+        XCTAssertEqual(tree.children[0].children[0].children[0].kind, .paragraph)
+        XCTAssertEqual(tree.children[1].isTight, true)
+        XCTAssertEqual(tree.children[1].children[0].children.map(\.kind), [.text])
+        let loose = NativeMarkdownASTParser().parse("- loose\n\n  continuation\n").children[0]
+        XCTAssertEqual(loose.isTight, false)
+        XCTAssertEqual(loose.children[0].children.map(\.kind), [.paragraph, .paragraph])
+        let text = source as NSString
+        func check(_ node: NativeMarkdownNode) {
+            XCTAssertEqual(text.substring(with: node.sourceRange), node.source)
+            node.children.forEach(check)
+        }
+        check(tree)
+    }
+
     func testCommonMarkBlockPrecedenceExamples() {
         // CommonMark 0.31.2: setext headings, thematic breaks, and fenced code blocks.
         let cases: [(String, [NativeMarkdownNode.Kind])] = [
