@@ -17,6 +17,14 @@ struct NativeMarkdownNode: Equatable {
     let sourceRange: NSRange
     let children: [NativeMarkdownNode]
 
+    var semanticText: String? {
+        switch kind {
+        case .text: NativeMarkdownTextDecoder.decode(source)
+        case .inlineCode: NativeMarkdownTextDecoder.codeSpan(source)
+        default: nil
+        }
+    }
+
     init(kind: Kind, source: String, sourceRange: NSRange, children: [NativeMarkdownNode] = []) {
         self.kind = kind
         self.source = source
@@ -276,6 +284,16 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
+        func closingBackticks(_ count: Int, after start: Int) -> Int? {
+            var cursor = start
+            while cursor < characters.count {
+                guard characters[cursor] == "`" else { cursor += 1; continue }
+                let run = characters[cursor...].prefix(while: { $0 == "`" }).count
+                if run == count { return cursor }
+                cursor += run
+            }
+            return nil
+        }
 
         while index < characters.count {
             if characters[index] == "\\", index + 1 < characters.count {
@@ -318,7 +336,7 @@ struct NativeMarkdownASTParser {
             }
             if characters[index] == "`" {
                 let run = characters[index...].prefix(while: { $0 == "`" }).count
-                if let end = closing(Array(repeating: "`", count: run), after: index + run) {
+                if let end = closingBackticks(run, after: index + run) {
                     flushPlain(until: index)
                     append(.inlineCode, start: index, end: end + run)
                     index = end + run; plainStart = index; continue
@@ -349,7 +367,8 @@ struct NativeMarkdownASTParser {
                     var end = close + 1
                     if end < characters.count, characters[end] == "(",
                        let destinationEnd = closing([")"], after: end + 1) {
-                        destination = String(characters[(end + 1)..<destinationEnd])
+                        destination = NativeMarkdownTextDecoder.decode(
+                            String(characters[(end + 1)..<destinationEnd]))
                         end = destinationEnd + 1
                     } else if end < characters.count, characters[end] == "[",
                               let referenceEnd = closing(["]"], after: end + 1) {
@@ -479,6 +498,7 @@ struct NativeMarkdownASTParser {
               match.range(at: 1).location != NSNotFound,
               match.range(at: 2).location != NSNotFound else { return nil }
         let text = line as NSString
-        return (text.substring(with: match.range(at: 1)), text.substring(with: match.range(at: 2)))
+        return (text.substring(with: match.range(at: 1)),
+                NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: 2))))
     }
 }

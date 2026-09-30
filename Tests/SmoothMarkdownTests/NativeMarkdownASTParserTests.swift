@@ -159,4 +159,12 @@ final class NativeMarkdownASTParserTests: XCTestCase {
         XCTAssertEqual(nodes.map(\.kind), [.text])
         XCTAssertEqual(nodes[0].source, source)
     }
+
+    func testBacktickRunsMustMatchExactly() {
+        let source = "`foo``bar``"
+        let nodes = NativeMarkdownASTParser().parse(source).children[0].children
+        XCTAssertEqual(nodes.map(\.kind), [.text, .inlineCode])
+        XCTAssertEqual(nodes.map(\.source), ["`foo", "``bar``"])
+        XCTAssertEqual(nodes[1].semanticText, "bar")
+    }
 }

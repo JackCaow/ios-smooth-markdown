@@ -26,6 +26,18 @@ jobs:
       - name: Check Flutter Demo fixtures
         working-directory: ios-smooth-markdown
         run: python3 tools/check_flutter_example_parity.py
+      - name: Download pinned CommonMark 0.31.2 examples
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            https://spec.commonmark.org/0.31.2/spec.json \
+            --output "$RUNNER_TEMP/commonmark-spec.json"
+          echo "d431b29d97b6f73e69d547109cf5081578fac931e72afe95639ebe766c1b2a20  $RUNNER_TEMP/commonmark-spec.json" \
+            | shasum -a 256 --check
+      - name: Run Swift tests and official source-range sweep
+        working-directory: ios-smooth-markdown
+        env:
+          COMMONMARK_SPEC_JSON: ${{ runner.temp }}/commonmark-spec.json
+        run: swift test --parallel
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Demo project
