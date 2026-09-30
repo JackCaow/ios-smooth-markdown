@@ -145,7 +145,10 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
     func testOfficialReferenceLinksKeepTitlesAndFirstDefinition() throws {
         let expected: [Int: (NativeMarkdownNode.Kind, String?)] = [
             539: (.link("/url"), "title"),
+            540: (.link("/url"), nil),
             544: (.link("/url1"), nil),
+            549: (.link("/uri"), nil),
+            550: (.link("/uri"), nil),
             553: (.link("/url"), "title"),
             572: (.image("/url"), "title"),
             584: (.image("/url"), "title"),
