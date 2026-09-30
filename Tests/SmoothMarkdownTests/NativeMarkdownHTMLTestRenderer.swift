@@ -28,6 +28,7 @@ enum NativeMarkdownHTMLTestRenderer {
         case .text: return escape(node.semanticText ?? node.source)
         case .inlineCode: return "<code>" + escape(node.semanticText ?? node.source) + "</code>"
         case .paragraph: return "<p>" + content + "</p>\n"
+        case let .heading(level): return "<h\(level)>" + content + "</h\(level)>\n"
         case .strong: return "<strong>" + content + "</strong>"
         case .emphasis: return "<em>" + content + "</em>"
         case .softBreak: return "\n"

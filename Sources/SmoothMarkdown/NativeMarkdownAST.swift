@@ -18,23 +18,26 @@ struct NativeMarkdownNode: Equatable {
     let children: [NativeMarkdownNode]
     let title: String?
     let isTight: Bool?
+    let literalText: String?
 
     var semanticText: String? {
         switch kind {
-        case .text: NativeMarkdownTextDecoder.decode(source)
+        case .text: literalText ?? NativeMarkdownTextDecoder.decode(source)
         case .inlineCode: NativeMarkdownTextDecoder.codeSpan(source)
         default: nil
         }
     }
 
     init(kind: Kind, source: String, sourceRange: NSRange,
-         children: [NativeMarkdownNode] = [], title: String? = nil, isTight: Bool? = nil) {
+         children: [NativeMarkdownNode] = [], title: String? = nil,
+         isTight: Bool? = nil, literalText: String? = nil) {
         self.kind = kind
         self.source = source
         self.sourceRange = sourceRange
         self.children = children
         self.title = title
         self.isTight = isTight
+        self.literalText = literalText
     }
 }
 
@@ -55,7 +58,9 @@ struct NativeMarkdownASTParser {
         var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
-    init() {}
+    private let enableGFM: Bool
+
+    init(enableGFM: Bool = true) { self.enableGFM = enableGFM }
 
     func parse(_ source: String) -> NativeMarkdownNode {
         let lines = sourceLines(source)
@@ -128,7 +133,7 @@ struct NativeMarkdownASTParser {
             if isThematic(text) {
                 result.append(node(.thematicBreak, start, start + 1)); index += 1; continue
             }
-            if isTable(at: index, lines: lines) {
+            if enableGFM, isTable(at: index, lines: lines) {
                 index += 2
                 while index < lines.count, !lines[index].isBlank, lines[index].text.contains("|") {
                     index += 1
@@ -209,11 +214,13 @@ struct NativeMarkdownASTParser {
             let content = lines.map {
                 $0.text + ($0.raw.hasSuffix("\r\n") ? "\r" : "")
             }.joined(separator: "\n")
-            return inline(content, offset: first.start, references: references)
+            return inline(content, offset: first.start, references: references,
+                          trimTrailingWhitespace: true)
         }
         var children: [NativeMarkdownNode] = []
         for (position, line) in lines.enumerated() {
-            children += inline(line.text, offset: line.start, references: references)
+            children += inline(line.text, offset: line.start, references: references,
+                               trimTrailingWhitespace: position == lines.count - 1)
             if position + 1 < lines.count {
                 let breakStart = line.start + (line.text as NSString).length
                 let breakRange = NSRange(location: breakStart, length: min(1, max(0, line.end - breakStart)))
@@ -231,6 +238,7 @@ struct NativeMarkdownASTParser {
             .prefix(while: { $0 == " " || $0 == "\t" }))
         let body = match[3].replacingOccurrences(of: #"[ \t]+#+[ \t]*$"#, with: "",
                                                    options: .regularExpression)
+            .replacingOccurrences(of: #"[ \t]+$"#, with: "", options: .regularExpression)
         return (match[2].count, prefix, body)
     }
 
@@ -489,7 +497,7 @@ struct NativeMarkdownASTParser {
     }
 
     private func inline(_ source: String, offset: Int,
-                        references: [String: Reference]) -> [NativeMarkdownNode] {
+                        references: [String: Reference], trimTrailingWhitespace: Bool = false) -> [NativeMarkdownNode] {
         let characters = Array(source)
         var utf16Positions = [Int](repeating: 0, count: characters.count + 1)
         for position in characters.indices {
@@ -516,7 +524,8 @@ struct NativeMarkdownASTParser {
                 } else {
                     children = [.init(kind: .text, source: content,
                                       sourceRange: NSRange(location: offset + utf16Offset(contentStart),
-                                                           length: (content as NSString).length))]
+                                                           length: (content as NSString).length),
+                                      literalText: content)]
                 }
             } else { children = [] }
             result.append(.init(kind: kind, source: spelling,
@@ -536,6 +545,9 @@ struct NativeMarkdownASTParser {
                 cursor += 1
             }
             return nil
+        }
+        func angleEnd(after start: Int) -> Int? {
+            (start..<characters.count).first { characters[$0] == ">" }
         }
         func closingBracket(after start: Int) -> Int? {
             var depth = 0
@@ -557,7 +569,7 @@ struct NativeMarkdownASTParser {
                         cursor += length
                         continue
                     }
-                    if let end = closing([">"], after: cursor + 1),
+                    if let end = angleEnd(after: cursor + 1),
                        autolinkDestination(String(characters[(cursor + 1)..<end])) != nil {
                         cursor = end + 1
                         continue
@@ -688,8 +700,10 @@ struct NativeMarkdownASTParser {
             if characters[index] == "\\", index + 1 < characters.count {
                 if isLineEnding(characters[index + 1]) {
                     flushPlain(until: index)
-                    append(.hardBreak, start: index, end: index + 2)
-                    index += 2; plainStart = index; continue
+                    var end = index + 2
+                    while end < characters.count, characters[end] == " " || characters[end] == "\t" { end += 1 }
+                    append(.hardBreak, start: index, end: end)
+                    index = end; plainStart = index; continue
                 }
                 index += 2; continue
             }
@@ -705,7 +719,7 @@ struct NativeMarkdownASTParser {
                 append(hard ? .hardBreak : .softBreak, start: start, end: end)
                 index = end; plainStart = index; continue
             }
-            if characters[index] == "<", let end = closing([">"], after: index + 1) {
+            if characters[index] == "<", let end = angleEnd(after: index + 1) {
                 let content = String(characters[(index + 1)..<end])
                 if let destination = autolinkDestination(content) {
                     flushPlain(until: index)
@@ -719,8 +733,8 @@ struct NativeMarkdownASTParser {
                     index += length; plainStart = index; continue
                 }
             }
-            if index == 0 || characters[index - 1].isWhitespace ||
-                "*_~(".contains(characters[index - 1]),
+            if enableGFM, (index == 0 || characters[index - 1].isWhitespace ||
+                "*_~(".contains(characters[index - 1])),
                let autolink = bareAutolink(in: characters, at: index) {
                 flushPlain(until: index)
                 append(.link(autolink.destination), start: index, end: autolink.end,
@@ -734,6 +748,7 @@ struct NativeMarkdownASTParser {
                     append(.inlineCode, start: index, end: end + run)
                     index = end + run; plainStart = index; continue
                 }
+                index += run; continue
             }
             if characters[index] == "$", index + 1 < characters.count,
                characters[index + 1] != "$", let end = closing(["$"], after: index + 1),
@@ -790,7 +805,7 @@ struct NativeMarkdownASTParser {
                     }
                 }
             }
-            if characters[index] == "~" {
+            if enableGFM, characters[index] == "~" {
                 let run = characters[index...].prefix(while: { $0 == "~" }).count
                 guard run <= 2, let end = closingTildes(run, after: index + run),
                       end > index + run else { index += max(1, run); continue }
@@ -809,7 +824,11 @@ struct NativeMarkdownASTParser {
             index += run
             plainStart = index
         }
-        flushPlain(until: characters.count)
+        var end = characters.count
+        if trimTrailingWhitespace {
+            while end > plainStart, characters[end - 1] == " " || characters[end - 1] == "\t" { end -= 1 }
+        }
+        flushPlain(until: end)
         return NativeMarkdownEmphasisParser.resolve(result, source: source, offset: offset)
     }
 
