@@ -174,7 +174,7 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> ReaderNativeImageTextView {
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.backgroundColor = .clear
         view.isEditable = false
         view.isSelectable = true
@@ -288,6 +288,14 @@ final class ReaderNativeImageTextView: UITextView, UIGestureRecognizerDelegate {
     private var imageHosts: [UIHostingController<AnyView>] = []
     private var imageSizes: [CGSize] = []
     private var dragAnchorUTF16: Int?
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        super.init(frame: frame, textContainer: textContainer)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
 
     func applyRenderedContent(_ content: NSAttributedString, imageAnchorsUTF16: [Int]) {
         if !attributedText.isEqual(to: content) {

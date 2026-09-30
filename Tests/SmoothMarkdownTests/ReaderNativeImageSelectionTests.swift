@@ -24,7 +24,9 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         } else { XCTFail("Oversized SVG must be rejected") }
 
         let bitmapKey = ReaderRemoteImageKey(url: URL(string: "https://example.com/photo.png")!, svg: false)
-        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10)).pngData { context in
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10), format: format).pngData { context in
             UIColor.red.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
         }
@@ -43,7 +45,7 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         let source = "Before 😀\n█\nAfter"
         let anchor = (source as NSString).range(of: "█").location
         let range = (source as NSString).range(of: "😀\n█\nAfter")
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.isSelectable = true
         view.applyRenderedContent(NSAttributedString(string: source), imageAnchorsUTF16: [anchor])
         view.selectedRange = range
@@ -65,7 +67,7 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
                                                       .foregroundColor: UIColor.clear]))
         source.append(NSAttributedString(string: "\nAfter 😀 image."))
 
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.attributedText = source
