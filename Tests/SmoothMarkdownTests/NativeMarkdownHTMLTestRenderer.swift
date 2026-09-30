@@ -30,6 +30,7 @@ enum NativeMarkdownHTMLTestRenderer {
         case .paragraph: return "<p>" + content + "</p>\n"
         case let .heading(level): return "<h\(level)>" + content + "</h\(level)>\n"
         case .strong: return "<strong>" + content + "</strong>"
+        case .strikethrough: return "<del>" + content + "</del>"
         case .emphasis: return "<em>" + content + "</em>"
         case .softBreak: return "\n"
         case .hardBreak: return "<br />\n"
@@ -45,6 +46,19 @@ enum NativeMarkdownHTMLTestRenderer {
             return "<pre><code" + attribute + ">" + escape(node.semanticText ?? "") + "</code></pre>\n"
         case .indentedCode: return "<pre><code>" + escape(node.semanticText ?? "") + "</code></pre>\n"
         case .htmlBlock: return node.source.hasSuffix("\n") ? node.source : node.source + "\n"
+        case .table:
+            func row(_ row: NativeMarkdownNode, header: Bool) -> String {
+                let tag = header ? "th" : "td"
+                let cells = row.children.enumerated().map { index, cell in
+                    let alignment = index < node.tableAlignments.count ? node.tableAlignments[index] : nil
+                    let attribute = alignment.map { " align=\"" + $0 + "\"" } ?? ""
+                    return "<" + tag + attribute + ">" + cell.children.map(render).joined() + "</" + tag + ">\n"
+                }.joined()
+                return "<tr>\n" + cells + "</tr>\n"
+            }
+            guard let header = node.children.first else { return "" }
+            let body = node.children.dropFirst().map { row($0, header: false) }.joined()
+            return "<table>\n<thead>\n" + row(header, header: true) + "</thead>\n" + (body.isEmpty ? "" : "<tbody>\n" + body + "</tbody>\n") + "</table>\n"
         case .thematicBreak: return "<hr />\n"
         default: return "UNSUPPORTED(\(node.kind))"
         }
