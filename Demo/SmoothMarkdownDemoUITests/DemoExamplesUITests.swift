@@ -78,6 +78,34 @@ final class DemoExamplesUITests: XCTestCase {
         add(featureScreenshot)
     }
 
+    func testMathPageSnapshotsThroughMatrixAndCalculus() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("feature-math", in: app)
+        XCTAssertTrue(app.navigationBars["Math Formula Demo"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 2)
+
+        for section in ["top", "summation", "matrix", "calculus"] {
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "MathML iOS \(section)"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            app.swipeUp()
+            Thread.sleep(forTimeInterval: 1)
+        }
+
+        app.buttons["demo-feature-back"].tap()
+        app.buttons["theme-menu"].tap()
+        app.buttons["VS Code Dark"].tap()
+        choose("feature-math", in: app)
+        XCTAssertTrue(app.navigationBars["Math Formula Demo"].waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 2)
+        let darkScreenshot = XCTAttachment(screenshot: app.screenshot())
+        darkScreenshot.name = "MathML iOS dark theme"
+        darkScreenshot.lifetime = .keepAlways
+        add(darkScreenshot)
+    }
+
     func testBasicFormattingInlineCodeBackgroundScreenshotOnPhysicalDevice() {
         let app = XCUIApplication()
         app.launch()

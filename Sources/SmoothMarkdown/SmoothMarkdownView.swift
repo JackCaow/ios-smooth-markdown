@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftUIMath
 #if os(iOS)
 import UIKit
 #endif
@@ -1254,6 +1253,7 @@ public struct SmoothMarkdownView: View {
                         .layoutValue(key: InlineImageKey.self, value: true)
                 case let .math(latex):
                     inlineMath(latex)
+                        .layoutValue(key: InlineMathKey.self, value: true)
                 case let .plugin(plugin, match):
                     pluginView(plugin, match).fixedSize()
                 case .lineBreak:
@@ -1279,10 +1279,7 @@ public struct SmoothMarkdownView: View {
         if let builder = extensionBuilder(node) {
             builder.build(node, context: renderContext()).fixedSize()
         } else {
-            SwiftUIMath.Math(latex)
-                .mathTypesettingStyle(.text)
-                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
-                .fixedSize()
+            NativeMathWebView(latex: latex, size: 16, display: false, color: styleSheet.textColor)
                 .accessibilityLabel(latex)
         }
     }
@@ -1300,9 +1297,7 @@ public struct SmoothMarkdownView: View {
 
     private func nativeBlockMath(_ latex: String) -> some View {
         ScrollView(.horizontal) {
-            SwiftUIMath.Math(latex)
-                .mathTypesettingStyle(.display)
-                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 20))
+            NativeMathWebView(latex: latex, size: 20, display: true, color: styleSheet.textColor)
                 .fixedSize()
                 .accessibilityLabel(latex.isEmpty ? "Empty formula" : latex)
         }
