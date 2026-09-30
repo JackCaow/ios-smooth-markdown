@@ -93,4 +93,46 @@ final class NativeMarkdownASTParserTests: XCTestCase {
         let tree = NativeMarkdownASTParser().parse(source)
         XCTAssertEqual(tree.children[0].children.map(\.kind), [.text])
     }
+
+    func testLineBreaksAutolinksAndInlineHTML() {
+        let source = "a\nb  \nc\\\nd <https://example.com> <dev@example.com> <kbd>x</kbd>"
+        let tree = NativeMarkdownASTParser().parse(source)
+        let nodes = tree.children[0].children
+        XCTAssertEqual(nodes.map(\.kind), [
+            .text, .softBreak, .text, .hardBreak, .text, .hardBreak, .text,
+            .link("https://example.com"), .text, .link("mailto:dev@example.com"),
+            .text, .inlineHTML, .text, .inlineHTML,
+        ])
+        for node in nodes {
+            XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
+        }
+    }
+
+    func testSetextHeadingsAndIndentedCode() {
+        let source = "Title\n=====\n\nOther\n---\n\n    code()\n    more\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children.map(\.kind), [.heading(1), .heading(2), .indentedCode])
+        XCTAssertEqual(tree.children[0].children.map(\.source), ["Title"])
+        XCTAssertEqual(tree.children[1].children.map(\.source), ["Other"])
+        for child in tree.children {
+            XCTAssertEqual((source as NSString).substring(with: child.sourceRange), child.source)
+        }
+    }
+
+    func testNestedListsRetainHierarchyAndExactSource() throws {
+        let source = "- parent\n  - child\n    1. grandchild\n  - sibling\n- root\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        let list = tree.children[0]
+        XCTAssertEqual(list.kind, .list(ordered: false))
+        XCTAssertEqual(list.children.count, 2)
+        let nested = try XCTUnwrap(list.children[0].children.last)
+        XCTAssertEqual(nested.kind, .list(ordered: false))
+        XCTAssertEqual(nested.children.count, 2)
+        XCTAssertEqual(nested.children[0].children.last?.kind, .list(ordered: true))
+        func check(_ node: NativeMarkdownNode) {
+            XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
+            node.children.forEach(check)
+        }
+        check(tree)
+    }
 }

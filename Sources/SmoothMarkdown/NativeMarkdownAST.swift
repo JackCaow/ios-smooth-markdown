@@ -3,9 +3,10 @@ import Foundation
 /// A source-preserving tree owned by SmoothMarkdown. The source ranges use UTF-16 offsets.
 struct NativeMarkdownNode: Equatable {
     enum Kind: Equatable {
-        case document, paragraph, heading(Int), fencedCode(String), table, tableRow, tableCell
+        case document, paragraph, heading(Int), fencedCode(String), indentedCode, table, tableRow, tableCell
         case list(ordered: Bool), listItem(checked: Bool?), blockQuote, thematicBreak
         case text, strong, emphasis, strikethrough, inlineCode, inlineMath
+        case softBreak, hardBreak, inlineHTML
         case blockMath, footnoteReference(String), footnoteDefinition(String)
         case referenceDefinition(String, String)
         case link(String), image(String), htmlBlock, raw
@@ -32,9 +33,32 @@ struct NativeMarkdownASTParser {
     func parse(_ source: String) -> NativeMarkdownNode {
         let document = MarkdownDocumentCodec().parse(source)
         let references = referenceDefinitions(in: document)
-        let blocks = document.blocks.compactMap { block -> NativeMarkdownNode? in
-            guard let range = document.sourceRange(of: block.id) else { return nil }
-            return parse(block, range: range, references: references)
+        var blocks: [NativeMarkdownNode] = []
+        var index = 0
+        while index < document.blocks.count {
+            let block = document.blocks[index]
+            guard let range = document.sourceRange(of: block.id) else { index += 1; continue }
+            if index + 1 < document.blocks.count {
+                let next = document.blocks[index + 1]
+                if case let .paragraph(markdown) = block.kind,
+                   case .horizontalRule = next.kind,
+                   next.leadingTrivia.isEmpty,
+                   next.source.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .range(of: #"^ {0,3}-{3,}$"#, options: .regularExpression) != nil,
+                   let nextRange = document.sourceRange(of: next.id),
+                   NSMaxRange(range) == nextRange.location {
+                    let combined = (source as NSString).substring(with: NSRange(
+                        location: range.location, length: NSMaxRange(nextRange) - range.location))
+                    blocks.append(.init(kind: .heading(2), source: combined,
+                                        sourceRange: NSRange(location: range.location,
+                                                             length: (combined as NSString).length),
+                                        children: inline(markdown, offset: range.location, references: references)))
+                    index += 2
+                    continue
+                }
+            }
+            blocks.append(parse(block, range: range, references: references))
+            index += 1
         }
         return NativeMarkdownNode(kind: .document, source: source,
                                   sourceRange: NSRange(location: 0, length: (source as NSString).length),
@@ -56,6 +80,28 @@ struct NativeMarkdownASTParser {
         }
         if trimmed.hasPrefix("$$"), trimmed.hasSuffix("$$"), trimmed.count >= 4 {
             return node(.blockMath)
+        }
+        let lines = trimmed.components(separatedBy: "\n")
+        if let last = lines.last, lines.count > 1,
+           last.range(of: #"^ {0,3}=+[ \t]*$"#, options: .regularExpression) != nil,
+           case let .paragraph(markdown) = block.kind {
+            let body = markdown.components(separatedBy: "\n").dropLast().joined(separator: "\n")
+            return node(.heading(1), inline(body, offset: bodyOffset(body, in: block.source, base: range.location),
+                                            references: references))
+        }
+        if lines.count == 2, !lines[0].contains("|"),
+           lines[1].range(of: #"^ {0,3}-{3,}[ \t]*$"#, options: .regularExpression) != nil,
+           case .table = block.kind {
+            return node(.heading(2), inline(lines[0], offset: bodyOffset(lines[0], in: block.source,
+                                                                          base: range.location),
+                                            references: references))
+        }
+        let sourceLines = block.source.components(separatedBy: "\n")
+        if !sourceLines.isEmpty, sourceLines.allSatisfy({ line in
+            line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                line.hasPrefix("    ") || line.hasPrefix("\t")
+        }) {
+            return node(.indentedCode)
         }
         switch block.kind {
         case let .paragraph(markdown):
@@ -89,22 +135,9 @@ struct NativeMarkdownASTParser {
                                           children: cellNodes)
             })
         case let .list(list):
-            let ordered = list.items.first?.kind == .ordered
-            var searchStart = block.source.startIndex
-            let items = list.items.map { item -> NativeMarkdownNode in
-                let itemSource = item.source
-                let found = block.source.range(of: itemSource, range: searchStart..<block.source.endIndex)
-                let itemOffset = found.map { (String(block.source[..<$0.lowerBound]) as NSString).length } ?? 0
-                if let found { searchStart = found.upperBound }
-                let itemRange = NSRange(location: range.location + itemOffset,
-                                        length: (itemSource as NSString).length)
-                let prefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
-                let body = item.content
-                return NativeMarkdownNode(kind: .listItem(checked: item.checked), source: itemSource,
-                                          sourceRange: itemRange,
-                                          children: inline(body, offset: itemRange.location + (prefix as NSString).length, references: references))
-            }
-            return node(.list(ordered: ordered), items)
+            return node(.list(ordered: list.items.first?.kind == .ordered),
+                        listNodes(list, source: block.source, base: range.location,
+                                  references: references))
         case .horizontalRule: return node(.thematicBreak)
         case .plugin, .raw:
             if trimmed.hasPrefix("<"), trimmed.hasSuffix(">") { return node(.htmlBlock) }
@@ -129,6 +162,54 @@ struct NativeMarkdownASTParser {
     private func bodyOffset(_ body: String, in source: String, base: Int) -> Int {
         guard let range = source.range(of: body) else { return base }
         return base + (String(source[..<range.lowerBound]) as NSString).length
+    }
+
+    private func listNodes(_ list: MarkdownSourceList, source: String, base: Int,
+                           references: [String: String]) -> [NativeMarkdownNode] {
+        let text = source as NSString
+        func width(_ indent: String) -> Int {
+            indent.reduce(0) { value, character in
+                character == "\t" ? ((value / 4) + 1) * 4 : value + 1
+            }
+        }
+        func position(_ index: Int) -> Int { list.sourceOffset(ofItemAt: index) ?? text.length }
+        func slice(_ start: Int, _ end: Int) -> String {
+            text.substring(with: NSRange(location: start, length: max(0, end - start)))
+        }
+        func nodes(from first: Int, through limit: Int) -> [NativeMarkdownNode] {
+            guard first < limit else { return [] }
+            let level = width(list.items[first].indent)
+            var result: [NativeMarkdownNode] = []
+            var index = first
+            while index < limit {
+                let item = list.items[index]
+                let start = position(index)
+                var next = index + 1
+                while next < limit && width(list.items[next].indent) > level { next += 1 }
+                let end = next < list.items.count ? position(next) : text.length
+                let prefix = item.indent + item.marker + item.spacing + (item.taskMarker ?? "") + item.taskSpacing
+                var children = inline(item.content, offset: base + start + (prefix as NSString).length,
+                                      references: references)
+                if index + 1 < next {
+                    let childStart = position(index + 1)
+                    let last = list.items[next - 1]
+                    let childEnd = position(next - 1) + (last.source as NSString).length +
+                        last.trailingContinuations.reduce(0) { $0 + ($1.source as NSString).length }
+                    let ordered = list.items[index + 1].kind == .ordered
+                    children.append(.init(kind: .list(ordered: ordered),
+                                          source: slice(childStart, childEnd),
+                                          sourceRange: NSRange(location: base + childStart,
+                                                               length: childEnd - childStart),
+                                          children: nodes(from: index + 1, through: next)))
+                }
+                result.append(.init(kind: .listItem(checked: item.checked), source: slice(start, end),
+                                    sourceRange: NSRange(location: base + start, length: end - start),
+                                    children: children))
+                index = next
+            }
+            return result
+        }
+        return nodes(from: 0, through: list.items.count)
     }
 
     private func inline(_ source: String, offset: Int,
@@ -170,7 +251,36 @@ struct NativeMarkdownASTParser {
         }
 
         while index < characters.count {
-            if characters[index] == "\\", index + 1 < characters.count { index += 2; continue }
+            if characters[index] == "\\", index + 1 < characters.count {
+                if characters[index + 1] == "\n" {
+                    flushPlain(until: index)
+                    append(.hardBreak, start: index, end: index + 2)
+                    index += 2; plainStart = index; continue
+                }
+                index += 2; continue
+            }
+            if characters[index] == "\n" {
+                let hard = index >= 2 && characters[index - 1] == " " && characters[index - 2] == " "
+                let start = hard ? max(plainStart, index - 2) : index
+                flushPlain(until: start)
+                append(hard ? .hardBreak : .softBreak, start: start, end: index + 1)
+                index += 1; plainStart = index; continue
+            }
+            if characters[index] == "<", let end = closing([">"], after: index + 1) {
+                let content = String(characters[(index + 1)..<end])
+                if let destination = autolinkDestination(content) {
+                    flushPlain(until: index)
+                    append(.link(destination), start: index, end: end + 1,
+                           contentStart: index + 1, contentEnd: end)
+                    index = end + 1; plainStart = index; continue
+                }
+                if content.range(of: #"^/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^<>]*)?/?$|^!--.*--$"#,
+                                 options: .regularExpression) != nil {
+                    flushPlain(until: index)
+                    append(.inlineHTML, start: index, end: end + 1)
+                    index = end + 1; plainStart = index; continue
+                }
+            }
             if characters[index] == "`" {
                 let run = characters[index...].prefix(while: { $0 == "`" }).count
                 if let end = closing(Array(repeating: "`", count: run), after: index + run) {
@@ -244,6 +354,20 @@ struct NativeMarkdownASTParser {
         }
         flushPlain(until: characters.count)
         return result
+    }
+
+    private func autolinkDestination(_ content: String) -> String? {
+        guard !content.isEmpty, !content.contains(where: { $0.isWhitespace || $0 == "<" || $0 == ">" }) else {
+            return nil
+        }
+        if content.range(of: #"^[A-Za-z][A-Za-z0-9+.-]{1,31}:"#, options: .regularExpression) != nil {
+            return content
+        }
+        if content.range(of: #"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}$"#,
+                         options: .regularExpression) != nil {
+            return "mailto:" + content
+        }
+        return nil
     }
 
     private func normalizeReference(_ label: String) -> String {
