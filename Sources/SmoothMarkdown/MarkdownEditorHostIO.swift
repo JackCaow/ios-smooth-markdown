@@ -171,7 +171,7 @@ public final class MarkdownEditorHostIO {
     @discardableResult
     public func exportPDF() async -> Bool {
         let source = controller.text
-        let html = HTMLFormatter.format(MarkdownSyntax.parse(source))
+        let html = NativeMarkdownHTMLSerializer.format(source)
         emit(.pdfExport, .started)
         do {
             if let onExportPDF {
