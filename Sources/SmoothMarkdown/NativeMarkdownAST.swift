@@ -23,6 +23,8 @@ struct NativeMarkdownNode: Equatable {
         switch kind {
         case .text: literalText ?? NativeMarkdownTextDecoder.decode(source)
         case .inlineCode: NativeMarkdownTextDecoder.codeSpan(source)
+        case .fencedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: true)
+        case .indentedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: false)
         default: nil
         }
     }
@@ -50,7 +52,7 @@ struct NativeMarkdownASTParser {
         let raw: String
         let start: Int
         var end: Int { start + (raw as NSString).length }
-        var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var isBlank: Bool { text.allSatisfy { $0 == " " || $0 == "\t" } }
     }
 
     private let enableGFM: Bool
@@ -59,7 +61,7 @@ struct NativeMarkdownASTParser {
 
     func parse(_ source: String) -> NativeMarkdownNode {
         let lines = sourceLines(source)
-        let references = referenceDefinitions(in: lines)
+        let references = referenceDefinitions(in: scan(lines, source: source, references: [:]))
         return .init(kind: .document, source: source,
                      sourceRange: NSRange(location: 0, length: (source as NSString).length),
                      children: scan(lines, source: source, references: references))
@@ -82,12 +84,12 @@ struct NativeMarkdownASTParser {
         var result: [NativeMarkdownNode] = []
         var index = 0
         func node(_ kind: NativeMarkdownNode.Kind, _ first: Int, _ limit: Int,
-                  _ children: [NativeMarkdownNode] = []) -> NativeMarkdownNode {
+                  _ children: [NativeMarkdownNode] = [], title: String? = nil) -> NativeMarkdownNode {
             let start = lines[first].start
             let end = lines[limit - 1].end
             let range = NSRange(location: start, length: end - start)
             return .init(kind: kind, source: (source as NSString).substring(with: range),
-                         sourceRange: range, children: children)
+                         sourceRange: range, children: children, title: title)
         }
         while index < lines.count {
             if lines[index].isBlank { index += 1; continue }
@@ -95,7 +97,8 @@ struct NativeMarkdownASTParser {
             let text = lines[index].text
             if let parsed = referenceDefinition(at: index, in: lines), !parsed.definition.label.hasPrefix("^") {
                 let definition = parsed.definition
-                result.append(node(.referenceDefinition(definition.label, definition.destination), start, parsed.next))
+                result.append(node(.referenceDefinition(definition.label, definition.destination), start, parsed.next,
+                                   title: definition.title))
                 index = parsed.next; continue
             }
             if let label = footnoteLabel(text) {
@@ -166,17 +169,25 @@ struct NativeMarkdownASTParser {
                 }
                 result.append(node(.blockQuote, start, index, paragraphs)); continue
             }
-            if text.hasPrefix("    ") || text.hasPrefix("\t") {
+            if indentation(text) >= 4 {
                 index += 1
                 while index < lines.count,
-                      lines[index].isBlank || lines[index].text.hasPrefix("    ") || lines[index].text.hasPrefix("\t") {
+                      lines[index].isBlank || indentation(lines[index].text) >= 4 {
                     index += 1
                 }
                 result.append(node(.indentedCode, start, index)); continue
             }
-            if htmlStart(text) {
+            if let ending = NativeMarkdownHTMLBlock.end(for: text) {
                 index += 1
-                while index < lines.count, !lines[index].isBlank { index += 1 }
+                if !ending.matches(text) {
+                    while index < lines.count {
+                        if ending.matches(lines[index].text) {
+                            if case .marker = ending { index += 1 }
+                            break
+                        }
+                        index += 1
+                    }
+                }
                 result.append(node(.htmlBlock, start, index)); continue
             }
             index += 1
@@ -187,7 +198,8 @@ struct NativeMarkdownASTParser {
                 let content = lines[start..<index].map(\.text).joined(separator: "\n")
                 let offset = lines[start].start
                 result.append(node(.heading(level), start, index + 1,
-                                   inline(content, offset: offset, references: references)))
+                                   inline(content, offset: offset, references: references,
+                                          trimTrailingWhitespace: true, trimLeadingWhitespace: true)))
                 index += 1; continue
             }
             let end = index
@@ -196,7 +208,7 @@ struct NativeMarkdownASTParser {
             }.joined(separator: "\n")
             result.append(node(.paragraph, start, end,
                                inline(content, offset: lines[start].start, references: references,
-                                      trimTrailingWhitespace: true)))
+                                      trimTrailingWhitespace: true, trimLeadingWhitespace: true)))
         }
         return result
     }
@@ -208,7 +220,17 @@ struct NativeMarkdownASTParser {
         let body = match[3].replacingOccurrences(of: #"[ \t]+#+[ \t]*$"#, with: "",
                                                    options: .regularExpression)
             .replacingOccurrences(of: #"[ \t]+$"#, with: "", options: .regularExpression)
-        return (match[2].count, prefix, body)
+        return (match[2].count, prefix, body.allSatisfy({ $0 == "#" }) ? "" : body)
+    }
+
+    private func indentation(_ line: String) -> Int {
+        var width = 0
+        for character in line {
+            if character == " " { width += 1 }
+            else if character == "\t" { width += 4 - width % 4 }
+            else { break }
+        }
+        return width
     }
 
     private func fenceOpen(_ line: String) -> (marker: Character, count: Int, info: String)? {
@@ -219,7 +241,7 @@ struct NativeMarkdownASTParser {
         guard count >= 3 else { return nil }
         let info = String(trimmed.dropFirst(count)).trimmingCharacters(in: .whitespaces)
         guard marker != "`" || !info.contains("`") else { return nil }
-        return (marker, count, info)
+        return (marker, count, NativeMarkdownTextDecoder.decode(info))
     }
 
     private func fenceClose(_ line: String, marker: Character, count: Int) -> Bool {
@@ -240,10 +262,6 @@ struct NativeMarkdownASTParser {
         return nil
     }
 
-    private func htmlStart(_ line: String) -> Bool {
-        match(#"^ {0,3}(?:<!--|<![A-Z]|<\?|</?(?:script|pre|style|div|table|section|details|p)(?:[ \t>/]))"#, line.lowercased()) != nil
-    }
-
     private func footnoteLabel(_ line: String) -> String? {
         match(#"^ {0,3}\[\^([^]]+)\]:"#, line)?[1]
     }
@@ -255,7 +273,7 @@ struct NativeMarkdownASTParser {
     private func interruptsParagraph(at index: Int, lines: [Line]) -> Bool {
         let text = lines[index].text
         return heading(text) != nil || fenceOpen(text) != nil || isThematic(text) ||
-            quotePrefix(text) != nil || htmlStart(text) ||
+            quotePrefix(text) != nil || NativeMarkdownHTMLBlock.end(for: text, interruptingParagraph: true) != nil ||
             (listMarker(text).map {
                 text.count > $0.prefix.count && (!$0.ordered || $0.number == 1)
             } ?? false)
@@ -375,7 +393,8 @@ struct NativeMarkdownASTParser {
     }
 
     private func inline(_ source: String, offset: Int,
-                        references: [String: Reference], trimTrailingWhitespace: Bool = false) -> [NativeMarkdownNode] {
+                        references: [String: Reference], trimTrailingWhitespace: Bool = false,
+                        trimLeadingWhitespace: Bool = false) -> [NativeMarkdownNode] {
         let characters = Array(source)
         var utf16Positions = [Int](repeating: 0, count: characters.count + 1)
         for position in characters.indices {
@@ -384,6 +403,10 @@ struct NativeMarkdownASTParser {
         var result: [NativeMarkdownNode] = []
         var index = 0
         var plainStart = 0
+        if trimLeadingWhitespace {
+            while index < characters.count, characters[index] == " " || characters[index] == "\t" { index += 1 }
+            plainStart = index
+        }
 
         func utf16Offset(_ position: Int) -> Int { utf16Positions[position] }
         func isLineEnding(_ character: Character) -> Bool {
@@ -763,30 +786,16 @@ struct NativeMarkdownASTParser {
             .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
-    private func referenceDefinitions(in lines: [Line]) -> [String: Reference] {
+    private func referenceDefinitions(in nodes: [NativeMarkdownNode]) -> [String: Reference] {
         var result: [String: Reference] = [:]
-        var fence: (marker: Character, count: Int)?
-        var index = 0
-        while index < lines.count {
-            let line = lines[index]
-            defer { index += 1 }
-            if let active = fence {
-                if fenceClose(line.text, marker: active.marker, count: active.count) { fence = nil }
-                continue
+        func collect(_ node: NativeMarkdownNode) {
+            if case let .referenceDefinition(label, destination) = node.kind {
+                let key = normalizeReference(label)
+                if result[key] == nil { result[key] = Reference(destination: destination, title: node.title) }
             }
-            if let open = fenceOpen(line.text) {
-                fence = (open.marker, open.count)
-                continue
-            }
-            guard let parsed = referenceDefinition(at: index, in: lines),
-                  !parsed.definition.label.hasPrefix("^") else { continue }
-            let definition = parsed.definition
-            index = parsed.next - 1
-            let key = normalizeReference(definition.label)
-            if result[key] == nil {
-                result[key] = Reference(destination: definition.destination, title: definition.title)
-            }
+            node.children.forEach(collect)
         }
+        nodes.forEach(collect)
         return result
     }
 
@@ -796,26 +805,11 @@ struct NativeMarkdownASTParser {
               lines[start].text.range(of: #"^ {0,3}\["#, options: .regularExpression) != nil else { return nil }
         var spelling = lines[start].text
         var next = start + 1
-        while spelling.count <= 1024 {
-            if let definition = referenceDefinition(spelling) { return (definition, next) }
-            guard next < lines.count, !lines[next].isBlank, !spelling.contains("]:") else { return nil }
+        while next < lines.count, !lines[next].isBlank {
             spelling += "\n" + lines[next].text
             next += 1
         }
-        return nil
-    }
-
-    private func referenceDefinition(_ line: String) -> (label: String, destination: String, title: String?)? {
-        let pattern = #"^ {0,3}\[((?:\\.|[^\\\[\]])+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
-        guard let expression = try? NSRegularExpression(pattern: pattern),
-              let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)),
-              match.range(at: 1).location != NSNotFound,
-              match.range(at: 2).location != NSNotFound else { return nil }
-        let text = line as NSString
-        guard !normalizeReference(text.substring(with: match.range(at: 1))).isEmpty else { return nil }
-        let title = (3...5).first(where: { match.range(at: $0).location != NSNotFound })
-            .map { NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: $0))) }
-        return (text.substring(with: match.range(at: 1)),
-                NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: 2))), title)
+        guard let definition = NativeMarkdownReferenceParser.parse(spelling) else { return nil }
+        return ((definition.label, definition.destination, definition.title), start + definition.lineCount)
     }
 }

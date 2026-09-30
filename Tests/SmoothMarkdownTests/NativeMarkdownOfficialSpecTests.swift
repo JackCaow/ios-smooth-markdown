@@ -268,4 +268,30 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
                            expected, "Example \(number)")
         }
     }
+
+    func testOfficialCodeHTMLAndEscapingSemantics() throws {
+        let sections = ["Backslash escapes", "Entity and numeric character references", "Fenced code blocks", "Indented code blocks", "HTML blocks"]
+        let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 115)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
+
+    func testOfficialRemainingBlockSemantics() throws {
+        let sections = ["Tabs", "Precedence", "Thematic breaks", "ATX headings", "Setext headings", "Link reference definitions", "Paragraphs", "Blank lines", "Inlines", "Textual content"]
+        let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 116)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
 }

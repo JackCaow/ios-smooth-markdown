@@ -39,6 +39,13 @@ enum NativeMarkdownHTMLTestRenderer {
             return "<img src=\"" + destination(url) + "\" alt=\"" + escape(plainText(node)) + "\"" + title + " />"
         case .document: return content
         case .referenceDefinition: return ""
+        case let .fencedCode(info):
+            let language = info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+            let attribute = language.isEmpty ? "" : " class=\"language-" + escape(language) + "\""
+            return "<pre><code" + attribute + ">" + escape(node.semanticText ?? "") + "</code></pre>\n"
+        case .indentedCode: return "<pre><code>" + escape(node.semanticText ?? "") + "</code></pre>\n"
+        case .htmlBlock: return node.source.hasSuffix("\n") ? node.source : node.source + "\n"
+        case .thematicBreak: return "<hr />\n"
         default: return "UNSUPPORTED(\(node.kind))"
         }
     }
