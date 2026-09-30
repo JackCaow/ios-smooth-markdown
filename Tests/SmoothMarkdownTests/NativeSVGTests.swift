@@ -20,6 +20,14 @@ final class NativeSVGTests: XCTestCase {
         XCTAssertNil(SVG(data: Data(count: 2 * 1024 * 1024 + 1)))
     }
 
+    func testArcPathEndsAtRequestedPointAndCurvesBeyondChord() {
+        let path = SVGPathData.parse("M 0 50 A 50 50 0 0 1 100 50")
+        guard let path else { XCTFail("Arc path should parse"); return }
+        XCTAssertEqual(path.boundingRect.minX, 0, accuracy: 0.001)
+        XCTAssertEqual(path.boundingRect.maxX, 100, accuracy: 0.001)
+        XCTAssertGreaterThan(path.boundingRect.height, 40)
+    }
+
     func testMissingBundleResourceReturnsNil() {
         XCTAssertNil(SVG(named: "missing.svg", in: .module))
     }

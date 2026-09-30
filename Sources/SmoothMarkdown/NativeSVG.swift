@@ -49,8 +49,7 @@ private enum SVGNumbers {
         scanner.charactersToBeSkipped = .whitespacesAndNewlines
         var result: [CGFloat] = []
         while !scanner.isAtEnd {
-            var number = 0.0
-            if scanner.scanDouble(&number) { result.append(CGFloat(number)) }
+            if let number = scanner.scanDouble() { result.append(CGFloat(number)) }
             else { _ = scanner.scanCharacter() }
         }
         return result
@@ -59,8 +58,7 @@ private enum SVGNumbers {
     static func length(_ value: String?) -> CGFloat? {
         guard let value else { return nil }
         let scanner = Scanner(string: value.trimmingCharacters(in: .whitespacesAndNewlines))
-        var number = 0.0
-        guard scanner.scanDouble(&number), number.isFinite else { return nil }
+        guard let number = scanner.scanDouble(), number.isFinite else { return nil }
         let unit = String(value[scanner.currentIndex...]).trimmingCharacters(in: .whitespaces).lowercased()
         let scale: Double
         switch unit {
@@ -367,7 +365,7 @@ private enum SVGPaths {
     }
 }
 
-private enum SVGPathData {
+enum SVGPathData {
     static func parse(_ data: String) -> Path? {
         let scanner = Scanner(string: data.replacingOccurrences(of: ",", with: " "))
         scanner.charactersToBeSkipped = .whitespacesAndNewlines
@@ -378,7 +376,7 @@ private enum SVGPathData {
         var previousControl: CGPoint?
         var previousQuadratic: CGPoint?
         var steps = 0
-        func number() -> CGFloat? { var value = 0.0; return scanner.scanDouble(&value) ? CGFloat(value) : nil }
+        func number() -> CGFloat? { scanner.scanDouble().map { CGFloat($0) } }
         func point(relative: Bool) -> CGPoint? {
             guard let x = number(), let y = number() else { return nil }
             return CGPoint(x: x + (relative ? current.x : 0), y: y + (relative ? current.y : 0))
@@ -423,6 +421,13 @@ private enum SVGPathData {
                 let control = previousQuadratic.map { CGPoint(x: 2 * current.x - $0.x, y: 2 * current.y - $0.y) } ?? current
                 path.addQuadCurve(to: end, control: control)
                 current = end; previousQuadratic = control
+            case "A":
+                guard let rx = number(), let ry = number(), let rotation = number(),
+                      let large = number(), let sweep = number(),
+                      let end = point(relative: relative) else { return nil }
+                addArc(to: end, from: current, rx: rx, ry: ry,
+                       rotation: rotation, large: large != 0, sweep: sweep != 0, to: &path)
+                current = end
             case "Z":
                 path.closeSubpath(); current = start; command = " "
             default: return nil
@@ -432,5 +437,47 @@ private enum SVGPathData {
             if scanner.currentIndex == oldIndex && op != "Z" { return nil }
         }
         return steps < 100000 ? path : nil
+    }
+
+    /// SVG endpoint arc conversion, split into cubic segments of at most 90 degrees.
+    private static func addArc(to end: CGPoint, from start: CGPoint, rx rawRX: CGFloat, ry rawRY: CGFloat,
+                               rotation: CGFloat, large: Bool, sweep: Bool, to path: inout Path) {
+        var rx = abs(rawRX), ry = abs(rawRY)
+        guard rx > 0, ry > 0, start != end else { path.addLine(to: end); return }
+        let phi = rotation * .pi / 180
+        let cosPhi = cos(phi), sinPhi = sin(phi)
+        let dx = (start.x - end.x) / 2, dy = (start.y - end.y) / 2
+        let x1 = cosPhi * dx + sinPhi * dy
+        let y1 = -sinPhi * dx + cosPhi * dy
+        let needed = sqrt(x1 * x1 / (rx * rx) + y1 * y1 / (ry * ry))
+        if needed > 1 { rx *= needed; ry *= needed }
+        let numerator = max(0, rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1)
+        let denominator = rx * rx * y1 * y1 + ry * ry * x1 * x1
+        guard denominator > 0 else { path.addLine(to: end); return }
+        let sign: CGFloat = large == sweep ? -1 : 1
+        let factor = sign * sqrt(numerator / denominator)
+        let cx1 = factor * rx * y1 / ry
+        let cy1 = factor * -ry * x1 / rx
+        let cx = cosPhi * cx1 - sinPhi * cy1 + (start.x + end.x) / 2
+        let cy = sinPhi * cx1 + cosPhi * cy1 + (start.y + end.y) / 2
+        let startAngle = atan2((y1 - cy1) / ry, (x1 - cx1) / rx)
+        var delta = atan2((-y1 - cy1) / ry, (-x1 - cx1) / rx) - startAngle
+        if sweep && delta < 0 { delta += 2 * .pi }
+        if !sweep && delta > 0 { delta -= 2 * .pi }
+        let segments = min(64, max(1, Int(ceil(abs(delta) / (.pi / 2)))))
+        let step = delta / CGFloat(segments)
+        func project(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: cx + rx * cosPhi * x - ry * sinPhi * y,
+                    y: cy + rx * sinPhi * x + ry * cosPhi * y)
+        }
+        for i in 0..<segments {
+            let a = startAngle + CGFloat(i) * step
+            let b = a + step
+            let k = 4 / 3 * tan((b - a) / 4)
+            let c1 = project(cos(a) - k * sin(a), sin(a) + k * cos(a))
+            let c2 = project(cos(b) + k * sin(b), sin(b) - k * cos(b))
+            let target = i == segments - 1 ? end : project(cos(b), sin(b))
+            path.addCurve(to: target, control1: c1, control2: c2)
+        }
     }
 }
