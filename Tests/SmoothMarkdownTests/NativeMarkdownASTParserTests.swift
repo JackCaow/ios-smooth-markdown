@@ -135,4 +135,28 @@ final class NativeMarkdownASTParserTests: XCTestCase {
         }
         check(tree)
     }
+
+    func testATXClosingSequenceAndGFMInlineBoundaries() {
+        let source = "# Heading ###\n\nA ~short~ and ~~long~~, not ~~~triple~~~ or foo_bar_baz. " +
+            "www.example.com, https://example.com/path(test)."
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children[0].kind, .heading(1))
+        XCTAssertEqual(tree.children[0].children.map(\.source), ["Heading"])
+        let inlines = tree.children[1].children
+        XCTAssertEqual(inlines.filter { $0.kind == .strikethrough }.map(\.source),
+                       ["~short~", "~~long~~"])
+        XCTAssertTrue(inlines.contains { $0.kind == .link("http://www.example.com") })
+        XCTAssertTrue(inlines.contains { $0.kind == .link("https://example.com/path(test)") })
+        XCTAssertTrue(inlines.contains { $0.source.contains("foo_bar_baz") && $0.kind == .text })
+        for node in inlines {
+            XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
+        }
+    }
+
+    func testIncompleteBareLinksStayText() {
+        let source = "www. http:// foo_bar_baz ~~~no~~~"
+        let nodes = NativeMarkdownASTParser().parse(source).children[0].children
+        XCTAssertEqual(nodes.map(\.kind), [.text])
+        XCTAssertEqual(nodes[0].source, source)
+    }
 }

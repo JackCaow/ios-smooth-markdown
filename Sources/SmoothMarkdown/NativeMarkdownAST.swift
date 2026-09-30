@@ -107,7 +107,12 @@ struct NativeMarkdownASTParser {
         case let .paragraph(markdown):
             return node(.paragraph, inline(markdown, offset: bodyOffset(markdown, in: block.source, base: range.location), references: references))
         case let .heading(level, markdown):
-            return node(.heading(level), inline(markdown, offset: bodyOffset(markdown, in: block.source, base: range.location), references: references))
+            let body = markdown.replacingOccurrences(of: #"[ \t]+#+[ \t]*$"#, with: "",
+                                                      options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+            return node(.heading(level), inline(body, offset: bodyOffset(body, in: block.source,
+                                                                         base: range.location),
+                                                references: references))
         case let .fencedCode(_, info, _):
             return node(.fencedCode(info.trimmingCharacters(in: .whitespacesAndNewlines)))
         case let .table(table):
@@ -225,12 +230,20 @@ struct NativeMarkdownASTParser {
 
         func utf16Offset(_ position: Int) -> Int { utf16Positions[position] }
         func append(_ kind: NativeMarkdownNode.Kind, start: Int, end: Int,
-                    contentStart: Int? = nil, contentEnd: Int? = nil) {
+                    contentStart: Int? = nil, contentEnd: Int? = nil,
+                    parseContent: Bool = true) {
             let spelling = String(characters[start..<end])
             let children: [NativeMarkdownNode]
             if let contentStart, let contentEnd {
-                children = inline(String(characters[contentStart..<contentEnd]),
-                                  offset: offset + utf16Offset(contentStart), references: references)
+                let content = String(characters[contentStart..<contentEnd])
+                if parseContent {
+                    children = inline(content, offset: offset + utf16Offset(contentStart),
+                                      references: references)
+                } else {
+                    children = [.init(kind: .text, source: content,
+                                      sourceRange: NSRange(location: offset + utf16Offset(contentStart),
+                                                           length: (content as NSString).length))]
+                }
             } else { children = [] }
             result.append(.init(kind: kind, source: spelling,
                                 sourceRange: NSRange(location: offset + utf16Offset(start),
@@ -245,6 +258,20 @@ struct NativeMarkdownASTParser {
             while cursor + marker.count <= characters.count {
                 if characters[cursor] == "\\" { cursor += min(2, characters.count - cursor); continue }
                 if Array(characters[cursor..<(cursor + marker.count)]) == marker { return cursor }
+                cursor += 1
+            }
+            return nil
+        }
+        func closingTildes(_ count: Int, after start: Int) -> Int? {
+            var cursor = start
+            while cursor + count <= characters.count {
+                if characters[cursor] == "\\" { cursor += min(2, characters.count - cursor); continue }
+                if characters[cursor] == "~",
+                   (cursor == 0 || characters[cursor - 1] != "~"),
+                   (cursor + count == characters.count || characters[cursor + count] != "~"),
+                   characters[cursor..<(cursor + count)].allSatisfy({ $0 == "~" }) {
+                    return cursor
+                }
                 cursor += 1
             }
             return nil
@@ -271,7 +298,7 @@ struct NativeMarkdownASTParser {
                 if let destination = autolinkDestination(content) {
                     flushPlain(until: index)
                     append(.link(destination), start: index, end: end + 1,
-                           contentStart: index + 1, contentEnd: end)
+                           contentStart: index + 1, contentEnd: end, parseContent: false)
                     index = end + 1; plainStart = index; continue
                 }
                 if content.range(of: #"^/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^<>]*)?/?$|^!--.*--$"#,
@@ -280,6 +307,14 @@ struct NativeMarkdownASTParser {
                     append(.inlineHTML, start: index, end: end + 1)
                     index = end + 1; plainStart = index; continue
                 }
+            }
+            if index == 0 || characters[index - 1].isWhitespace ||
+                "*_~(".contains(characters[index - 1]),
+               let autolink = bareAutolink(in: characters, at: index) {
+                flushPlain(until: index)
+                append(.link(autolink.destination), start: index, end: autolink.end,
+                       contentStart: index, contentEnd: autolink.end, parseContent: false)
+                index = autolink.end; plainStart = index; continue
             }
             if characters[index] == "`" {
                 let run = characters[index...].prefix(while: { $0 == "`" }).count
@@ -334,13 +369,29 @@ struct NativeMarkdownASTParser {
             }
             let marker: [Character]
             let kind: NativeMarkdownNode.Kind
-            if index + 1 < characters.count, characters[index] == "~", characters[index + 1] == "~" {
-                marker = ["~", "~"]; kind = .strikethrough
+            if characters[index] == "~" {
+                let run = characters[index...].prefix(while: { $0 == "~" }).count
+                guard run <= 2, let end = closingTildes(run, after: index + run),
+                      end > index + run else { index += max(1, run); continue }
+                flushPlain(until: index)
+                append(.strikethrough, start: index, end: end + run,
+                       contentStart: index + run, contentEnd: end)
+                index = end + run; plainStart = index; continue
             } else if index + 1 < characters.count, characters[index] == "*", characters[index + 1] == "*" {
                 marker = ["*", "*"]; kind = .strong
             } else if index + 1 < characters.count, characters[index] == "_", characters[index + 1] == "_" {
+                if index > 0, index + 2 < characters.count,
+                   characters[index - 1].isLetter || characters[index - 1].isNumber,
+                   characters[index + 2].isLetter || characters[index + 2].isNumber {
+                    index += 2; continue
+                }
                 marker = ["_", "_"]; kind = .strong
             } else if characters[index] == "*" || characters[index] == "_" {
+                if characters[index] == "_", index > 0, index + 1 < characters.count,
+                   (characters[index - 1].isLetter || characters[index - 1].isNumber),
+                   (characters[index + 1].isLetter || characters[index + 1].isNumber) {
+                    index += 1; continue
+                }
                 marker = [characters[index]]; kind = .emphasis
             } else {
                 index += 1; continue
@@ -368,6 +419,40 @@ struct NativeMarkdownASTParser {
             return "mailto:" + content
         }
         return nil
+    }
+
+    private func bareAutolink(in characters: [Character], at start: Int)
+        -> (end: Int, destination: String)? {
+        guard characters.indices.contains(start),
+              characters[start] == "h" || characters[start] == "w" ||
+                characters[start].isLetter || characters[start].isNumber else { return nil }
+        let candidate = String(characters[start...])
+        let pattern = #"^(?:https?://|www\.)[^\s<>]+|^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#
+        guard let expression = try? NSRegularExpression(pattern: pattern),
+              let match = expression.firstMatch(in: candidate,
+                                               range: NSRange(location: 0, length: (candidate as NSString).length)),
+              match.range.location == 0 else { return nil }
+        var spelling = (candidate as NSString).substring(with: match.range)
+        while let last = spelling.last, ".,!?;:".contains(last) { spelling.removeLast() }
+        while spelling.last == ")", spelling.filter({ $0 == ")" }).count > spelling.filter({ $0 == "(" }).count {
+            spelling.removeLast()
+        }
+        guard !spelling.isEmpty else { return nil }
+        let destination: String
+        if spelling.hasPrefix("www.") {
+            let host = String(spelling.dropFirst(4).prefix { !"/:?#".contains($0) })
+            let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+            guard labels.count >= 2, labels.allSatisfy({ !$0.isEmpty }),
+                  labels.suffix(2).allSatisfy({ !$0.contains("_") }) else { return nil }
+            destination = "http://" + spelling
+        }
+        else if spelling.contains("@"), !spelling.contains("://") { destination = "mailto:" + spelling }
+        else {
+            guard let url = URLComponents(string: spelling),
+                  url.host?.isEmpty == false else { return nil }
+            destination = spelling
+        }
+        return (start + spelling.count, destination)
     }
 
     private func normalizeReference(_ label: String) -> String {
