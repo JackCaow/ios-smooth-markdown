@@ -1,4 +1,3 @@
-import Markdown
 
 /// A native selection surface can project ordinary prose and headings around
 /// standalone images. Other blocks retain the explicit block-range UI.

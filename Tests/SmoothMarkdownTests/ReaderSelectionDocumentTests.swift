@@ -1,5 +1,4 @@
 import XCTest
-import Markdown
 @testable import SmoothMarkdown
 
 final class ReaderSelectionDocumentTests: XCTestCase {

@@ -1,4 +1,3 @@
-import Markdown
 import SwiftUI
 
 /// A host-supplied renderer for a parsed Markdown node.

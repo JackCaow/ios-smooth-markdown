@@ -1,4 +1,3 @@
-import Markdown
 import SwiftDraw
 import SwiftUI
 import SwiftUIMath
