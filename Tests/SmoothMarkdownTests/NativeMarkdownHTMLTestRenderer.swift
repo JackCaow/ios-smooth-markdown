@@ -33,6 +33,12 @@ enum NativeMarkdownHTMLTestRenderer {
         case .inlineCode: return "<code>" + escape(node.semanticText ?? node.source) + "</code>"
         case .paragraph: return "<p>" + content + "</p>\n"
         case let .heading(level): return "<h\(level)>" + content + "</h\(level)>\n"
+        case let .fencedCode(info):
+            let language = info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+            let attribute = language.isEmpty ? "" : " class=\"language-" + escape(language) + "\""
+            return "<pre><code" + attribute + ">" + escape(node.semanticText ?? "") + "</code></pre>\n"
+        case .indentedCode:
+            return "<pre><code>" + escape(node.semanticText ?? "") + "</code></pre>\n"
         case .thematicBreak: return "<hr />\n"
         case .strong: return "<strong>" + content + "</strong>"
         case .emphasis: return "<em>" + content + "</em>"
@@ -59,7 +65,7 @@ enum NativeMarkdownHTMLTestRenderer {
             let blocks = node.children.dropFirst(node.children.prefix { !isBlock($0) }.count)
             let body = blocks.map { render($0, tightList: false) }.joined()
             if body.isEmpty { return "<li>" + inline + "</li>\n" }
-            return "<li>" + inline + (inline.isEmpty ? "\n" : "\n") + body + "</li>\n"
+            return "<li>" + inline + "\n" + body + "</li>\n"
         default: return "UNSUPPORTED(\(node.kind))"
         }
     }
