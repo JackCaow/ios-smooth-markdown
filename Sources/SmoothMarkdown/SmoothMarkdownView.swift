@@ -1,6 +1,4 @@
-import SwiftDraw
 import SwiftUI
-import SwiftUIMath
 #if os(iOS)
 import UIKit
 #endif
@@ -410,7 +408,7 @@ public struct SmoothMarkdownView: View {
         if hasCustomBuilder(node) { return true }
         if node is Paragraph || node is Heading || node is Markdown.Table.Cell {
             // Match the same post-plugin text pieces that inlineView will dispatch.
-            // The raw swift-markdown Text node may contain a plugin token that
+            // The raw native Markdown.Text node may contain a plugin token that
             // becomes a separate result before builders see ordinary text.
             return hasCustomExtension(in: node) || InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
                                       hasCustomBuilder: hasCustomBuilder).contains {
@@ -663,17 +661,17 @@ public struct SmoothMarkdownView: View {
     }
     #endif
 
-    private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
+    private func detailsBlock(_ details: DetailsSyntax.Block) -> AnyView {
         let summary = parse(details.summary)
         let summaryNode = summary.child(at: 0)
         let summaryLabel = summaryNode.map(plainText).flatMap { $0.isEmpty ? nil : $0 } ?? "Details"
-        return DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
+        return AnyView(DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
             if let summaryNode { inlineView(summaryNode) }
         }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-            ForEach(Array(PluginBlockSyntax.sections(details.content, registry: plugins).enumerated()), id: \.offset) { _, section in
-                pluginSection(section)
+            ForEach(Array(DetailsSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
+                detailsSection(section)
             }
-        }))
+        })))
     }
 
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
@@ -1009,19 +1007,7 @@ public struct SmoothMarkdownView: View {
                 url: tapURL, image: image, label: label, inline: inline)
         }
         switch source {
-        case let .remote(url, svg: true):
-            return accessibleImage(
-                AsyncSVGView(url: url) { phase in
-                    switch phase {
-                    case .success(let svg):
-                        NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
-                            SVGView(svg: svg).resizable().scaledToFit()
-                        }
-                    case .failure: SwiftUI.Text(label)
-                    case .empty: ProgressView()
-                    }
-                }, url: url, image: image, label: label, inline: inline)
-        case let .remote(url, svg: false):
+        case let .remote(url, _):
             return accessibleImage(
                 RemoteBitmapView(url: url, width: width, height: height, fallback: label),
                 url: url, image: image, label: label, inline: inline)
@@ -1029,7 +1015,7 @@ public struct SmoothMarkdownView: View {
             guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
             return accessibleImage(
                 NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
-                    SVGView(svg: svg).resizable().scaledToFit()
+                    SVGView(svg: svg)
                 }, url: URL(string: name), image: image, label: label, inline: inline)
         case let .bundled(name, svg: false):
             return accessibleImage(
@@ -1055,7 +1041,7 @@ public struct SmoothMarkdownView: View {
         case let .svg(svg):
             content = AnyView(NaturalImageLayout(naturalSize: svg.size,
                                                  explicitWidth: width, explicitHeight: height) {
-                SVGView(svg: svg).resizable().scaledToFit()
+                SVGView(svg: svg)
             })
         case let .bitmap(bitmap):
             content = AnyView(NaturalImageLayout(naturalSize: bitmap.size,
@@ -1255,6 +1241,7 @@ public struct SmoothMarkdownView: View {
                         .layoutValue(key: InlineImageKey.self, value: true)
                 case let .math(latex):
                     inlineMath(latex)
+                        .layoutValue(key: InlineMathKey.self, value: true)
                 case let .plugin(plugin, match):
                     pluginView(plugin, match).fixedSize()
                 case .lineBreak:
@@ -1280,10 +1267,7 @@ public struct SmoothMarkdownView: View {
         if let builder = extensionBuilder(node) {
             builder.build(node, context: renderContext()).fixedSize()
         } else {
-            SwiftUIMath.Math(latex)
-                .mathTypesettingStyle(.text)
-                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 16))
-                .fixedSize()
+            NativeMathWebView(latex: latex, size: 16, display: false, color: styleSheet.textColor)
                 .accessibilityLabel(latex)
         }
     }
@@ -1301,9 +1285,7 @@ public struct SmoothMarkdownView: View {
 
     private func nativeBlockMath(_ latex: String) -> some View {
         ScrollView(.horizontal) {
-            SwiftUIMath.Math(latex)
-                .mathTypesettingStyle(.display)
-                .mathFont(SwiftUIMath.Math.Font(name: .latinModern, size: 20))
+            NativeMathWebView(latex: latex, size: 20, display: true, color: styleSheet.textColor)
                 .fixedSize()
                 .accessibilityLabel(latex.isEmpty ? "Empty formula" : latex)
         }

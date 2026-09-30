@@ -4,7 +4,9 @@ import SwiftUI
 struct SmoothMarkdownDemoApp: App {
     var body: some Scene {
         WindowGroup {
-            if ProcessInfo.processInfo.arguments.contains(where: { $0.hasSuffix("-fixture") }) {
+            if ProcessInfo.processInfo.arguments.contains("-svg-transparency-probe") {
+                SVGTransparencyProbeView()
+            } else if ProcessInfo.processInfo.arguments.contains(where: { $0.hasSuffix("-fixture") }) {
                 FixtureDemoView()
             } else {
                 DemoHomeView()

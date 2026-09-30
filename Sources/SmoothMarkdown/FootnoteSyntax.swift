@@ -1,6 +1,6 @@
 import Foundation
 
-/// Footnote extensions supported by the Flutter parser but absent from swift-markdown.
+/// Footnote definitions and references handled by the native extension pipeline.
 enum FootnoteSyntax {
     struct Definition: Equatable {
         let label: String

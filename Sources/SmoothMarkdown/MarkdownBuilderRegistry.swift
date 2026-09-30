@@ -14,7 +14,7 @@ public protocol MarkdownWidgetBuilder {
     /// Replaces a parser-plugin view when `canBuild` accepts its result.
     func build(_ node: MarkdownPluginNode, context: MarkdownRenderContext) -> AnyView
 
-    /// Matches a native extension parsed outside swift-markdown's Markup tree.
+    /// Matches a native extension parsed outside the core Markup tree.
     func canBuild(_ node: MarkdownExtensionNode) -> Bool
 
     /// Replaces an extension node such as math, a footnote, or details.
@@ -32,7 +32,7 @@ public extension MarkdownWidgetBuilder {
     }
 }
 
-/// A parsed extension that has no corresponding swift-markdown `Markup` node.
+/// A parsed extension that has no corresponding core `Markup` node.
 /// `content` is the inner formula or Markdown body; `source` is normalized
 /// Markdown spelling and may differ from the author's original whitespace.
 public struct MarkdownExtensionNode {

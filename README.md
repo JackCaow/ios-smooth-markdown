@@ -6,17 +6,13 @@ The library is under active development. It supports common Markdown and GFM con
 
 ## Install
 
-Requires **iOS 17+** and Swift Package Manager. In Xcode, use **File → Add Package Dependencies**, enter:
+Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. Markdown is parsed into a native Swift AST; SVG and math rendering use Apple frameworks.
 
-```text
-https://github.com/JackCaow/ios-smooth-markdown
-```
-
-Add the **SmoothMarkdown** product to your app target and select version **0.1.0** or later. If you maintain a `Package.swift`, add:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.2.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.1.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.2.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -25,7 +21,23 @@ targets: [
 ]
 ```
 
-The `Demo` app is for exploration and is not required by the package.
+CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
+
+```ruby
+pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.2.0'
+```
+
+`SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
+
+### SVG and math
+
+The native SVG path uses SwiftUI Canvas/CoreGraphics for common shapes and paints. Complex SVGs, including embedded fonts, use Apple's `WKWebView` with JavaScript disabled; referenced resources may be fetched. External raster images in the Canvas path use a bounded `URLSession` download and a 32 MiB in-memory cache. The implementation rendered all 96 valid SVGs in SwiftDraw 0.29's 97-sample fixture set and rejected its intentionally malformed sample. Browser SVG output can differ from the old renderer's pixels.
+
+Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layout. A SwiftUI renderer remains visible while a formula is prepared or if WebKit cannot render it. Neither path adds a package dependency.
+
+## Syntax coverage
+
+The native parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
 
 ## Quick start
 

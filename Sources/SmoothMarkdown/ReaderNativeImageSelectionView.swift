@@ -1,5 +1,4 @@
 #if os(iOS)
-import SwiftDraw
 import SwiftUI
 import UIKit
 
@@ -175,7 +174,7 @@ struct ReaderNativeImageSelectionView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> ReaderNativeImageTextView {
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.backgroundColor = .clear
         view.isEditable = false
         view.isSelectable = true
@@ -289,6 +288,27 @@ final class ReaderNativeImageTextView: UITextView, UIGestureRecognizerDelegate {
     private var imageHosts: [UIHostingController<AnyView>] = []
     private var imageSizes: [CGSize] = []
     private var dragAnchorUTF16: Int?
+    private var ownedTextStorage: NSTextStorage?
+
+    override init(frame: CGRect, textContainer: NSTextContainer?) {
+        if let textContainer {
+            super.init(frame: frame, textContainer: textContainer)
+        } else {
+            // A nil container starts UITextView in TextKit 2 on current iOS.
+            // The image anchor must use TextKit 1 glyph and line metrics.
+            let storage = NSTextStorage()
+            let manager = NSLayoutManager()
+            let container = NSTextContainer(size: .zero)
+            storage.addLayoutManager(manager)
+            manager.addTextContainer(container)
+            super.init(frame: frame, textContainer: container)
+            ownedTextStorage = storage
+        }
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+    }
 
     func applyRenderedContent(_ content: NSAttributedString, imageAnchorsUTF16: [Int]) {
         if !attributedText.isEqual(to: content) {

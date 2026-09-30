@@ -8,6 +8,10 @@ struct InlineImageKey: LayoutValueKey {
     static let defaultValue = false
 }
 
+struct InlineMathKey: LayoutValueKey {
+    static let defaultValue = false
+}
+
 /// Places text fragments and image views on the same line, wrapping at words.
 struct InlineFlowLayout: Layout {
     private struct Arrangement {
@@ -25,7 +29,7 @@ struct InlineFlowLayout: Layout {
         for (index, subview) in subviews.enumerated() {
             subview.place(at: CGPoint(x: bounds.minX + arrangement.positions[index].x,
                                       y: bounds.minY + arrangement.positions[index].y),
-                          proposal: subview[InlineImageKey.self]
+                          proposal: subview[InlineImageKey.self] || subview[InlineMathKey.self]
                               ? ProposedViewSize(arrangement.sizes[index]) : .unspecified)
         }
     }
@@ -45,12 +49,14 @@ struct InlineFlowLayout: Layout {
                 lineHeight = 0
                 continue
             }
-            let size = subview.sizeThatFits(subview[InlineImageKey.self]
-                                            ? ProposedViewSize(width: available, height: nil) : .unspecified)
+            let constrained = subview[InlineImageKey.self] || subview[InlineMathKey.self]
+            var size = subview.sizeThatFits(constrained
+                                            ? ProposedViewSize(width: max(1, available - x), height: nil) : .unspecified)
             if x > 0 && x + size.width > available {
                 y += max(lineHeight, 20)
                 x = 0
                 lineHeight = 0
+                if constrained { size = subview.sizeThatFits(ProposedViewSize(width: available, height: nil)) }
             }
             positions[index] = CGPoint(x: x, y: y)
             sizes[index] = size

@@ -9,6 +9,12 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         let svg = Data("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='32'></svg>".utf8)
         XCTAssertEqual(ReaderRemoteImageResolution.decode(svg, key: svgKey).naturalSize,
                        CGSize(width: 64, height: 32))
+        let extensionlessKey = ReaderRemoteImageKey(
+            url: URL(string: "https://img.shields.io/github/stars/owner/repo?style=flat")!, svg: false)
+        if case let .svg(decoded) = ReaderRemoteImageResolution.decode(svg, key: extensionlessKey) {
+            XCTAssertEqual(decoded.size, CGSize(width: 64, height: 32))
+            XCTAssertEqual(decoded.baseURL, extensionlessKey.url)
+        } else { XCTFail("An extensionless SVG response must use the vector renderer") }
         if case .failure = ReaderRemoteImageResolution.decode(Data("broken".utf8), key: svgKey) {
             // Malformed bytes are retryable after the view reappears.
         } else { XCTFail("Malformed SVG should be a retryable failure") }
@@ -18,19 +24,28 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         } else { XCTFail("Oversized SVG must be rejected") }
 
         let bitmapKey = ReaderRemoteImageKey(url: URL(string: "https://example.com/photo.png")!, svg: false)
-        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10)).pngData { context in
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let bitmap = UIGraphicsImageRenderer(size: CGSize(width: 20, height: 10), format: format).pngData { context in
             UIColor.red.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 20, height: 10))
         }
         XCTAssertEqual(ReaderRemoteImageResolution.decode(bitmap, key: bitmapKey).naturalSize,
                        CGSize(width: 20, height: 10))
+        if case .bitmap = ReaderRemoteImageResolution.decode(bitmap, key: extensionlessKey) {
+            // The response bytes, rather than a missing suffix, choose the bitmap decoder.
+        } else { XCTFail("An extensionless bitmap response must stay a bitmap") }
+        if case .rejected = ReaderRemoteImageResolution.decode(
+            Data(count: ReaderRemoteImagePolicy.maxBitmapBytes + 1), key: extensionlessKey) {
+            // The bitmap byte limit is unchanged.
+        } else { XCTFail("Oversized remote payload must be rejected") }
     }
 
     func testStyleRerenderKeepsNativeSelectionButDocumentReplacementClearsIt() {
         let source = "Before 😀\n█\nAfter"
         let anchor = (source as NSString).range(of: "█").location
         let range = (source as NSString).range(of: "😀\n█\nAfter")
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.isSelectable = true
         view.applyRenderedContent(NSAttributedString(string: source), imageAnchorsUTF16: [anchor])
         view.selectedRange = range
@@ -47,22 +62,31 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
     func testTextKitOneImageGlyphKeepsNativeRangeAndCopiesOnlyText() {
         let source = NSMutableAttributedString(string: "Before 🐈 image.\n")
         let anchor = source.length
+        let imageParagraph = NSMutableParagraphStyle()
+        imageParagraph.minimumLineHeight = 64
         source.append(NSAttributedString(string: ReaderNativeImageTextView.imageAnchor,
-                                         attributes: [.font: UIFont.systemFont(ofSize: 64),
+                                         attributes: [.font: UIFont.systemFont(ofSize: 1),
+                                                      .paragraphStyle: imageParagraph,
                                                       .foregroundColor: UIColor.clear]))
         source.append(NSAttributedString(string: "\nAfter 😀 image."))
 
-        let view = ReaderNativeImageTextView(usingTextLayoutManager: false)
+        let view = ReaderNativeImageTextView(frame: .zero, textContainer: nil)
         view.textContainerInset = .zero
         view.textContainer.lineFragmentPadding = 0
         view.attributedText = source
         view.frame = CGRect(x: 0, y: 0, width: 300, height: 200)
         view.layoutIfNeeded()
+        view.layoutManager.ensureLayout(for: view.textContainer)
         let glyph = view.layoutManager.glyphIndexForCharacter(at: anchor)
         let frame = view.layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1),
                                                     in: view.textContainer)
         XCTAssertGreaterThan(frame.width, 0)
-        XCTAssertGreaterThanOrEqual(frame.height, 64)
+        let imageLine = view.layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        XCTAssertGreaterThanOrEqual(imageLine.height, 64)
+        let afterOffset = (source.string as NSString).range(of: "After").location
+        let afterGlyph = view.layoutManager.glyphIndexForCharacter(at: afterOffset)
+        let afterLine = view.layoutManager.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
+        XCTAssertGreaterThanOrEqual(afterLine.minY - imageLine.minY, 64)
         XCTAssertEqual(ReaderNativeImageTextView.selectedCopyText(
             in: source, range: NSRange(location: 0, length: source.length), imageAnchorsUTF16: [anchor]),
                        "Before 🐈 image.\nAfter 😀 image.")

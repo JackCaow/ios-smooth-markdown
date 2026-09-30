@@ -1,4 +1,3 @@
-import SwiftDraw
 import XCTest
 @testable import SmoothMarkdown
 
@@ -8,6 +7,10 @@ final class ImageSourceTests: XCTestCase {
                        .remote(URL(string: "https://example.com/logo.svg")!, svg: true))
         XCTAssertEqual(ImageSource.parse("https://example.com/photo.png"),
                        .remote(URL(string: "https://example.com/photo.png")!, svg: false))
+        XCTAssertEqual(ImageSource.parse("https://example.com/logo.svg?style=flat"),
+                       .remote(URL(string: "https://example.com/logo.svg?style=flat")!, svg: true))
+        XCTAssertEqual(ImageSource.parse("https://img.shields.io/github/stars/owner/repo?style=flat"),
+                       .remote(URL(string: "https://img.shields.io/github/stars/owner/repo?style=flat")!, svg: false))
         XCTAssertEqual(ImageSource.parse("Assets/mark.SVG"), .bundled("Assets/mark.SVG", svg: true))
         XCTAssertEqual(ImageSource.parse("icon.png"), .bundled("icon.png", svg: false))
     }

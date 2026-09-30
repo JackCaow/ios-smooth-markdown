@@ -261,6 +261,7 @@ private struct DemoConversationDetailView: View {
             style.inlineCodeBackground = .black.opacity(0.2)
             style.quoteBarColor = .white.opacity(0.7)
             style.tableBorderColor = .white.opacity(0.6)
+            style.tableHeaderBackgroundColor = .black.opacity(0.16)
         }
         return style
     }

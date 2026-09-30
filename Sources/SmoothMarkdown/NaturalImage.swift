@@ -55,37 +55,69 @@ struct RemoteBitmapView: View {
     let fallback: String
 
     @State private var bitmap: NativeBitmap?
+    @State private var svg: SVG?
     @State private var failed = false
 
     var body: some View {
         Group {
-            if let bitmap {
+            if let svg {
+                NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
+                    SVGView(svg: svg)
+                }
+            } else if let bitmap {
                 NaturalImageLayout(naturalSize: bitmap.size, explicitWidth: width, explicitHeight: height) {
                     bitmapView(bitmap).resizable().scaledToFit()
                 }
             } else if failed {
-                RemoteBitmapFailureView(label: fallback)
+                if url.pathExtension.lowercased() == "svg" {
+                    SwiftUI.Text(fallback)
+                } else {
+                    RemoteBitmapFailureView(label: fallback)
+                }
             } else {
                 ProgressView()
             }
         }
         .task(id: url) {
             bitmap = nil
+            svg = nil
             failed = false
+            #if os(iOS)
+            let key = ReaderRemoteImageKey(url: url, svg: url.pathExtension.lowercased() == "svg")
+            let fetched = await ReaderRemoteImageLoader.fetch(key)
+            guard !Task.isCancelled else { return }
+            switch fetched {
+            case let .data(data):
+                switch ReaderRemoteImageResolution.decode(data, key: key) {
+                case let .svg(image): svg = image
+                case let .bitmap(image): bitmap = image
+                case .failure, .rejected: failed = true
+                }
+            case .failure, .rejected: failed = true
+            }
+            #else
             do {
                 let (data, response) = try await URLSession.shared.data(from: url)
                 guard let response = response as? HTTPURLResponse,
-                      (200..<300).contains(response.statusCode),
-                      let decoded = NativeBitmap(data: data) else {
+                      (200..<300).contains(response.statusCode) else {
                     failed = true
                     return
                 }
-                bitmap = decoded
+                if data.count <= ReaderRemoteImagePolicy.maxSVGBytes,
+                   let decoded = SVG(data: data, baseURL: response.url) {
+                    svg = decoded
+                } else if data.count <= ReaderRemoteImagePolicy.maxBitmapBytes,
+                          let decoded = NativeBitmap(data: data) {
+                    bitmap = decoded
+                } else {
+                    failed = true
+                }
             } catch is CancellationError {
                 // A changed image source starts another task; do not show an error.
             } catch {
                 failed = true
             }
+            #endif
         }
     }
 }
