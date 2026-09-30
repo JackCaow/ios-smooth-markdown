@@ -3,7 +3,7 @@ import XCTest
 @testable import SmoothMarkdown
 
 /// Runs against the pinned official CommonMark examples when COMMONMARK_SPEC_JSON is set.
-/// This checks source preservation, not rendered HTML equivalence.
+/// Checks source ranges, block structure, and rendered HTML against official examples.
 final class NativeMarkdownOfficialSpecTests: XCTestCase {
     func testOfficialFirstVisibleBlockKindAcrossExamples() throws {
         var count = 0

@@ -3,6 +3,12 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class NativeMarkdownGFMTests: XCTestCase {
+    func testFilteredHTMLInsideQuoteUsesProjectedLiteral() {
+        let source = "> <script>\n> x\n> </script>\n"
+        XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser().parse(source)),
+                       "<blockquote>\n&lt;script>\nx\n&lt;/script>\n</blockquote>\n")
+    }
+
     func testOfficialTaskListSemanticsAndSourceRanges() throws {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "gfm-tasklist", withExtension: "json"))
         let examples = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: String]])

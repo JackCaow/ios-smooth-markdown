@@ -16,7 +16,7 @@ final class NativeMarkdownHTMLSerializerTests: XCTestCase {
     }
 
     func testOfficialGFMHTMLExport() throws {
-        for fixture in ["gfm-tables", "gfm-inline", "gfm-tagfilter"] {
+        for fixture in ["gfm-tables", "gfm-inline", "gfm-tagfilter", "gfm-tasklist"] {
             let url = try XCTUnwrap(Bundle.module.url(forResource: fixture, withExtension: "json"))
             let examples = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: String]])
             for example in examples {

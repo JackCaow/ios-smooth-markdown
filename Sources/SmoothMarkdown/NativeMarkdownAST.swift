@@ -63,6 +63,7 @@ struct NativeMarkdownASTParser {
         var sourceEnd: Int? = nil
         var projected = false
         var lazyContinuation = false
+        var virtualIndent = 0
         var end: Int { sourceEnd ?? start + (raw as NSString).length }
         var isBlank: Bool { text.allSatisfy { $0 == " " || $0 == "\t" } }
     }
@@ -82,7 +83,7 @@ struct NativeMarkdownASTParser {
     private func filterHTML(_ node: NativeMarkdownNode) -> NativeMarkdownNode {
         guard enableGFM else { return node }
         let filtered = node.kind == .inlineHTML || node.kind == .htmlBlock
-            ? NativeMarkdownHTMLTagFilter.filter(node.source) : node.literalText
+            ? NativeMarkdownHTMLTagFilter.filter(node.literalText ?? node.source) : node.literalText
         return .init(kind: node.kind, source: node.source, sourceRange: node.sourceRange,
                      children: node.children.map(filterHTML), title: node.title,
                      isTight: node.isTight, listStart: node.listStart,
@@ -202,17 +203,7 @@ struct NativeMarkdownASTParser {
                         index += 1
                     } else { break }
                 }
-                let contents = lines[start..<index].map { line -> Line in
-                    let prefix = quotePrefix(line.text) ?? ""
-                    var body = String(line.text.dropFirst(prefix.count))
-                    if prefix.hasSuffix(">"), body.hasPrefix("\t\t") {
-                        body = "      " + String(body.dropFirst(2))
-                    }
-                    return Line(text: body, raw: body + (line.raw.hasSuffix("\n") ? "\n" : ""),
-                                start: line.start + (prefix as NSString).length,
-                                sourceEnd: line.end, projected: true,
-                                lazyContinuation: prefix.isEmpty)
-                }
+                let contents = lines[start..<index].map(projectQuoteLine)
                 result.append(node(.blockQuote, start, index,
                                    scan(contents, source: source, references: references))); continue
             }
@@ -296,7 +287,7 @@ struct NativeMarkdownASTParser {
             let hardBreak = position + 1 < lines.count &&
                 (trailing >= 2 || (trailing == 0 && body.hasSuffix("\\")))
             let visible = String(body.dropLast(trailing + (hardBreak && trailing == 0 ? 1 : 0)))
-            children += inline(visible, offset: line.start + (prefix as NSString).length,
+            children += inline(visible, offset: line.start + (prefix as NSString).length - line.virtualIndent,
                                references: references,
                                trimTrailingWhitespace: position == lines.count - 1)
             if position + 1 < lines.count {
@@ -330,6 +321,12 @@ struct NativeMarkdownASTParser {
             else { break }
         }
         return width
+    }
+
+    private func displayColumn(_ text: String) -> Int {
+        text.reduce(0) { column, character in
+            column + (character == "\t" ? 4 - column % 4 : 1)
+        }
     }
 
     private func fenceOpen(_ line: String) -> (marker: Character, count: Int, info: String)? {
@@ -366,7 +363,45 @@ struct NativeMarkdownASTParser {
     }
 
     private func quotePrefix(_ line: String) -> String? {
-        match(#"^( {0,3}>[ ]?)"#, line)?[1]
+        match(#"^( {0,3}>)"#, line)?[1]
+    }
+
+    private func projectQuoteLine(_ line: Line) -> Line {
+        guard let prefix = quotePrefix(line.text) else {
+            return Line(text: line.text, raw: line.raw, start: line.start,
+                        sourceEnd: line.end, projected: true, lazyContinuation: true,
+                        virtualIndent: line.virtualIndent)
+        }
+        var body = String(line.text.dropFirst(prefix.count))
+        var column = prefix.count
+        var offset = (prefix as NSString).length
+        var virtualIndent = line.virtualIndent
+        if body.first == " " || body.first == "\t" {
+            let first = body.removeFirst()
+            offset += String(first).utf16.count
+            let width = first == "\t" ? 4 - column % 4 : 1
+            column += 1
+            let remaining = width - 1
+            body = String(repeating: " ", count: remaining) + body
+            virtualIndent += remaining
+        }
+        var expanded = ""
+        var initialWhitespace = true
+        for character in body {
+            if character == "\t", initialWhitespace {
+                let width = 4 - column % 4
+                expanded += String(repeating: " ", count: width)
+                virtualIndent += width - 1
+                column += width
+            } else {
+                expanded.append(character)
+                if character == " " { column += 1 }
+                else { initialWhitespace = false }
+            }
+        }
+        return Line(text: expanded, raw: expanded + (line.raw.hasSuffix("\n") ? "\n" : ""),
+                    start: line.start + offset, sourceEnd: line.end, projected: true,
+                    virtualIndent: virtualIndent)
     }
 
     private func quoteParagraphCanContinue(_ body: String) -> Bool {
@@ -453,7 +488,7 @@ struct NativeMarkdownASTParser {
         -> (indent: Int, prefix: String, ordered: Bool, number: Int,
             style: Character, overflowSpaces: Int)? {
         guard let parts = match(#"^([ \t]*)([-+*]|[0-9]{1,9}[.)])([ \t]+|$)(.*)$"#, line) else { return nil }
-        let indent = parts[1].reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
+        let indent = indentation(parts[1])
         guard indent <= maxIndent else { return nil }
         let marker = parts[2]
         let spacing = parts[3]
@@ -472,7 +507,7 @@ struct NativeMarkdownASTParser {
     private func list(at start: Int, lines: [Line], source: String,
                       references: [String: Reference]) -> (node: NativeMarkdownNode, next: Int) {
         let first = listMarker(lines[start].text)!
-        var siblingLimit = max((first.prefix as NSString).length, first.indent + 2)
+        var siblingLimit = displayColumn(first.prefix)
         var index = start
         var loose = false
         var parsedItems: [(range: NSRange, checked: Bool?, blocks: [NativeMarkdownNode])] = []
@@ -488,7 +523,7 @@ struct NativeMarkdownASTParser {
                 body = String(repeating: " ", count: marker.overflowSpaces) +
                     String(body.drop(while: { $0 == " " || $0 == "\t" }))
             }
-            let task = match(#"^\[([ xX])\][ \t]+"#, body)
+            let task = enableGFM ? match(#"^\[([ xX])\][ \t]+"#, body) : nil
             let checked: Bool?
             if let task {
                 checked = task[1].lowercased() == "x"
@@ -496,7 +531,7 @@ struct NativeMarkdownASTParser {
             } else { checked = nil }
             let prefixWidth = (marker.prefix as NSString).length +
                 (task.map { ($0[0] as NSString).length } ?? 0)
-            let contentIndent = max((marker.prefix as NSString).length, marker.indent +
+            let contentIndent = max(displayColumn(marker.prefix), marker.indent +
                 (marker.ordered ? String(marker.number).count + 1 : 1) + 1)
             siblingLimit = contentIndent
             var contents = [Line(text: body, raw: body + (itemLine.raw.hasSuffix("\n") ? "\n" : ""),
