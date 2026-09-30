@@ -22,6 +22,13 @@ final class NativeMathMLTests: XCTestCase {
         XCTAssertTrue(html.contains("<mtable>"))
     }
 
+    func testCasesBraceHasRowBasedMinimumHeight() {
+        let oneRow = NativeMathML.html("\\begin{cases}x&x>0\\end{cases}", display: true)
+        let twoRows = NativeMathML.html("\\begin{cases}x&x>0\\\\-x&x<0\\end{cases}", display: true)
+        XCTAssertTrue(oneRow.contains("minsize=\"1.25em\">{</mo>"))
+        XCTAssertTrue(twoRows.contains("minsize=\"2.5em\">{</mo>"))
+    }
+
     func testMathWhitespaceAndExplicitTextSpacing() {
         let math = NativeMathML.html("\\frac{\\partial}{\\partial t}", display: true)
         XCTAssertFalse(math.contains("<mspace"))
@@ -114,6 +121,22 @@ extension NativeMathMLTests {
         web.navigationDelegate = delegate
         web.loadHTMLString(html, baseURL: nil)
         wait(for: [finished], timeout: 15)
+        let measured = expectation(description: "cases fence and table measured")
+        var casesHeights: [NSNumber]?
+        web.evaluateJavaScript("""
+            (() => { const card = document.querySelectorAll('.card')[3];
+              return [card.querySelector('mo').getBoundingClientRect().height,
+                      card.querySelector('mtable').getBoundingClientRect().height]; })()
+            """) { result, error in
+            XCTAssertNil(error)
+            casesHeights = result as? [NSNumber]
+            measured.fulfill()
+        }
+        wait(for: [measured], timeout: 15)
+        let heights = try XCTUnwrap(casesHeights)
+        XCTAssertEqual(heights.count, 2)
+        XCTAssertGreaterThan(heights[0].doubleValue, heights[1].doubleValue * 0.8,
+                             "The cases opening brace should span its two-row table")
         let captured = expectation(description: "gallery snapshot")
         var snapshot: NSImage?
         web.takeSnapshot(with: nil) { image, _ in snapshot = image; captured.fulfill() }

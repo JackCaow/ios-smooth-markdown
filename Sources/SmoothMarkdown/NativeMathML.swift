@@ -85,8 +85,15 @@ enum NativeMathML {
         case let .alignedMatrix(rows, left, right, columns):
             return "<mrow><mo stretchy=\"true\">\(escape(left))</mo>\(table(rows, columns: columns, display: display))<mo stretchy=\"true\">\(escape(right))</mo></mrow>"
         case let .environment(name, columns, rows):
-            let left = name == "cases" ? "<mo stretchy=\"true\">{</mo>" : ""
-            return "<mrow>\(left)\(table(rows, columns: columns, display: display))</mrow>"
+            if name == "cases" {
+                // WebKit does not grow a lone stretchy opening brace to an mtable.
+                // Give it a row-based minimum; stretchy still handles a taller
+                // table where supported by the system renderer.
+                let minHeight = Double(rows.count) * 1.25
+                return "<mrow><mo fence=\"true\" stretchy=\"true\" minsize=\"\(minHeight)em\">{</mo>" +
+                    table(rows, columns: columns, display: display) + "</mrow>"
+            }
+            return "<mrow>\(table(rows, columns: columns, display: display))</mrow>"
         }
     }
 
