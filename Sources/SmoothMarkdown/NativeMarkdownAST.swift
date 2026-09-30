@@ -17,6 +17,14 @@ struct NativeMarkdownNode: Equatable {
     let sourceRange: NSRange
     let children: [NativeMarkdownNode]
 
+    var semanticText: String? {
+        switch kind {
+        case .text: NativeMarkdownTextDecoder.decode(source)
+        case .inlineCode: NativeMarkdownTextDecoder.codeSpan(source)
+        default: nil
+        }
+    }
+
     init(kind: Kind, source: String, sourceRange: NSRange, children: [NativeMarkdownNode] = []) {
         self.kind = kind
         self.source = source
@@ -349,7 +357,8 @@ struct NativeMarkdownASTParser {
                     var end = close + 1
                     if end < characters.count, characters[end] == "(",
                        let destinationEnd = closing([")"], after: end + 1) {
-                        destination = String(characters[(end + 1)..<destinationEnd])
+                        destination = NativeMarkdownTextDecoder.decode(
+                            String(characters[(end + 1)..<destinationEnd]))
                         end = destinationEnd + 1
                     } else if end < characters.count, characters[end] == "[",
                               let referenceEnd = closing(["]"], after: end + 1) {
@@ -479,6 +488,7 @@ struct NativeMarkdownASTParser {
               match.range(at: 1).location != NSNotFound,
               match.range(at: 2).location != NSNotFound else { return nil }
         let text = line as NSString
-        return (text.substring(with: match.range(at: 1)), text.substring(with: match.range(at: 2)))
+        return (text.substring(with: match.range(at: 1)),
+                NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: 2))))
     }
 }
