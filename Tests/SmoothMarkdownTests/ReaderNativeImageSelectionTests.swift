@@ -62,8 +62,11 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
     func testTextKitOneImageGlyphKeepsNativeRangeAndCopiesOnlyText() {
         let source = NSMutableAttributedString(string: "Before 🐈 image.\n")
         let anchor = source.length
+        let imageParagraph = NSMutableParagraphStyle()
+        imageParagraph.minimumLineHeight = 64
         source.append(NSAttributedString(string: ReaderNativeImageTextView.imageAnchor,
-                                         attributes: [.font: UIFont.systemFont(ofSize: 64),
+                                         attributes: [.font: UIFont.systemFont(ofSize: 1),
+                                                      .paragraphStyle: imageParagraph,
                                                       .foregroundColor: UIColor.clear]))
         source.append(NSAttributedString(string: "\nAfter 😀 image."))
 
@@ -73,11 +76,17 @@ final class ReaderNativeImageSelectionTests: XCTestCase {
         view.attributedText = source
         view.frame = CGRect(x: 0, y: 0, width: 300, height: 200)
         view.layoutIfNeeded()
+        view.layoutManager.ensureLayout(for: view.textContainer)
         let glyph = view.layoutManager.glyphIndexForCharacter(at: anchor)
         let frame = view.layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1),
                                                     in: view.textContainer)
         XCTAssertGreaterThan(frame.width, 0)
-        XCTAssertGreaterThanOrEqual(frame.height, 64)
+        let imageLine = view.layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+        XCTAssertGreaterThanOrEqual(imageLine.height, 64)
+        let afterOffset = (source.string as NSString).range(of: "After").location
+        let afterGlyph = view.layoutManager.glyphIndexForCharacter(at: afterOffset)
+        let afterLine = view.layoutManager.lineFragmentRect(forGlyphAt: afterGlyph, effectiveRange: nil)
+        XCTAssertGreaterThanOrEqual(afterLine.minY - imageLine.minY, 64)
         XCTAssertEqual(ReaderNativeImageTextView.selectedCopyText(
             in: source, range: NSRange(location: 0, length: source.length), imageAnchorsUTF16: [anchor]),
                        "Before 🐈 image.\nAfter 😀 image.")
