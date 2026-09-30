@@ -69,4 +69,24 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertEqual(code.semanticText, expected, "Example \(number)")
         }
     }
+
+    func testOfficialUnmatchedEmphasisRemainsLiteral() throws {
+        let selected: Set<Int> = [351, 352, 358, 359, 363, 366, 367, 371,
+                                  379, 380, 383, 384, 385, 391, 397, 398, 400, 401]
+        for example in try examples() {
+            guard let number = example["example"] as? Int, selected.contains(number) else { continue }
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let html = try XCTUnwrap(example["html"] as? String)
+            XCTAssertTrue(html.hasPrefix("<p>") && html.hasSuffix("</p>\n"))
+            let expected = NativeMarkdownTextDecoder.decode(String(html.dropFirst(3).dropLast(5)))
+            let tree = NativeMarkdownASTParser().parse(source)
+            XCTAssertEqual(tree.children.map(\.kind), [.paragraph], "Example \(number)")
+            let actual = tree.children[0].children.map { node -> String in
+                if let semanticText = node.semanticText { return semanticText }
+                if node.kind == .softBreak { return "\n" }
+                return ""
+            }.joined()
+            XCTAssertEqual(actual, expected, "Example \(number)")
+        }
+    }
 }

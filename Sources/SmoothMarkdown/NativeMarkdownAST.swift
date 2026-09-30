@@ -294,6 +294,44 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
+        func isPunctuation(_ character: Character?) -> Bool {
+            guard let character else { return false }
+            return character.unicodeScalars.allSatisfy {
+                CharacterSet.punctuationCharacters.contains($0) || CharacterSet.symbols.contains($0)
+            }
+        }
+        func delimiterFlags(at position: Int, run: Int, marker: Character)
+            -> (opens: Bool, closes: Bool) {
+            let previous = position > 0 ? characters[position - 1] : nil
+            let next = position + run < characters.count ? characters[position + run] : nil
+            let previousSpace = previous?.isWhitespace ?? true
+            let nextSpace = next?.isWhitespace ?? true
+            let previousPunctuation = isPunctuation(previous)
+            let nextPunctuation = isPunctuation(next)
+            let left = !nextSpace && (!nextPunctuation || previousSpace || previousPunctuation)
+            let right = !previousSpace && (!previousPunctuation || nextSpace || nextPunctuation)
+            if marker == "_" {
+                return (left && (!right || previousPunctuation),
+                        right && (!left || nextPunctuation))
+            }
+            return (left, right)
+        }
+        func closingEmphasis(_ marker: Character, count: Int, after start: Int) -> Int? {
+            var cursor = start
+            while cursor < characters.count {
+                if characters[cursor] == "\\" {
+                    cursor += min(2, characters.count - cursor)
+                    continue
+                }
+                guard characters[cursor] == marker else { cursor += 1; continue }
+                let run = characters[cursor...].prefix(while: { $0 == marker }).count
+                if run >= count, delimiterFlags(at: cursor, run: run, marker: marker).closes {
+                    return cursor
+                }
+                cursor += run
+            }
+            return nil
+        }
 
         while index < characters.count {
             if characters[index] == "\\", index + 1 < characters.count {
@@ -386,8 +424,6 @@ struct NativeMarkdownASTParser {
                     }
                 }
             }
-            let marker: [Character]
-            let kind: NativeMarkdownNode.Kind
             if characters[index] == "~" {
                 let run = characters[index...].prefix(while: { $0 == "~" }).count
                 guard run <= 2, let end = closingTildes(run, after: index + run),
@@ -396,31 +432,24 @@ struct NativeMarkdownASTParser {
                 append(.strikethrough, start: index, end: end + run,
                        contentStart: index + run, contentEnd: end)
                 index = end + run; plainStart = index; continue
-            } else if index + 1 < characters.count, characters[index] == "*", characters[index + 1] == "*" {
-                marker = ["*", "*"]; kind = .strong
-            } else if index + 1 < characters.count, characters[index] == "_", characters[index + 1] == "_" {
-                if index > 0, index + 2 < characters.count,
-                   characters[index - 1].isLetter || characters[index - 1].isNumber,
-                   characters[index + 2].isLetter || characters[index + 2].isNumber {
-                    index += 2; continue
-                }
-                marker = ["_", "_"]; kind = .strong
-            } else if characters[index] == "*" || characters[index] == "_" {
-                if characters[index] == "_", index > 0, index + 1 < characters.count,
-                   (characters[index - 1].isLetter || characters[index - 1].isNumber),
-                   (characters[index + 1].isLetter || characters[index + 1].isNumber) {
-                    index += 1; continue
-                }
-                marker = [characters[index]]; kind = .emphasis
-            } else {
+            }
+            guard characters[index] == "*" || characters[index] == "_" else {
                 index += 1; continue
             }
-            if let end = closing(marker, after: index + marker.count), end > index + marker.count {
+            let marker = characters[index]
+            let run = characters[index...].prefix(while: { $0 == marker }).count
+            guard delimiterFlags(at: index, run: run, marker: marker).opens else {
+                index += run; continue
+            }
+            let count = min(run, 2)
+            if let end = closingEmphasis(marker, count: count, after: index + count),
+               end > index + count {
                 flushPlain(until: index)
-                append(kind, start: index, end: end + marker.count,
-                       contentStart: index + marker.count, contentEnd: end)
-                index = end + marker.count; plainStart = index
-            } else { index += 1 }
+                append(count == 2 ? .strong : .emphasis, start: index, end: end + count,
+                       contentStart: index + count, contentEnd: end)
+                index = end + count; plainStart = index; continue
+            }
+            index += run
         }
         flushPlain(until: characters.count)
         return result
