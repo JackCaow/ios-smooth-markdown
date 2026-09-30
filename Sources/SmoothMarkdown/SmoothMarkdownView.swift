@@ -661,17 +661,17 @@ public struct SmoothMarkdownView: View {
     }
     #endif
 
-    private func detailsBlock(_ details: DetailsSyntax.Block) -> some View {
+    private func detailsBlock(_ details: DetailsSyntax.Block) -> AnyView {
         let summary = parse(details.summary)
         let summaryNode = summary.child(at: 0)
         let summaryLabel = summaryNode.map(plainText).flatMap { $0.isEmpty ? nil : $0 } ?? "Details"
-        return DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
+        return AnyView(DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
             if let summaryNode { inlineView(summaryNode) }
         }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-            ForEach(Array(PluginBlockSyntax.sections(details.content, registry: plugins).enumerated()), id: \.offset) { _, section in
-                pluginSection(section)
+            ForEach(Array(DetailsSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
+                detailsSection(section)
             }
-        }))
+        })))
     }
 
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {

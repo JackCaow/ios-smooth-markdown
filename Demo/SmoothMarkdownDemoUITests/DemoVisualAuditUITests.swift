@@ -275,6 +275,23 @@ final class DemoVisualAuditUITests: XCTestCase {
         capture("state-07-chat-reply-complete", in: app)
     }
 
+    func test09NestedDetailsPreserveOuterAndInnerContent() {
+        let app = launchDemo()
+        choose("example-details-summary", in: app)
+        let outer = app.buttons["外层折叠块"]
+        reveal(outer, bySwiping: app, direction: .up)
+        XCTAssertTrue(outer.isHittable)
+        outer.tap()
+        let inner = app.buttons["内层折叠块"]
+        reveal(inner, bySwiping: app, direction: .up)
+        XCTAssertTrue(inner.isHittable)
+        inner.tap()
+        XCTAssertTrue(app.staticTexts["这是内层嵌套的内容。"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["外层内容的其他部分。"].exists)
+        XCTAssertFalse(app.staticTexts["</details>"].exists)
+        capture("details-nested-expanded-final", in: app)
+    }
+
     private func launchDemo() -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
