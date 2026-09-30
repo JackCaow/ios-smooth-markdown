@@ -164,4 +164,38 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertEqual(node.title, value.1, "Example \(number)")
         }
     }
+
+    func testOfficialEmphasisSemantics() throws {
+        func escape(_ value: String) -> String {
+            value.replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+                .replacingOccurrences(of: "\"", with: "&quot;")
+        }
+        func render(_ node: NativeMarkdownNode) -> String {
+            let content = node.children.map(render).joined()
+            switch node.kind {
+            case .text, .inlineCode:
+                let value = escape(node.semanticText ?? node.source)
+                return node.kind == .inlineCode ? "<code>" + value + "</code>" : value
+            case .paragraph: return "<p>" + content + "</p>\n"
+            case .strong: return "<strong>" + content + "</strong>"
+            case .emphasis: return "<em>" + content + "</em>"
+            case .softBreak: return "\n"
+            case .hardBreak: return "<br />\n"
+            case .inlineHTML: return node.source
+            case let .link(destination): return "<a href=\"" + escape(destination) + "\">" + content + "</a>"
+            case .document: return content
+            default: return "UNSUPPORTED(\(node.kind))"
+            }
+        }
+        let selected = try examples().filter { ($0["section"] as? String) == "Emphasis and strong emphasis" }
+        XCTAssertEqual(selected.count, 132)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(render(NativeMarkdownASTParser().parse(source)), expected, "Example \(number)")
+        }
+    }
 }

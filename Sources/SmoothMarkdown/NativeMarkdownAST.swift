@@ -572,21 +572,13 @@ struct NativeMarkdownASTParser {
             }
             let marker = characters[index]
             let run = characters[index...].prefix(while: { $0 == marker }).count
-            guard delimiterFlags(at: index, run: run, marker: marker).opens else {
-                index += run; continue
-            }
-            let count = min(run, 2)
-            if let end = closingEmphasis(marker, count: count, after: index + count),
-               end > index + count {
-                flushPlain(until: index)
-                append(count == 2 ? .strong : .emphasis, start: index, end: end + count,
-                       contentStart: index + count, contentEnd: end)
-                index = end + count; plainStart = index; continue
-            }
+            flushPlain(until: index)
+            append(.text, start: index, end: index + run)
             index += run
+            plainStart = index
         }
         flushPlain(until: characters.count)
-        return result
+        return NativeMarkdownEmphasisParser.resolve(result, source: source, offset: offset)
     }
 
     private func autolinkDestination(_ content: String) -> String? {
