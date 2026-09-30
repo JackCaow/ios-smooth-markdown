@@ -289,9 +289,22 @@ final class ReaderNativeImageTextView: UITextView, UIGestureRecognizerDelegate {
     private var imageHosts: [UIHostingController<AnyView>] = []
     private var imageSizes: [CGSize] = []
     private var dragAnchorUTF16: Int?
+    private var ownedTextStorage: NSTextStorage?
 
     override init(frame: CGRect, textContainer: NSTextContainer?) {
-        super.init(frame: frame, textContainer: textContainer)
+        if let textContainer {
+            super.init(frame: frame, textContainer: textContainer)
+        } else {
+            // A nil container starts UITextView in TextKit 2 on current iOS.
+            // The image anchor must use TextKit 1 glyph and line metrics.
+            let storage = NSTextStorage()
+            let manager = NSLayoutManager()
+            let container = NSTextContainer(size: .zero)
+            storage.addLayoutManager(manager)
+            manager.addTextContainer(container)
+            super.init(frame: frame, textContainer: container)
+            ownedTextStorage = storage
+        }
     }
 
     required init?(coder: NSCoder) {
