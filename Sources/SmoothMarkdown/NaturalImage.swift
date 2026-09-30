@@ -62,7 +62,7 @@ struct RemoteBitmapView: View {
         Group {
             if let svg {
                 NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
-                    SVGView(svg: svg).resizable().scaledToFit()
+                    SVGView(svg: svg)
                 }
             } else if let bitmap {
                 NaturalImageLayout(naturalSize: bitmap.size, explicitWidth: width, explicitHeight: height) {

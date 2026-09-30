@@ -1015,7 +1015,7 @@ public struct SmoothMarkdownView: View {
             guard let svg = SVG(named: name, in: .main) else { return AnyView(SwiftUI.Text(label)) }
             return accessibleImage(
                 NaturalImageLayout(naturalSize: svg.size, explicitWidth: width, explicitHeight: height) {
-                    SVGView(svg: svg).resizable().scaledToFit()
+                    SVGView(svg: svg)
                 }, url: URL(string: name), image: image, label: label, inline: inline)
         case let .bundled(name, svg: false):
             return accessibleImage(
@@ -1041,7 +1041,7 @@ public struct SmoothMarkdownView: View {
         case let .svg(svg):
             content = AnyView(NaturalImageLayout(naturalSize: svg.size,
                                                  explicitWidth: width, explicitHeight: height) {
-                SVGView(svg: svg).resizable().scaledToFit()
+                SVGView(svg: svg)
             })
         case let .bitmap(bitmap):
             content = AnyView(NaturalImageLayout(naturalSize: bitmap.size,

@@ -7,6 +7,8 @@
 - Native AST 与正式 HTML 导出对照 CommonMark 0.31.2 官方 652 例和 GFM 扩展 24 例，完整 HTML 均通过。
 - 联合版本的 Swift 包测试共 532 项，0 失败、1 项跳过（联合验收）。这些结果验证解析语义与包内行为。
 
+- iOS Simulator 定向运行 `ImageSourceTests` 与 `ReaderNativeImageSelectionTests`：8 项通过，验证响应字节识别、图片行高、下一段位置、选择范围和纯文本复制。
+
 ## 独立 CocoaPods consumer
 
 示例工程位于 `/tmp/smoothmarkdown-pod-consumer`。`PodConsumer/PodConsumerApp.swift` 仅导入 `SwiftUI` 和 `SmoothMarkdown`，并在同一 App 中实例化 `SmoothMarkdownView`、`StreamMarkdownView`、`SmoothMarkdownEditor`，注册一个接受 `Heading` 的自定义 `MarkdownWidgetBuilder`。Podfile 的唯一 pod 声明为：
@@ -48,8 +50,8 @@ pod lib lint SmoothMarkdown.podspec --allow-warnings \
 
 完整 Demo 截图套件 9 项通过，共导出 220 张 PNG，覆盖基础 Markdown、功能页、编辑器、主题、聊天、12 个会话详情、40 个 Mermaid 图及动态状态。截图与复核记录位于桌面 `ios-smooth-markdown-zero-dependency-review` 文件夹。
 
-截图发现并修复了嵌套折叠块、无扩展名 SVG 识别与缩放、发出消息表格表头对比度；折叠块和表头均有定向通过截图。公式复核覆盖括号、负间距、暗色透明背景及 cases 花括号。
+截图发现并修复了嵌套折叠块、无扩展名 SVG 识别与缩放、发出消息表格表头对比度；三项均有定向通过截图，最终证据在 `benchmarks/evidence/*-final.png`。SVG 曾因重复 `.scaledToFit()` 被压成 20pt 宽，移除重复适配后 9 个徽章恢复自然尺寸。公式复核覆盖括号、负间距、暗色透明背景及 cases 花括号。
 
-原始图片 fixture 中的 Flutter Logo 地址返回 404，另一处地址是预设失败样例。部分宽幅 Mermaid 图初始视窗显示不全，需双轴平移或缩放；这仍是现有布局限制。
+原始图片 fixture 中的 Flutter Logo 地址返回 404，另一处地址是预设失败样例。性能页第二个徽章的“404 badge not found”也是上游 SVG 内容。部分宽幅 Mermaid 图初始视窗显示不全，需双轴平移或缩放；这仍是现有布局限制。
 
 验证使用模拟器；CocoaPods Trunk 尚未发布，需要完成账号验证。
