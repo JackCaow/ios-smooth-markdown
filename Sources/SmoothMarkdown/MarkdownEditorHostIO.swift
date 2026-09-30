@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 #if canImport(UIKit)
 import UIKit
 #elseif canImport(AppKit)

@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Keeps image nodes in their original position among styled inline text.
 enum InlineContent {
