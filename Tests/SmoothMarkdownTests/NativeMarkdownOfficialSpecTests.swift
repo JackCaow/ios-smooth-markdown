@@ -3,7 +3,7 @@ import XCTest
 @testable import SmoothMarkdown
 
 /// Runs against the pinned official CommonMark examples when COMMONMARK_SPEC_JSON is set.
-/// This checks source preservation, not rendered HTML equivalence.
+/// Checks source ranges, block structure, and rendered HTML against official examples.
 final class NativeMarkdownOfficialSpecTests: XCTestCase {
     func testOfficialFirstVisibleBlockKindAcrossExamples() throws {
         var count = 0
@@ -260,6 +260,32 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
         let sections = ["Autolinks", "Raw HTML", "Hard line breaks", "Soft line breaks", "Code spans"]
         let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
         XCTAssertEqual(selected.count, 78)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
+
+    func testOfficialCodeHTMLAndEscapingSemantics() throws {
+        let sections = ["Backslash escapes", "Entity and numeric character references", "Fenced code blocks", "Indented code blocks", "HTML blocks"]
+        let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 115)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
+
+    func testOfficialRemainingBlockSemantics() throws {
+        let sections = ["Tabs", "Precedence", "Thematic breaks", "ATX headings", "Setext headings", "Link reference definitions", "Paragraphs", "Blank lines", "Inlines", "Textual content"]
+        let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 116)
         for example in selected {
             let number = try XCTUnwrap(example["example"] as? Int)
             let source = try XCTUnwrap(example["markdown"] as? String)
