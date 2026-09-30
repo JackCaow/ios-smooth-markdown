@@ -2,6 +2,45 @@
 
 Native Swift package and SwiftUI demo, based on [Flutter Smooth Markdown](https://github.com/JackCaow/flutter-smooth-markdown) version 0.10.0.
 
+## Use in an iOS app
+
+Requires iOS 17 or newer. In Xcode, choose **File > Add Package Dependencies**, enter
+`https://github.com/JackCaow/ios-smooth-markdown`, select the `main` branch, and add
+the **SmoothMarkdown** product to your app target. There is no version tag yet;
+pin a commit in shipped apps until a versioned release is available.
+
+For a package manifest, add the same repository and product:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", branch: "main")
+],
+targets: [
+    .target(name: "YourApp", dependencies: [
+        .product(name: "SmoothMarkdown", package: "ios-smooth-markdown")
+    ])
+]
+```
+
+Render Markdown in any SwiftUI screen:
+
+```swift
+import SmoothMarkdown
+import SwiftUI
+
+struct ArticleView: View {
+    let markdown: String
+
+    var body: some View {
+        SmoothMarkdownView(markdown: markdown, selectable: true)
+    }
+}
+```
+
+`SmoothMarkdownView` owns vertical scrolling by default. Set `scrollable: false`
+when the parent already scrolls, such as a chat list. HTML and parser plugins are
+off by default. The `Demo` directory is a runnable example, not an app dependency.
+
 ## Status
 
 On iOS, hosts can customize the menu shown for a selected native reader-text range:
