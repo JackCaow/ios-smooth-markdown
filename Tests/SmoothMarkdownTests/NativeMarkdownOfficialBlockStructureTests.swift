@@ -91,7 +91,6 @@ final class NativeMarkdownOfficialBlockStructureTests: XCTestCase {
             let html = try XCTUnwrap(example["html"] as? String)
             let actual = NativeMarkdownHTMLTestRenderer.render(
                 NativeMarkdownASTParser(enableGFM: false).parse(markdown))
-            if actual != html { print("HTMLDIFF \(number) actual=\(String(reflecting: actual)) expected=\(String(reflecting: html))") }
             XCTAssertEqual(actual, html, "CommonMark example \(number)")
         }
     }

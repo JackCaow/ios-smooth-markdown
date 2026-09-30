@@ -179,10 +179,14 @@ struct NativeMarkdownASTParser {
                 }
                 let contents = lines[start..<index].map { line -> Line in
                     let prefix = quotePrefix(line.text) ?? ""
-                    let body = String(line.text.dropFirst(prefix.count))
+                    var body = String(line.text.dropFirst(prefix.count))
+                    if prefix.hasSuffix(">"), body.hasPrefix("\t\t") {
+                        body = "      " + String(body.dropFirst(2))
+                    }
                     return Line(text: body, raw: body + (line.raw.hasSuffix("\n") ? "\n" : ""),
                                 start: line.start + (prefix as NSString).length,
-                                sourceEnd: line.end, projected: true)
+                                sourceEnd: line.end, projected: true,
+                                lazyContinuation: prefix.isEmpty)
                 }
                 result.append(node(.blockQuote, start, index,
                                    scan(contents, source: source, references: references))); continue
@@ -208,14 +212,18 @@ struct NativeMarkdownASTParser {
                         index += 1
                     }
                 }
-                result.append(node(.htmlBlock, start, index)); continue
+                let projected = lines[start..<index].contains(where: \.projected)
+                result.append(node(.htmlBlock, start, index,
+                                   literalText: projected ? lines[start..<index].map(\.raw).joined() : nil))
+                continue
             }
             index += 1
             while index < lines.count, !lines[index].isBlank,
                   (lines[index].lazyContinuation ||
                    (setextLevel(lines[index].text) == nil &&
                     !interruptsParagraph(at: index, lines: lines))) { index += 1 }
-            if index < lines.count, let level = setextLevel(lines[index].text) {
+            if index < lines.count, !lines[index].lazyContinuation,
+               let level = setextLevel(lines[index].text) {
                 let content = lines[start..<index].map(\.text).joined(separator: "\n")
                 let offset = lines[start].start
                 result.append(node(.heading(level), start, index + 1,
@@ -225,7 +233,8 @@ struct NativeMarkdownASTParser {
             }
             let end = index
             result.append(node(.paragraph, start, end,
-                               paragraphInlines(Array(lines[start..<end]), references: references)))
+                               paragraphInlines(Array(lines[start..<end]), source: source,
+                                                references: references)))
         }
         return result
     }
@@ -236,8 +245,15 @@ struct NativeMarkdownASTParser {
         return NativeMarkdownCodeSemantics.text(source: markdown, fenced: fenced)
     }
 
-    private func paragraphInlines(_ lines: [Line], references: [String: Reference]) -> [NativeMarkdownNode] {
+    private func paragraphInlines(_ lines: [Line], source: String,
+                                  references: [String: Reference]) -> [NativeMarkdownNode] {
         guard let first = lines.first else { return [] }
+        if lines.count > 1, !first.projected, first.text.contains("](") {
+            let content = lines.map { $0.text + ($0.raw.hasSuffix("\r\n") ? "\r" : "") }
+                .joined(separator: "\n")
+            return inline(content, offset: first.start, references: references,
+                          trimTrailingWhitespace: true, trimLeadingWhitespace: true)
+        }
         if lines.allSatisfy({ !$0.projected && indentation($0.text) == 0 }) {
             let content = lines.map {
                 $0.text + ($0.raw.hasSuffix("\r\n") ? "\r" : "")
@@ -248,17 +264,23 @@ struct NativeMarkdownASTParser {
         var children: [NativeMarkdownNode] = []
         for (position, line) in lines.enumerated() {
             let leading = line.text.prefix { $0 == " " || $0 == "\t" }
-            let removed = line.projected ? leading.count : min(3, leading.count)
+            let removed = line.projected || position > 0 ? leading.count : min(3, leading.count)
             let prefix = String(leading.prefix(removed))
             let body = String(line.text.dropFirst(removed))
-            children += inline(body, offset: line.start + (prefix as NSString).length,
+            let trailing = body.reversed().prefix { $0 == " " || $0 == "\t" }.count
+            let hardBreak = position + 1 < lines.count &&
+                (trailing >= 2 || (trailing == 0 && body.hasSuffix("\\")))
+            let visible = String(body.dropLast(trailing + (hardBreak && trailing == 0 ? 1 : 0)))
+            children += inline(visible, offset: line.start + (prefix as NSString).length,
                                references: references,
                                trimTrailingWhitespace: position == lines.count - 1)
             if position + 1 < lines.count {
-                let breakStart = line.start + (line.text as NSString).length
-                let breakRange = NSRange(location: breakStart, length: min(1, max(0, line.end - breakStart)))
+                let breakStart = line.start + (prefix as NSString).length + (visible as NSString).length
+                let breakRange = NSRange(location: breakStart, length: max(0, line.end - breakStart))
                 if breakRange.length > 0 {
-                    children.append(.init(kind: .softBreak, source: "\n", sourceRange: breakRange))
+                    let spelling = (source as NSString).substring(with: breakRange)
+                    children.append(.init(kind: hardBreak ? .hardBreak : .softBreak,
+                                          source: spelling, sourceRange: breakRange))
                 }
             }
         }
@@ -388,16 +410,23 @@ struct NativeMarkdownASTParser {
     }
 
     private func listMarker(_ line: String, maxIndent: Int = 3)
-        -> (indent: Int, prefix: String, ordered: Bool, number: Int, style: Character)? {
+        -> (indent: Int, prefix: String, ordered: Bool, number: Int,
+            style: Character, overflowSpaces: Int)? {
         guard let parts = match(#"^([ \t]*)([-+*]|[0-9]{1,9}[.)])([ \t]+|$)(.*)$"#, line) else { return nil }
         let indent = parts[1].reduce(0) { $0 + ($1 == "\t" ? 4 : 1) }
         guard indent <= maxIndent else { return nil }
         let marker = parts[2]
         let spacing = parts[3]
-        let consumed = spacing.count > 4 || parts[4].isEmpty ? min(1, spacing.count) : spacing.count
+        var column = indent + marker.count
+        for character in spacing {
+            column += character == "\t" ? 4 - column % 4 : 1
+        }
+        let spacingWidth = column - indent - marker.count
+        let overflow = spacingWidth > 4
+        let consumed = overflow || parts[4].isEmpty ? min(1, spacing.count) : spacing.count
         return (indent, parts[1] + marker + String(spacing.prefix(consumed)),
                 marker.last == "." || marker.last == ")",
-                Int(marker.dropLast()) ?? 1, marker.last!)
+                Int(marker.dropLast()) ?? 1, marker.last!, overflow ? spacingWidth - 1 : 0)
     }
 
     private func list(at start: Int, lines: [Line], source: String,
@@ -408,12 +437,17 @@ struct NativeMarkdownASTParser {
         var loose = false
         var parsedItems: [(range: NSRange, checked: Bool?, blocks: [NativeMarkdownNode])] = []
         while index < lines.count, let marker = listMarker(lines[index].text),
+              !isThematic(lines[index].text),
               marker.indent < siblingLimit, marker.ordered == first.ordered,
               marker.style == first.style {
             let itemStart = index
             let itemLine = lines[index]
             index += 1
             var body = String(itemLine.text.dropFirst(marker.prefix.count))
+            if marker.overflowSpaces > 0 {
+                body = String(repeating: " ", count: marker.overflowSpaces) +
+                    String(body.drop(while: { $0 == " " || $0 == "\t" }))
+            }
             let task = match(#"^\[([ xX])\][ \t]+"#, body)
             let checked: Bool?
             if let task {
@@ -483,7 +517,8 @@ struct NativeMarkdownASTParser {
             let itemRange = NSRange(location: itemLine.start, length: end - itemLine.start)
             parsedItems.append((itemRange, checked,
                                 scan(contents, source: source, references: references)))
-            if index >= lines.count || (listMarker(lines[index].text)?.indent ?? Int.max) >= siblingLimit ||
+            if index >= lines.count || isThematic(lines[index].text) ||
+                (listMarker(lines[index].text)?.indent ?? Int.max) >= siblingLimit ||
                 listMarker(lines[index].text)?.style != first.style { break }
         }
         let items = parsedItems.map { item -> NativeMarkdownNode in
@@ -501,16 +536,6 @@ struct NativeMarkdownASTParser {
                       listStart: first.ordered ? first.number : nil), index)
     }
 
-    private func indentation(_ text: String) -> Int {
-        var width = 0
-        for character in text {
-            if character == " " { width += 1 }
-            else if character == "\t" { width = (width / 4 + 1) * 4 }
-            else { break }
-        }
-        return width
-    }
-
     private func project(_ line: Line, removing width: Int) -> Line {
         var removed = 0
         var cursor = line.text.startIndex
@@ -521,9 +546,16 @@ struct NativeMarkdownASTParser {
             cursor = line.text.index(after: cursor)
         }
         let prefix = String(line.text[..<cursor])
-        let body = String(line.text[cursor...])
+        let leading = line.text.prefix { $0 == " " || $0 == "\t" }
+        let residual = max(0, indentation(line.text) - width)
+        let content = String(line.text.dropFirst(leading.count))
+        let body = String(repeating: " ", count: residual) + content
+        let physicalRemaining = leading.count - prefix.count
+        let offsetAdjustment = residual - physicalRemaining
+        let projectedStart = max(line.start,
+                                 line.start + (prefix as NSString).length - offsetAdjustment)
         return Line(text: body, raw: body + (line.raw.hasSuffix("\n") ? "\n" : ""),
-                    start: line.start + (prefix as NSString).length,
+                    start: projectedStart,
                     sourceEnd: line.end, projected: true)
     }
 

@@ -50,7 +50,9 @@ enum NativeMarkdownHTMLTestRenderer {
             return "<img src=\"" + destination(url) + "\" alt=\"" + escape(plainText(node)) + "\"" + title + " />"
         case .document: return content
         case .referenceDefinition: return ""
-        case .htmlBlock: return node.source.hasSuffix("\n") ? node.source : node.source + "\n"
+        case .htmlBlock:
+            let html = node.literalText ?? node.source
+            return html.hasSuffix("\n") ? html : html + "\n"
         case .blockQuote: return "<blockquote>\n" + content + "</blockquote>\n"
         case let .list(ordered):
             let tag = ordered ? "ol" : "ul"
