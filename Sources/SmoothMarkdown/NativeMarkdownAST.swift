@@ -20,11 +20,12 @@ struct NativeMarkdownNode: Equatable {
     let isTight: Bool?
     let listStart: Int?
     let literalText: String?
+    let tableAlignments: [String?]
 
     var semanticText: String? {
         switch kind {
         case .text: literalText ?? NativeMarkdownTextDecoder.decode(source)
-        case .inlineCode: NativeMarkdownTextDecoder.codeSpan(source)
+        case .inlineCode: literalText ?? NativeMarkdownTextDecoder.codeSpan(source)
         case .fencedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: true)
         case .indentedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: false)
         default: nil
@@ -33,7 +34,8 @@ struct NativeMarkdownNode: Equatable {
 
     init(kind: Kind, source: String, sourceRange: NSRange,
          children: [NativeMarkdownNode] = [], title: String? = nil,
-         isTight: Bool? = nil, listStart: Int? = nil, literalText: String? = nil) {
+         isTight: Bool? = nil, listStart: Int? = nil, literalText: String? = nil,
+         tableAlignments: [String?] = []) {
         self.kind = kind
         self.source = source
         self.sourceRange = sourceRange
@@ -42,6 +44,7 @@ struct NativeMarkdownNode: Equatable {
         self.isTight = isTight
         self.listStart = listStart
         self.literalText = literalText
+        self.tableAlignments = tableAlignments
     }
 }
 
@@ -144,19 +147,30 @@ struct NativeMarkdownASTParser {
                 result.append(node(.thematicBreak, start, start + 1)); index += 1; continue
             }
             if enableGFM, isTable(at: index, lines: lines) {
+                let alignments = tableSpans(lines[index + 1].text).map { span -> String? in
+                    let cell = (lines[index + 1].text as NSString).substring(with: span)
+                    if cell.hasPrefix(":") && cell.hasSuffix(":") { return "center" }
+                    if cell.hasPrefix(":") { return "left" }
+                    if cell.hasSuffix(":") { return "right" }
+                    return nil
+                }
                 index += 2
-                while index < lines.count, !lines[index].isBlank, lines[index].text.contains("|") {
+                while index < lines.count, !lines[index].isBlank, !interruptsParagraph(at: index, lines: lines) {
                     index += 1
                 }
                 let rowIndices = [start] + Array((start + 2)..<index)
                 let rows = rowIndices.map { rowIndex -> NativeMarkdownNode in
                     let row = lines[rowIndex]
-                    let cells = tableCells(row, references: references)
+                    var cells = Array(tableCells(row, references: references).prefix(alignments.count))
+                    while cells.count < alignments.count {
+                        cells.append(.init(kind: .tableCell, source: "", sourceRange: NSRange(location: row.start + (row.text as NSString).length, length: 0)))
+                    }
                     return .init(kind: .tableRow, source: row.text,
                                  sourceRange: NSRange(location: row.start, length: (row.text as NSString).length),
                                  children: cells)
                 }
-                result.append(node(.table, start, index, rows)); continue
+                let table = node(.table, start, index, rows)
+                result.append(.init(kind: .table, source: table.source, sourceRange: table.sourceRange, children: rows, tableAlignments: alignments)); continue
             }
             if listMarker(text) != nil {
                 let parsed = list(at: index, lines: lines, source: source, references: references)
@@ -372,40 +386,55 @@ struct NativeMarkdownASTParser {
 
     private func isTable(at index: Int, lines: [Line]) -> Bool {
         guard index + 1 < lines.count, lines[index].text.contains("|") else { return false }
-        let cells = lines[index + 1].text.trimmingCharacters(in: .whitespaces)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
-            .split(separator: "|", omittingEmptySubsequences: false)
-        return !cells.isEmpty && cells.allSatisfy {
-            $0.trimmingCharacters(in: .whitespaces)
-                .range(of: #"^:?-{3,}:?$"#, options: .regularExpression) != nil
+        let cells = tableSpans(lines[index + 1].text)
+        return !cells.isEmpty && cells.count == tableSpans(lines[index].text).count && cells.allSatisfy {
+            (lines[index + 1].text as NSString).substring(with: $0)
+                .range(of: #"^:?-+:?$"#, options: .regularExpression) != nil
         }
+    }
+
+    private func tableSpans(_ line: String) -> [NSRange] {
+        let text = line as NSString
+        var spans: [NSRange] = []
+        var start = 0
+        var slashes = 0
+        for index in 0..<text.length {
+            let character = text.character(at: index)
+            if character == 124 && slashes % 2 == 0 {
+                spans.append(NSRange(location: start, length: index - start))
+                start = index + 1
+            }
+            slashes = character == 92 ? slashes + 1 : 0
+        }
+        spans.append(NSRange(location: start, length: text.length - start))
+        func trim(_ span: NSRange) -> NSRange {
+            var location = span.location
+            var length = span.length
+            while length > 0, [UInt16(32), 9].contains(text.character(at: location)) { location += 1; length -= 1 }
+            while length > 0, [UInt16(32), 9].contains(text.character(at: location + length - 1)) { length -= 1 }
+            return NSRange(location: location, length: length)
+        }
+        spans = spans.map(trim)
+        if spans.count > 1, spans.first?.length == 0 { spans.removeFirst() }
+        if spans.count > 1, spans.last?.length == 0 { spans.removeLast() }
+        return spans
     }
 
     private func tableCells(_ line: Line, references: [String: Reference]) -> [NativeMarkdownNode] {
         let text = line.text as NSString
-        var spans: [NSRange] = []
-        var start = 0
-        for index in 0..<text.length where text.character(at: index) == 124 {
-            spans.append(NSRange(location: start, length: index - start))
-            start = index + 1
+        func normalizeCode(_ node: NativeMarkdownNode) -> NativeMarkdownNode {
+            .init(kind: node.kind, source: node.source, sourceRange: node.sourceRange,
+                  children: node.children.map(normalizeCode), title: node.title,
+                  isTight: node.isTight, listStart: node.listStart,
+                  literalText: node.kind == .inlineCode ? NativeMarkdownTextDecoder.codeSpan(node.source.replacingOccurrences(of: "\\|", with: "|")) : node.literalText,
+                  tableAlignments: node.tableAlignments)
         }
-        spans.append(NSRange(location: start, length: text.length - start))
-        if spans.first?.length == 0 { spans.removeFirst() }
-        if spans.last?.length == 0 { spans.removeLast() }
-        return spans.map { span in
-            var location = span.location
-            var length = span.length
-            while length > 0, [UInt16(32), 9].contains(text.character(at: location)) {
-                location += 1; length -= 1
-            }
-            while length > 0, [UInt16(32), 9].contains(text.character(at: location + length - 1)) {
-                length -= 1
-            }
-            let content = text.substring(with: NSRange(location: location, length: length))
-            let offset = line.start + location
+        return tableSpans(line.text).map { span in
+            let content = text.substring(with: span)
+            let offset = line.start + span.location
             return .init(kind: .tableCell, source: content,
-                         sourceRange: NSRange(location: offset, length: length),
-                         children: inline(content, offset: offset, references: references))
+                         sourceRange: NSRange(location: offset, length: span.length),
+                         children: inline(content, offset: offset, references: references).map(normalizeCode))
         }
     }
 
@@ -931,12 +960,15 @@ struct NativeMarkdownASTParser {
               characters[start] == "h" || characters[start] == "w" ||
                 characters[start].isLetter || characters[start].isNumber else { return nil }
         let candidate = String(characters[start...])
-        let pattern = #"^(?:https?://|www\.)[^\s<>]+|^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"#
+        let pattern = #"^(?:(?:https?|ftp)://|www\.)[^\s<>]+|^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+"#
         guard let expression = try? NSRegularExpression(pattern: pattern),
               let match = expression.firstMatch(in: candidate,
                                                range: NSRange(location: 0, length: (candidate as NSString).length)),
               match.range.location == 0 else { return nil }
         var spelling = (candidate as NSString).substring(with: match.range)
+        if let entity = spelling.range(of: #"&[A-Za-z0-9]+;$"#, options: .regularExpression) {
+            spelling = String(spelling[..<entity.lowerBound])
+        }
         while let last = spelling.last, ".,!?;:".contains(last) { spelling.removeLast() }
         while spelling.last == ")", spelling.filter({ $0 == ")" }).count > spelling.filter({ $0 == "(" }).count {
             spelling.removeLast()
@@ -950,7 +982,12 @@ struct NativeMarkdownASTParser {
                   labels.suffix(2).allSatisfy({ !$0.contains("_") }) else { return nil }
             destination = "http://" + spelling
         }
-        else if spelling.contains("@"), !spelling.contains("://") { destination = "mailto:" + spelling }
+        else if spelling.contains("@"), !spelling.contains("://") {
+            guard let last = spelling.last, last.isASCII && (last.isLetter || last.isNumber),
+                  let host = spelling.split(separator: "@").last,
+                  !host.contains("_") else { return nil }
+            destination = "mailto:" + spelling
+        }
         else {
             guard let url = URLComponents(string: spelling),
                   url.host?.isEmpty == false else { return nil }
