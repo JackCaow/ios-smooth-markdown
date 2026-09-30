@@ -63,15 +63,43 @@ enum DetailsSyntax {
         var content: [String] = []
         var foundSummary = false
         var inSummary = false
+        var depth = 1
+        var fence: Character?
+        var fenceLength = 0
         while index < lines.count {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             let lower = trimmed.lowercased()
-            if lower == "</details>" {
+            if let marker = fence {
+                if foundSummary { content.append(line) }
+                if let run = fenceRun(lower), run.0 == marker, run.1 >= fenceLength,
+                   lower.dropFirst(run.1).trimmingCharacters(in: .whitespaces).isEmpty {
+                    fence = nil
+                }
                 index += 1
-                break
+                continue
             }
-            if lower.hasPrefix("<summary>") {
+            if let run = fenceRun(lower) {
+                fence = run.0
+                fenceLength = run.1
+                if foundSummary { content.append(line) }
+                index += 1
+                continue
+            }
+            if lower == "<details>" || lower == "<details open>" {
+                depth += 1
+                if foundSummary { content.append(line) }
+                index += 1
+                continue
+            }
+            if lower == "</details>" {
+                depth -= 1
+                index += 1
+                if depth == 0 { break }
+                if foundSummary { content.append(line) }
+                continue
+            }
+            if depth == 1, lower.hasPrefix("<summary>") {
                 foundSummary = true
                 inSummary = true
                 let afterOpen = String(trimmed.dropFirst("<summary>".count))
