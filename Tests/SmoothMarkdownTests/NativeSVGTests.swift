@@ -37,6 +37,27 @@ final class NativeSVGTests: XCTestCase {
 import AppKit
 import SwiftUI
 
+private final class SVGImageMockProtocol: URLProtocol {
+    static let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==")!
+    static var requests = 0
+    static let lock = NSLock()
+
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "svg-image.test" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        Self.lock.lock()
+        Self.requests += 1
+        Self.lock.unlock()
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200,
+                                                               httpVersion: nil,
+                                                               headerFields: ["Content-Type": "image/png"])!,
+                            cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.png)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
+}
+
 @MainActor
 final class NativeSVGPixelTests: XCTestCase {
     private func bitmap(_ source: String, width: Int = 100, height: Int = 100) -> NSBitmapImageRep? {
@@ -45,6 +66,20 @@ final class NativeSVGPixelTests: XCTestCase {
         renderer.proposedSize = ProposedViewSize(width: CGFloat(width), height: CGFloat(height))
         guard let data = renderer.nsImage?.tiffRepresentation else { return nil }
         return NSBitmapImageRep(data: data)
+    }
+
+    func testExternalImageUsesURLSessionAndCache() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [SVGImageMockProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { session.invalidateAndCancel() }
+        let url = URL(string: "https://svg-image.test/\(UUID().uuidString).png")!
+        let first = await SVGExternalImageLoader.fetch(url, session: session)
+        let second = await SVGExternalImageLoader.fetch(url, session: session)
+        XCTAssertEqual(first?.width, 1)
+        XCTAssertEqual(second?.height, 1)
+        let requests = SVGImageMockProtocol.lock.withLock { SVGImageMockProtocol.requests }
+        XCTAssertEqual(requests, 1)
     }
 
     func testBasicPathRendersPixels() {
@@ -59,6 +94,14 @@ final class NativeSVGPixelTests: XCTestCase {
         XCTAssertNotNil(image)
         XCTAssertGreaterThan(image?.colorAt(x: 50, y: 50)?.alphaComponent ?? 0, 0.9)
         XCTAssertLessThan(image?.colorAt(x: 10, y: 10)?.alphaComponent ?? 1, 0.1)
+    }
+
+    func testObjectBoundingBoxPatternRepeats() {
+        let source = "<svg width='100' height='100'><defs><pattern id='dots' width='.2' height='.2'><rect width='10' height='10' fill='red'/></pattern></defs><rect width='100' height='100' fill='url(#dots)'/></svg>"
+        let image = bitmap(source)
+        XCTAssertGreaterThan(image?.colorAt(x: 5, y: 5)?.alphaComponent ?? 0, 0.9)
+        XCTAssertLessThan(image?.colorAt(x: 15, y: 15)?.alphaComponent ?? 1, 0.1)
+        XCTAssertGreaterThan(image?.colorAt(x: 25, y: 25)?.alphaComponent ?? 0, 0.9)
     }
 
     func testUserSpacePatternRepeats() {
@@ -86,6 +129,32 @@ final class NativeSVGPixelTests: XCTestCase {
         XCTAssertGreaterThan(right?.blueComponent ?? 0, right?.redComponent ?? 1)
     }
 
+    func testNestedViewportAlignmentAndSlice() {
+        let aligned = "<svg width='100' height='100'><svg x='10' y='10' width='80' height='40' viewBox='0 0 20 20' preserveAspectRatio='xMaxYMin meet'><rect width='20' height='20' fill='red'/></svg></svg>"
+        let image = bitmap(aligned)
+        XCTAssertLessThan(image?.colorAt(x: 20, y: 20)?.alphaComponent ?? 1, 0.1)
+        XCTAssertGreaterThan(image?.colorAt(x: 80, y: 20)?.alphaComponent ?? 0, 0.9)
+        let sliced = "<svg width='100' height='100'><svg x='10' y='10' width='80' height='40' viewBox='0 0 20 20' preserveAspectRatio='xMidYMid slice'><rect width='20' height='20' fill='blue'/></svg></svg>"
+        let sliceImage = bitmap(sliced)
+        XCTAssertGreaterThan(sliceImage?.colorAt(x: 15, y: 20)?.alphaComponent ?? 0, 0.9)
+        XCTAssertLessThan(sliceImage?.colorAt(x: 50, y: 60)?.alphaComponent ?? 1, 0.1)
+    }
+
+    func testNestedViewportPreserveAspectRatioNone() {
+        let source = "<svg width='100' height='100'><svg x='10' y='10' width='80' height='40' viewBox='0 0 20 20' preserveAspectRatio='none'><rect width='20' height='20' fill='red'/></svg></svg>"
+        let image = bitmap(source)
+        XCTAssertGreaterThan(image?.colorAt(x: 15, y: 20)?.alphaComponent ?? 0, 0.9)
+        XCTAssertGreaterThan(image?.colorAt(x: 85, y: 45)?.alphaComponent ?? 0, 0.9)
+        XCTAssertLessThan(image?.colorAt(x: 50, y: 60)?.alphaComponent ?? 1, 0.1)
+    }
+
+    func testLuminanceMaskHidesBlackAndShowsWhite() {
+        let source = "<svg width='100' height='100'><defs><mask id='lights'><rect width='50' height='100' fill='black'/><rect x='50' width='50' height='100' fill='white'/></mask></defs><rect width='100' height='100' fill='red' mask='url(#lights)'/></svg>"
+        let image = bitmap(source)
+        XCTAssertLessThan(image?.colorAt(x: 25, y: 50)?.alphaComponent ?? 1, 0.1)
+        XCTAssertGreaterThan(image?.colorAt(x: 75, y: 50)?.alphaComponent ?? 0, 0.9)
+    }
+
     func testAlphaMaskLimitsPaintedArea() {
         let source = "<svg width='100' height='100'><defs><mask id='window'><circle cx='50' cy='50' r='20' fill='white'/></mask></defs><rect width='100' height='100' fill='red' mask='url(#window)'/></svg>"
         let image = bitmap(source)
@@ -98,6 +167,15 @@ final class NativeSVGPixelTests: XCTestCase {
         let image = bitmap(source)
         XCTAssertGreaterThan(image?.colorAt(x: 50, y: 50)?.alphaComponent ?? 0, 0.9)
         XCTAssertLessThan(image?.colorAt(x: 10, y: 10)?.alphaComponent ?? 1, 0.1)
+    }
+
+    func testGradientInheritanceUserSpaceAndTransform() {
+        let source = "<svg width='100' height='100'><defs><linearGradient id='base' gradientUnits='userSpaceOnUse' x1='0' y1='0' x2='100' y2='0'><stop offset='0%' stop-color='red'/><stop offset='100%' stop-color='blue'/></linearGradient><linearGradient id='shifted' href='#base' gradientTransform='translate(25 0)'/></defs><rect width='100' height='100' fill='url(#shifted)'/></svg>"
+        let image = bitmap(source)
+        let left = image?.colorAt(x: 30, y: 50)?.usingColorSpace(.deviceRGB)
+        let right = image?.colorAt(x: 90, y: 50)?.usingColorSpace(.deviceRGB)
+        XCTAssertGreaterThan(left?.redComponent ?? 0, right?.redComponent ?? 1)
+        XCTAssertGreaterThan(right?.blueComponent ?? 0, left?.blueComponent ?? 1)
     }
 
     func testRadialGradientHasDistinctCenterAndEdge() {
