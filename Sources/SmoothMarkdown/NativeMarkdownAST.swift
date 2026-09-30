@@ -277,6 +277,30 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
+        func closingBracket(after start: Int) -> Int? {
+            var depth = 0
+            var cursor = start
+            while cursor < characters.count {
+                if characters[cursor] == "\\" {
+                    cursor += min(2, characters.count - cursor)
+                    continue
+                }
+                if characters[cursor] == "`" {
+                    let run = characters[cursor...].prefix(while: { $0 == "`" }).count
+                    if let end = closingBackticks(run, after: cursor + run) {
+                        cursor = end + run
+                        continue
+                    }
+                }
+                if characters[cursor] == "[" { depth += 1 }
+                if characters[cursor] == "]" {
+                    if depth == 0 { return cursor }
+                    depth -= 1
+                }
+                cursor += 1
+            }
+            return nil
+        }
         func closingTildes(_ count: Int, after start: Int) -> Int? {
             var cursor = start
             while cursor + count <= characters.count {
@@ -493,7 +517,7 @@ struct NativeMarkdownASTParser {
                 let image = characters[index] == "!"
                 let open = image ? index + 1 : index
                 if open < characters.count, characters[open] == "[",
-                   let close = closing(["]"], after: open + 1) {
+                   let close = closingBracket(after: open + 1) {
                     let label = String(characters[(open + 1)..<close])
                     var destination: String?
                     var title: String?
@@ -511,7 +535,13 @@ struct NativeMarkdownASTParser {
                     } else if !image {
                         destination = references[normalizeReference(label)]
                     }
-                    if let destination {
+                    let labelChildren = inline(label, offset: offset + utf16Offset(open + 1),
+                                               references: references)
+                    let containsLink = labelChildren.contains { child in
+                        if case .link = child.kind { return true }
+                        return child.children.contains { if case .link = $0.kind { return true }; return false }
+                    }
+                    if let destination, image || !containsLink {
                         flushPlain(until: index)
                         append(image ? .image(destination) : .link(destination), start: index,
                                end: end, contentStart: open + 1, contentEnd: close, title: title)

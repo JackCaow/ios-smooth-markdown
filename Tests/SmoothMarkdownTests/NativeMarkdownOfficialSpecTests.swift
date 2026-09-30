@@ -120,4 +120,25 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             }
         }
     }
+
+    func testOfficialNestedLinkLabelsAndLinkPrecedence() throws {
+        let selected: Set<Int> = [512, 515, 517, 518, 520]
+        for example in try examples() {
+            guard let number = example["example"] as? Int, selected.contains(number) else { continue }
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            let links = paragraph.children.filter { if case .link = $0.kind { return true }; return false }
+            let images = paragraph.children.filter { if case .image = $0.kind { return true }; return false }
+            switch number {
+            case 512, 515, 517:
+                XCTAssertEqual(links.map(\.kind), [.link("/uri")], "Example \(number)")
+            case 518:
+                XCTAssertEqual(links.map(\.kind), [.link("/uri")], "Example \(number)")
+                XCTAssertEqual(links.first?.source, "[bar](/uri)")
+            case 520:
+                XCTAssertEqual(images.map(\.kind), [.image("uri3")], "Example \(number)")
+            default: break
+            }
+        }
+    }
 }
