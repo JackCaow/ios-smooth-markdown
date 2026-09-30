@@ -74,4 +74,25 @@ final class NativeMarkdownOfficialBlockStructureTests: XCTestCase {
                            try htmlShapes(html), "CommonMark example \(number)")
         }
     }
+
+    func testOfficialQuoteAndListRenderedHTML() throws {
+        guard let path = ProcessInfo.processInfo.environment["COMMONMARK_SPEC_JSON"] else {
+            throw XCTSkip("Set COMMONMARK_SPEC_JSON to CommonMark 0.31.2 spec.json")
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let examples = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        let selected = examples.filter {
+            ["Block quotes", "List items", "Lists"].contains($0["section"] as? String ?? "")
+        }
+        XCTAssertEqual(selected.count, 99)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let markdown = try XCTUnwrap(example["markdown"] as? String)
+            let html = try XCTUnwrap(example["html"] as? String)
+            let actual = NativeMarkdownHTMLTestRenderer.render(
+                NativeMarkdownASTParser(enableGFM: false).parse(markdown))
+            if actual != html { print("HTMLDIFF \(number) actual=\(String(reflecting: actual)) expected=\(String(reflecting: html))") }
+            XCTAssertEqual(actual, html, "CommonMark example \(number)")
+        }
+    }
 }

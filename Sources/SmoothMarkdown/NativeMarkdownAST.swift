@@ -18,6 +18,7 @@ struct NativeMarkdownNode: Equatable {
     let children: [NativeMarkdownNode]
     let title: String?
     let isTight: Bool?
+    let listStart: Int?
     let literalText: String?
 
     var semanticText: String? {
@@ -30,13 +31,14 @@ struct NativeMarkdownNode: Equatable {
 
     init(kind: Kind, source: String, sourceRange: NSRange,
          children: [NativeMarkdownNode] = [], title: String? = nil,
-         isTight: Bool? = nil, literalText: String? = nil) {
+         isTight: Bool? = nil, listStart: Int? = nil, literalText: String? = nil) {
         self.kind = kind
         self.source = source
         self.sourceRange = sourceRange
         self.children = children
         self.title = title
         self.isTight = isTight
+        self.listStart = listStart
         self.literalText = literalText
     }
 }
@@ -54,6 +56,7 @@ struct NativeMarkdownASTParser {
         let start: Int
         var sourceEnd: Int? = nil
         var projected = false
+        var lazyContinuation = false
         var end: Int { sourceEnd ?? start + (raw as NSString).length }
         var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
@@ -192,8 +195,9 @@ struct NativeMarkdownASTParser {
             }
             index += 1
             while index < lines.count, !lines[index].isBlank,
-                  setextLevel(lines[index].text) == nil,
-                  !interruptsParagraph(at: index, lines: lines) { index += 1 }
+                  (lines[index].lazyContinuation ||
+                   (setextLevel(lines[index].text) == nil &&
+                    !interruptsParagraph(at: index, lines: lines))) { index += 1 }
             if index < lines.count, let level = setextLevel(lines[index].text) {
                 let content = lines[start..<index].map(\.text).joined(separator: "\n")
                 let offset = lines[start].start
@@ -210,7 +214,7 @@ struct NativeMarkdownASTParser {
 
     private func paragraphInlines(_ lines: [Line], references: [String: Reference]) -> [NativeMarkdownNode] {
         guard let first = lines.first else { return [] }
-        if lines.allSatisfy({ !$0.projected }) {
+        if lines.allSatisfy({ !$0.projected && indentation($0.text) == 0 }) {
             let content = lines.map {
                 $0.text + ($0.raw.hasSuffix("\r\n") ? "\r" : "")
             }.joined(separator: "\n")
@@ -219,7 +223,12 @@ struct NativeMarkdownASTParser {
         }
         var children: [NativeMarkdownNode] = []
         for (position, line) in lines.enumerated() {
-            children += inline(line.text, offset: line.start, references: references,
+            let leading = line.text.prefix { $0 == " " || $0 == "\t" }
+            let removed = line.projected ? leading.count : min(3, leading.count)
+            let prefix = String(leading.prefix(removed))
+            let body = String(line.text.dropFirst(removed))
+            children += inline(body, offset: line.start + (prefix as NSString).length,
+                               references: references,
                                trimTrailingWhitespace: position == lines.count - 1)
             if position + 1 < lines.count {
                 let breakStart = line.start + (line.text as NSString).length
@@ -431,7 +440,9 @@ struct NativeMarkdownASTParser {
                     continue
                 }
                 if !interruptsParagraph(at: index, lines: lines), !body.isEmpty {
-                    contents.append(project(current, removing: 0))
+                    var continuation = project(current, removing: min(indent, contentIndent))
+                    continuation.lazyContinuation = true
+                    contents.append(continuation)
                     lastContent = index
                     index += 1
                     continue
@@ -456,7 +467,8 @@ struct NativeMarkdownASTParser {
         let end = items.last.map { NSMaxRange($0.sourceRange) } ?? lines[start].end
         let range = NSRange(location: lines[start].start, length: end - lines[start].start)
         return (.init(kind: .list(ordered: first.ordered), source: (source as NSString).substring(with: range),
-                      sourceRange: range, children: items, isTight: !loose), index)
+                      sourceRange: range, children: items, isTight: !loose,
+                      listStart: first.ordered ? first.number : nil), index)
     }
 
     private func indentation(_ text: String) -> Int {
