@@ -3,6 +3,23 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class NativeMarkdownGFMTests: XCTestCase {
+    func testOfficialTaskListSemanticsAndSourceRanges() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "gfm-tasklist", withExtension: "json"))
+        let examples = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: String]])
+        XCTAssertEqual(examples.count, 2)
+        for (index, example) in examples.enumerated() {
+            let source = try XCTUnwrap(example["markdown"])
+            let tree = NativeMarkdownASTParser().parse(source)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(tree), example["html"],
+                           "GFM task list example \(index + 1)")
+            func check(_ node: NativeMarkdownNode) {
+                XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
+                node.children.forEach(check)
+            }
+            check(tree)
+        }
+    }
+
     func testOfficialInlineExtensionSemantics() throws {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "gfm-inline", withExtension: "json"))
         let examples = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: String]])
@@ -36,13 +53,7 @@ final class NativeMarkdownGFMTests: XCTestCase {
             let source = try XCTUnwrap(example["markdown"])
             let expected = try XCTUnwrap(example["html"])
             let tree = NativeMarkdownASTParser().parse(source)
-            // Container HTML is covered by the CommonMark container adapter separately.
-            if index != 3 {
-                XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(tree), expected, "GFM table example \(index + 1)")
-            } else {
-                XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(tree.children[0]), String(expected[..<expected.range(of: "</table>\n")!.upperBound]), "GFM block interruption")
-                XCTAssertEqual(tree.children[1].kind, .blockQuote)
-            }
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(tree), expected, "GFM table example \(index + 1)")
             func check(_ node: NativeMarkdownNode) {
                 XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
                 node.children.forEach(check)

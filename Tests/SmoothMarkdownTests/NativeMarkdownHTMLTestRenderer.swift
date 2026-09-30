@@ -61,14 +61,15 @@ enum NativeMarkdownHTMLTestRenderer {
                 ? " start=\"\(node.listStart!)\"" : ""
             let items = node.children.map { render($0, tightList: node.isTight ?? true) }.joined()
             return "<\(tag)\(start)>\n" + items + "</\(tag)>\n"
-        case .listItem:
-            if node.children.isEmpty { return "<li></li>\n" }
-            if !tightList { return "<li>\n" + content + "</li>\n" }
+        case let .listItem(checked):
+            let checkbox = checked.map { "<input " + ($0 ? "checked=\"\" " : "") + "disabled=\"\" type=\"checkbox\"> " } ?? ""
+            if node.children.isEmpty { return "<li>" + checkbox + "</li>\n" }
+            if !tightList { return "<li>\n" + checkbox + content + "</li>\n" }
             let inline = node.children.prefix { !isBlock($0) }.map { render($0, tightList: false) }.joined()
             let blocks = node.children.dropFirst(node.children.prefix { !isBlock($0) }.count)
             let body = blocks.map { render($0, tightList: false) }.joined()
-            if body.isEmpty { return "<li>" + inline + "</li>\n" }
-            return "<li>" + inline + "\n" + body + "</li>\n"
+            if body.isEmpty { return "<li>" + checkbox + inline + "</li>\n" }
+            return "<li>" + checkbox + inline + "\n" + body + "</li>\n"
         case .table:
             func row(_ row: NativeMarkdownNode, header: Bool) -> String {
                 let tag = header ? "th" : "td"
