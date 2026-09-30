@@ -6,17 +6,13 @@ The library is under active development. It supports common Markdown and GFM con
 
 ## Install
 
-Requires **iOS 17+** and Swift Package Manager. In Xcode, use **File → Add Package Dependencies**, enter:
+Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. Markdown is parsed into a native Swift AST; SVG and math rendering use Apple frameworks.
 
-```text
-https://github.com/JackCaow/ios-smooth-markdown
-```
-
-Add the **SmoothMarkdown** product to your app target and select version **0.1.0** or later. If you maintain a `Package.swift`, add:
+The zero-dependency code is currently on the `codex/ios-zero-dependencies-integration` branch. The existing `0.1.0` tag is an older release, and `0.2.0` has not been released yet. Until `0.2.0` is published, select that branch in Xcode's **File → Add Package Dependencies** for this version. If you maintain a `Package.swift`, add:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.1.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", branch: "codex/ios-zero-dependencies-integration")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -25,11 +21,19 @@ targets: [
 ]
 ```
 
-The `Demo` app is for exploration and is not required by the package.
+CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
 
-### SVG images
+```ruby
+pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :branch => 'codex/ios-zero-dependencies-integration'
+```
 
-SVG images use a SwiftUI Canvas/CoreGraphics path for common vector shapes and paints. Complex SVGs, including embedded web fonts, use Apple's `WKWebView` with JavaScript disabled. That path retains browser-grade SVG rendering without an external SVG package, but creates a WebKit view and may fetch resources referenced by the SVG. External raster images in the Canvas path use a bounded `URLSession` download and a 32 MiB in-memory cache. The native and WebKit paths were checked against SwiftDraw 0.29's 97 sample SVGs: 96 valid documents render, and the intentionally malformed sample is rejected. Browser rendering can differ from SwiftDraw where its output differs from SVG source semantics.
+`SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
+
+### SVG and math
+
+The native SVG path uses SwiftUI Canvas/CoreGraphics for common shapes and paints. Complex SVGs, including embedded fonts, use Apple's `WKWebView` with JavaScript disabled; referenced resources may be fetched. External raster images in the Canvas path use a bounded `URLSession` download and a 32 MiB in-memory cache. The implementation rendered all 96 valid SVGs in SwiftDraw 0.29's 97-sample fixture set and rejected its intentionally malformed sample. Browser SVG output can differ from the old renderer's pixels.
+
+Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layout. A SwiftUI renderer remains visible while a formula is prepared or if WebKit cannot render it. Neither path adds a package dependency.
 
 ## Quick start
 

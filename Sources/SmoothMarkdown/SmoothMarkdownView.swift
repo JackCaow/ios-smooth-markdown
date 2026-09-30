@@ -408,7 +408,7 @@ public struct SmoothMarkdownView: View {
         if hasCustomBuilder(node) { return true }
         if node is Paragraph || node is Heading || node is Markdown.Table.Cell {
             // Match the same post-plugin text pieces that inlineView will dispatch.
-            // The raw swift-markdown Text node may contain a plugin token that
+            // The raw native Markdown.Text node may contain a plugin token that
             // becomes a separate result before builders see ordinary text.
             return hasCustomExtension(in: node) || InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
                                       hasCustomBuilder: hasCustomBuilder).contains {
