@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 import XCTest
 @testable import SmoothMarkdown
 

@@ -2,7 +2,6 @@
 import Combine
 import SwiftUI
 import UIKit
-import struct Markdown.Paragraph
 
 /// Source editing, live preview, and split view backed by MarkdownEditorController.
 @available(iOS 17.0, *)

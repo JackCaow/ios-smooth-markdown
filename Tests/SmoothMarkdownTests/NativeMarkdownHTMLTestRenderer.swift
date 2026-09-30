@@ -1,0 +1,4 @@
+import Foundation
+@testable import SmoothMarkdown
+
+typealias NativeMarkdownHTMLTestRenderer = NativeMarkdownHTMLSerializer

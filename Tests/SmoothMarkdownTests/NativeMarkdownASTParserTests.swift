@@ -2,6 +2,100 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class NativeMarkdownASTParserTests: XCTestCase {
+    func testBlockQuoteTabsUseAbsoluteColumnsAndPreserveContentRanges() {
+        let samples: [(String, NativeMarkdownNode.Kind, String)] = [
+            (">\tfoo\n", .paragraph, "foo"),
+            (">\t\tfoo\n", .indentedCode, "  foo\n"),
+            (">\t foo\n", .paragraph, "foo"),
+            (" >\tfoo\n", .paragraph, "foo"),
+            ("  >\tfoo\n", .paragraph, "foo"),
+            ("   >\tfoo\n", .paragraph, "foo"),
+        ]
+        for (source, kind, expected) in samples {
+            let quote = NativeMarkdownASTParser().parse(source).children[0]
+            XCTAssertEqual(quote.kind, .blockQuote, source)
+            let block = quote.children[0]
+            XCTAssertEqual(block.kind, kind, source)
+            if kind == .paragraph {
+                XCTAssertEqual(block.children.map { $0.semanticText ?? "" }.joined(), expected, source)
+            } else {
+                XCTAssertEqual(block.semanticText, expected, source)
+            }
+            func check(_ node: NativeMarkdownNode) {
+                XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source, source)
+                node.children.forEach(check)
+            }
+            check(quote)
+        }
+    }
+
+    func testTabListIndentationAndTaskModeSwitch() {
+        let source = "-\titem\n    continuation\n"
+        let list = NativeMarkdownASTParser().parse(source).children[0]
+        XCTAssertEqual(list.kind, .list(ordered: false))
+        XCTAssertEqual(list.children.count, 1)
+        XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(list),
+                       "<ul>\n<li>item\ncontinuation</li>\n</ul>\n")
+        let taskSource = "- [x] done\n"
+        let commonMark = NativeMarkdownASTParser(enableGFM: false).parse(taskSource)
+        XCTAssertEqual(commonMark.children[0].children[0].kind, .listItem(checked: nil))
+        XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(commonMark),
+                       "<ul>\n<li>[x] done</li>\n</ul>\n")
+    }
+
+    func testQuotedLazyContinuationAndListTightness() {
+        let source = "> > 😀 foo\nbar\n\n- tight\n- item\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children.map(\.kind), [
+            .blockQuote, .list(ordered: false),
+        ])
+        XCTAssertEqual(tree.children[0].children[0].kind, .blockQuote)
+        XCTAssertEqual(tree.children[0].children[0].children[0].kind, .paragraph)
+        XCTAssertEqual(tree.children[1].isTight, true)
+        XCTAssertEqual(tree.children[1].children[0].children.map(\.kind), [.text])
+        let loose = NativeMarkdownASTParser().parse("- loose\n\n  continuation\n").children[0]
+        XCTAssertEqual(loose.isTight, false)
+        XCTAssertEqual(loose.children[0].children.map(\.kind), [.paragraph, .paragraph])
+        let text = source as NSString
+        func check(_ node: NativeMarkdownNode) {
+            XCTAssertEqual(text.substring(with: node.sourceRange), node.source)
+            node.children.forEach(check)
+        }
+        check(tree)
+    }
+
+    func testCommonMarkBlockPrecedenceExamples() {
+        // CommonMark 0.31.2: setext headings, thematic breaks, and fenced code blocks.
+        let cases: [(String, [NativeMarkdownNode.Kind])] = [
+            ("Foo\n---\n", [.heading(2)]),
+            ("***\n", [.thematicBreak]),
+            ("- - -\n", [.thematicBreak]),
+            ("``` ruby\nputs 1\n```\n", [.fencedCode("ruby")]),
+            ("    code\n", [.indentedCode]),
+            ("# heading ###\n", [.heading(1)]),
+        ]
+        for (source, expected) in cases {
+            let tree = NativeMarkdownASTParser().parse(source)
+            XCTAssertEqual(tree.children.map(\.kind), expected, source)
+        }
+    }
+
+    func testGFMTablesAndTaskItemsUseSourceRanges() {
+        // GFM 0.29-gfm: table and task list extensions.
+        let source = "😀 | B\n---|---\nx | y\n\n- [x] done\n- [ ] later\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children.map(\.kind), [.table, .list(ordered: false)])
+        XCTAssertEqual(tree.children[0].children.count, 2)
+        XCTAssertEqual(tree.children[1].children.map(\.kind),
+                       [.listItem(checked: true), .listItem(checked: false)])
+        let text = source as NSString
+        func check(_ node: NativeMarkdownNode) {
+            XCTAssertEqual(text.substring(with: node.sourceRange), node.source)
+            node.children.forEach(check)
+        }
+        check(tree)
+    }
+
     func testSourcePreservingBlocksAndUTF16Ranges() {
         let source = "😀 intro\n\n## Bold **name**\n\n```swift\nlet x = 1\n```\n"
         let tree = NativeMarkdownASTParser().parse(source)

@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Swift Markdown parses Markdown markers inside HTML code tags. Restore the
 /// original source of those children before the reader builds inline runs.

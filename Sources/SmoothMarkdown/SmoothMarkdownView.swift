@@ -1,4 +1,3 @@
-import Markdown
 import SwiftDraw
 import SwiftUI
 #if os(iOS)
