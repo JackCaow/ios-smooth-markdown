@@ -34,6 +34,7 @@ enum NativeMathParser {
     private struct Parser {
         let chars: [Character]
         var index = 0
+        var spacesAllowed = false
         init(_ chars: [Character]) { self.chars = chars }
         var end: Bool { index >= chars.count }
         var current: Character? { end ? nil : chars[index] }
@@ -68,6 +69,18 @@ enum NativeMathParser {
             var nodes: [NativeMathNode] = []
             while let c = current, c != terminator {
                 if c == "}" { break }
+                // Ordinary whitespace has no width in TeX math mode. Explicit spacing
+                // commands (including escaped space) still produce a visible gap.
+                if c.isWhitespace {
+                    _ = take()
+                    if spacesAllowed { nodes.append(.space(5)) }
+                    continue
+                }
+                if let style = ["displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle"]
+                    .first(where: { consumeControlWord("\\" + $0) }) {
+                    nodes.append(.style(style, .row(row(until: terminator))))
+                    return nodes
+                }
                 for (command, left, right, ruled) in [
                     ("\\over", "", "", true), ("\\atop", "", "", false),
                     ("\\choose", "(", ")", false), ("\\brack", "[", "]", false),
@@ -138,12 +151,21 @@ enum NativeMathParser {
                          environment == "eqnarray" ? "rcl" : environment == "cases" ? "ll" : "c")
                     let starredAlignment = environment.hasSuffix("*") && consume("[") ? String(take() ?? "c") : ""
                     if !starredAlignment.isEmpty { _ = consume("]") }
+                    let opening = "\\begin{" + environment + "}"
                     let closing = "\\end{" + environment + "}"
                     var body = ""
-                    while !end && !chars[index...].starts(with: Array(closing)) { body.append(take()!) }
-                    _ = consume(closing)
-                    let rows = body.replacingOccurrences(of: "\\cr", with: "\\\\").components(separatedBy: "\\\\").map { line in
-                        line.components(separatedBy: "&").map { NativeMathParser.parse($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    var nesting = 1
+                    while !end && nesting > 0 {
+                        if consume(opening) { nesting += 1; body += opening; continue }
+                        if consume(closing) {
+                            nesting -= 1
+                            if nesting > 0 { body += closing }
+                            continue
+                        }
+                        body.append(take()!)
+                    }
+                    let rows = Self.splitTopLevel(body, rows: true).map { line in
+                        Self.splitTopLevel(line, rows: false).map { NativeMathParser.parse($0) }
                     }
                     let base = environment.replacingOccurrences(of: "*", with: "")
                     let brackets: (String, String) = base == "pmatrix" ? ("(", ")") :
@@ -209,6 +231,13 @@ enum NativeMathParser {
                 let aliases = ["textrm":"mathrm", "rm":"mathrm", "bf":"mathbf", "textbf":"mathbf",
                                "cal":"mathcal", "texttt":"mathtt", "textit":"mathit", "mit":"mathit",
                                "textsf":"mathsf", "frak":"mathfrak", "mathbfit":"bm", "text":"mathrm"]
+                if name == "text" || name == "operatorname" {
+                    let previous = spacesAllowed
+                    spacesAllowed = true
+                    let value = group()
+                    spacesAllowed = previous
+                    return .alphabet(aliases[name] ?? "mathrm", value)
+                }
                 return .alphabet(aliases[name] ?? name, group())
             case "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle":
                 return .style(name, group())
@@ -232,9 +261,52 @@ enum NativeMathParser {
         mutating func rawGroup() -> String {
             guard consume("{") else { return "" }
             var value = ""
-            while let c = current, c != "}" { value.append(take()!) }
-            _ = consume("}")
+            var depth = 1
+            while let c = take() {
+                if c == "{" { depth += 1 }
+                if c == "}" { depth -= 1 }
+                if depth == 0 { break }
+                value.append(c)
+            }
             return value
+        }
+
+        /// Splits table separators only outside groups and nested environments.
+        private static func splitTopLevel(_ source: String, rows: Bool) -> [String] {
+            let chars = Array(source)
+            var pieces: [String] = []
+            var part = ""
+            var braces = 0
+            var environments = 0
+            var index = 0
+            while index < chars.count {
+                let remaining = chars[index...]
+                if remaining.starts(with: Array("\\begin{")) { environments += 1 }
+                if remaining.starts(with: Array("\\end{")) { environments = max(0, environments - 1) }
+                if chars[index] == "\\", index + 1 < chars.count {
+                    if braces == 0 && environments == 0 && rows {
+                        if chars[index + 1] == "\\" {
+                            pieces.append(part); part = ""; index += 2; continue
+                        }
+                        if remaining.starts(with: Array("\\cr")),
+                           index + 3 == chars.count || !chars[index + 3].isLetter {
+                            pieces.append(part); part = ""; index += 3; continue
+                        }
+                    }
+                    if chars[index + 1] == "\\" || !chars[index + 1].isLetter {
+                        part.append(chars[index]); part.append(chars[index + 1]); index += 2; continue
+                    }
+                }
+                if braces == 0 && environments == 0 && !rows && chars[index] == "&" {
+                    pieces.append(part); part = ""; index += 1; continue
+                }
+                if chars[index] == "{" { braces += 1 }
+                if chars[index] == "}" { braces = max(0, braces - 1) }
+                part.append(chars[index])
+                index += 1
+            }
+            pieces.append(part)
+            return pieces
         }
     }
 
@@ -278,7 +350,7 @@ private struct MathNodeView: View {
                                      value: index > 0 && NativeMathSpacing.canBreak(after: nodes[index - 1]))
                 }
             }
-        case let .space(_):
+        case .space:
             Color.clear.frame(width: 0, height: 0)
         case let .fraction(top, bottom):
             VStack(spacing: 1) {
@@ -368,7 +440,9 @@ private struct MathNodeView: View {
         case "mathtt": return .system(size: size, design: .monospaced)
         case "mathbf": return .custom("TimesNewRomanPS-BoldMT", fixedSize: size)
         case "bm": return .custom("TimesNewRomanPS-BoldItalicMT", fixedSize: size)
-        case "mathit", "mathnormal" where value.allSatisfy(\.isLetter):
+        case "mathit" where value.allSatisfy(\.isLetter):
+            return .custom("TimesNewRomanPS-ItalicMT", fixedSize: size)
+        case "mathnormal" where value.allSatisfy(\.isLetter):
             return .custom("TimesNewRomanPS-ItalicMT", fixedSize: size)
         default: return .custom("TimesNewRomanPSMT", fixedSize: size)
         }

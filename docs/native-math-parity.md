@@ -1,17 +1,17 @@
-# Native math command inventory (Draft #100)
+# Native math command inventory (PR #100)
 
-Compared against the pinned `swiftui-math` 0.1.0 source (`AtomFactory.swift` and `Parser.swift`, revision `0b5c2cfa`). This is an implementation checklist, not visual parity sign-off. The app on `main` continues to use SwiftUIMath.
+Compared against the pinned `swiftui-math` 0.1.0 source (`AtomFactory.swift` and `Parser.swift`, revision `0b5c2cfa`). This is an implementation checklist, not visual parity sign-off. The app on `main` continues to use SwiftUIMath. The draft uses no third-party math renderer: it parses the supported TeX commands locally, emits MathML, and asks Apple's offline WebKit engine to typeset and snapshot it. A local SwiftUI renderer remains visible until the snapshot is ready or if WebKit fails.
 
 | Category | Upstream | Draft renderer | Remaining difference |
 | --- | --- | --- | --- |
-| Named symbols and named operators | 233 glyph/operator entries plus 13 aliases | All 233 names map to visible glyphs; operators retain default limit behavior | Atom class spacing and font metrics differ |
-| Spacing and style | 6 spacing commands, 4 style commands | Parsed as mu gaps or scoped style nodes | Global TeX style state and negative kern metrics differ |
-| Fonts | 22 font command names | Parsed with scoped aliases; system fonts and Unicode alphabets | No bundled Latin Modern; some Unicode glyph fallback differs |
-| Accents and enclosures | 12 accents, overline, underline, left/right delimiters | Parsed and rendered with scalable text/overlays | Geometry is approximate |
-| Fractions/roots | frac, cfrac, dfrac, tfrac, binom, over, atop, choose, brack, brace, sqrt | Structural nodes and views | Continued fraction alignment and TeX rule/axis metrics differ |
-| Colors | color, textcolor, colorbox | Hex RGB foreground/background | Color inheritance differs from the upstream monochrome default |
-| Tables/environments | 13 matrix forms and 7 additional environments | Parsed and rendered as grids | Column sizing, delimiters and baseline differ |
-| Other parser commands | substack, pmod, not, limits/nolimits, escaped characters | Parsed for common forms | Unsupported negation combinations remain visible source |
+| Named symbols and named operators | 233 glyph/operator entries plus 13 aliases | All 233 names map to visible glyphs; operators retain default limit behavior | Apple math font and operator spacing differ from Latin Modern |
+| Spacing and style | 6 spacing commands, 4 style commands | Decimal em mu gaps including negative `\!`; ordinary math spaces ignored; style state scopes to remaining atoms in its group | Exact TeX font metrics still differ |
+| Fonts | 22 font command names | MathML mathvariant and system fallback fonts | No bundled Latin Modern; some Unicode glyph shapes differ |
+| Accents and enclosures | 12 accents, overline, underline, left/right delimiters | MathML mover/munder; only explicit left/right and matrix fences stretch, while ordinary parentheses remain text size | Wide accents may remain narrow on WebKit; very tall nested fences show glyph assembly seams |
+| Fractions/roots | frac, cfrac, dfrac, tfrac, binom, over, atop, choose, brack, brace, sqrt | MathML fractions, roots and scripts | Continued fraction and TeX axis metrics differ |
+| Colors | color, textcolor, colorbox | MathML foreground/background; base color resolves from `styleSheet.textColor` in the active color scheme and enters the snapshot cache key | This draft honors explicit colors while the app's old default Math view used monochrome mode |
+| Tables/environments | 13 matrix forms and 7 additional environments | MathML tables with column alignment; nested environments retain their own row and cell separators | WebKit's table/fence typography differs |
+| Other parser commands | substack, pmod, not, limits/nolimits, escaped characters | All 11 upstream `not` combinations, limits and controls parsed | Unknown commands remain visible source rather than upstream parse error |
 
 ## Upstream named commands by category
 
@@ -47,5 +47,8 @@ Compared against the pinned `swiftui-math` 0.1.0 source (`AtomFactory.swift` and
 ## Evidence
 
 - `Tests/SmoothMarkdownTests/NativeMathParserTests.swift` covers symbol inventory, structural nodes, actual macOS SwiftUI hosting layout, bitmap rendering, and constrained inline wrapping.
-- `benchmarks/evidence/ios-native-math-draft.png` is a real macOS SwiftUI host snapshot. It is not an iOS visual parity result.
-- Full TeX font metrics, arbitrary nesting, source error behavior, and all upstream snapshots still require further work. Keep PR #100 as Draft.
+- `Tests/SmoothMarkdownTests/NativeMathMLTests.swift` covers MathML structure, escaping, style and column alignment, ordinary/explicit spacing, actual offline WebKit snapshots, transparent crop, snapshot cache reuse, and formulas wider than the initial 2048-point viewport.
+- `DemoExamplesUITests.testMathPageSnapshotsThroughMatrixAndCalculus` captures the top, summation, matrix, and calculus areas plus dark theme of the full Demo math page on an iPhone 17 Pro Simulator (iOS 26.0.1). The five PNGs are `benchmarks/evidence/ios-native-math-webkit-{top,sum,matrix,calculus,dark}.png`; the test passed on 2026-09-30.
+- `benchmarks/evidence/ios-native-math-webkit-gallery.png` is an actual offline macOS WebKit snapshot covering alphabet variants, wide accents, nested matrices, cases, limits, colors, fractions, and a dark card. It exposes remaining wide-accent and tall-fence geometry differences.
+- `benchmarks/evidence/ios-native-math-draft.png` is the earlier local SwiftUI fallback snapshot.
+- Simulator review found no missing, clipped, or overlapping formulas across the Demo page. Wide accents remain visually narrow over multi-character operands, and WebKit assembles very tall nested delimiters with visible seams. These are typography differences from the pinned Latin Modern renderer, not missing commands or values. Unknown commands remain visible source instead of triggering the upstream parser error.

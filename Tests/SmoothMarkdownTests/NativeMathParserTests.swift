@@ -83,6 +83,46 @@ extension NativeMathParserTests {
         }
     }
 
+    func testNestedMatrixKeepsInnerSeparatorsInsideCell() {
+        let source = "\\begin{pmatrix}\\begin{matrix}a&b\\\\c&d\\end{matrix}&x\\\\y&z\\end{pmatrix}"
+        guard case let .row(nodes) = NativeMathParser.parse(source),
+              case let .matrix(rows, _, _) = nodes.first,
+              case let .row(cell) = rows.first?.first,
+              case let .matrix(inner, _, _) = cell.first else {
+            return XCTFail("Expected nested matrix in first cell")
+        }
+        XCTAssertEqual(rows.map(\.count), [2, 2])
+        XCTAssertEqual(inner.map(\.count), [2, 2])
+    }
+
+    func testStyleCommandsApplyToFollowingAtomsWithinGroup() {
+        let parsed = NativeMathParser.parse("a+{\\displaystyle b+\\textstyle c}+d")
+        guard case let .row(nodes) = parsed,
+              case let .row(group) = nodes[2],
+              case let .style("displaystyle", display) = group.first,
+              case let .row(displayAtoms) = display,
+              case .style("textstyle", _) = displayAtoms.last else {
+            return XCTFail("Expected scoped styles")
+        }
+        XCTAssertEqual(displayAtoms.first, .text("b"))
+        XCTAssertEqual(nodes.last, .text("d"))
+    }
+
+    func testEveryUpstreamNegationCombination() {
+        XCTAssertEqual(NativeMathSymbols.negated.count, 11)
+        for (command, glyph) in NativeMathSymbols.negated {
+            let source = command == "=" ? "\\not=" : "\\not\\" + command
+            XCTAssertEqual(NativeMathParser.parse(source), .row([.text(glyph)]), source)
+        }
+    }
+
+    func testTextPreservesSpacesAndNestedGroups() {
+        XCTAssertEqual(NativeMathParser.parse("\\text{a {b} c}"),
+                       .row([.alphabet("mathrm", .row([.text("a"), .space(5),
+                                                        .row([.text("b")]), .space(5), .text("c")]))]))
+        XCTAssertEqual(NativeMathParser.parse("a b"), .row([.text("a"), .text("b")]))
+    }
+
     func testMathAlphabetsPreserveScopeAndMapUnicode() {
         XCTAssertEqual(NativeMathParser.parse("\\mathbb{R}+\\mathfrak{g}"),
                        .row([.alphabet("mathbb", .row([.text("R")])), .text("+"),
@@ -140,7 +180,7 @@ extension NativeMathParserTests {
                        .row([.delimited("(", ")", .row([.fraction(.row([.text("1")]),
                                                                     .row([.text("2")]))]))]))
         XCTAssertEqual(NativeMathParser.parse("\\left\\langle x \\right\\rangle"),
-                       .row([.delimited("⟨", "⟩", .row([.text(" "), .text("x"), .text(" ")]))]))
+                       .row([.delimited("⟨", "⟩", .row([.text("x")]))]))
         XCTAssertTrue(NativeMathColor.isValid("#00aaff"))
         XCTAssertFalse(NativeMathColor.isValid("red"))
     }
@@ -235,7 +275,7 @@ extension NativeMathParserTests {
 
     func testInfixFractionsAndAccentsDoNotSharePrefixes() {
         XCTAssertEqual(NativeMathParser.parse("{a\\over b}"),
-                       .row([.row([.fraction(.row([.text("a")]), .row([.text(" "), .text("b")]))])]))
+                       .row([.row([.fraction(.row([.text("a")]), .row([.text("b")]))])]))
         XCTAssertEqual(NativeMathParser.parse("\\overline{x}"),
                        .row([.accent("¯", .row([.text("x")]))]))
         XCTAssertEqual(NativeMathParser.parse("\\leftarrow"), .row([.text("←")]))
