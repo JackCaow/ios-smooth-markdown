@@ -1,4 +1,3 @@
-import SwiftDraw
 import XCTest
 @testable import SmoothMarkdown
 

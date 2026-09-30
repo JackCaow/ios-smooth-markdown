@@ -1,4 +1,3 @@
-import SwiftDraw
 import SwiftUI
 import SwiftUIMath
 #if os(iOS)

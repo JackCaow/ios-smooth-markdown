@@ -27,6 +27,10 @@ targets: [
 
 The `Demo` app is for exploration and is not required by the package.
 
+### SVG images
+
+SVG images use a SwiftUI Canvas/CoreGraphics path for common vector shapes and paints. Complex SVGs, including embedded web fonts, use Apple's `WKWebView` with JavaScript disabled. That path retains browser-grade SVG rendering without an external SVG package, but creates a WebKit view and may fetch resources referenced by the SVG. External raster images in the Canvas path use a bounded `URLSession` download and a 32 MiB in-memory cache. The native and WebKit paths were checked against SwiftDraw 0.29's 97 sample SVGs: 96 valid documents render, and the intentionally malformed sample is rejected. Browser rendering can differ from SwiftDraw where its output differs from SVG source semantics.
+
 ## Quick start
 
 ### Render a document

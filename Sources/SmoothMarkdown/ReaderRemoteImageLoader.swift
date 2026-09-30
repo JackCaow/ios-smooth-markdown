@@ -1,7 +1,6 @@
 #if os(iOS)
 import Foundation
 import ImageIO
-import SwiftDraw
 import UIKit
 
 struct ReaderRemoteImageKey: Hashable, Sendable {
@@ -38,7 +37,7 @@ enum ReaderRemoteImageResolution: @unchecked Sendable {
         guard let data else { return .failure }
         guard ReaderRemoteImagePolicy.acceptsPayloadBytes(data.count, svg: key.svg) else { return .rejected }
         if key.svg {
-            guard let image = SVG(data: data) else { return .failure }
+            guard let image = SVG(data: data, baseURL: key.url) else { return .failure }
             let size = image.size
             guard size.width.isFinite, size.height.isFinite,
                   size.width > 0, size.height > 0,
