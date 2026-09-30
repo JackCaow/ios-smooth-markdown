@@ -19,7 +19,7 @@ final class NativeMathParserTests: XCTestCase {
         guard case let .script(base, sub, sup) = nodes.first else {
             return XCTFail("Expected summation bounds")
         }
-        XCTAssertEqual(base, .text("∑"))
+        XCTAssertEqual(base, .largeOperator("∑", limits: true))
         XCTAssertEqual(sub, .row([.text("i"), .text("="), .text("1")]))
         XCTAssertEqual(sup, .row([.text("n")]))
         XCTAssertTrue(nodes.contains(.text("∞")))
@@ -62,3 +62,71 @@ extension NativeMathParserTests {
         }
     }
 }
+
+extension NativeMathParserTests {
+    func testCasesArrayAndAlignmentEnvironments() {
+        let examples: [(String, String, String, Int, Int)] = [
+            ("\\begin{cases}x&x>0\\\\-x&x\\leq0\\end{cases}", "cases", "ll", 2, 2),
+            ("\\begin{array}{lcr}a&b&c\\\\d&e&f\\end{array}", "array", "lcr", 2, 3),
+            ("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}", "aligned", "rl", 2, 2),
+            ("\\begin{gather}x=1\\\\y=2\\end{gather}", "gather", "c", 2, 1)
+        ]
+        for (source, expectedName, expectedColumns, rowCount, columnCount) in examples {
+            guard case let .row(nodes) = NativeMathParser.parse(source),
+                  case let .environment(name, columns, rows) = nodes.first else {
+                return XCTFail("Expected environment for \(source)")
+            }
+            XCTAssertEqual(name, expectedName)
+            XCTAssertEqual(columns, expectedColumns)
+            XCTAssertEqual(rows.count, rowCount)
+            XCTAssertEqual(rows.map(\.count), Array(repeating: columnCount, count: rowCount))
+        }
+    }
+
+    func testMathAlphabetsPreserveScopeAndMapUnicode() {
+        XCTAssertEqual(NativeMathParser.parse("\\mathbb{R}+\\mathfrak{g}"),
+                       .row([.alphabet("mathbb", .row([.text("R")])), .text("+"),
+                             .alphabet("mathfrak", .row([.text("g")]))]))
+        XCTAssertEqual(NativeMathGlyphs.styled("RZ", alphabet: "mathbb"), "ℝℤ")
+        XCTAssertEqual(NativeMathGlyphs.styled("Ag", alphabet: "mathfrak"), "𝔄𝔤")
+        XCTAssertEqual(NativeMathGlyphs.styled("x", alphabet: "mathrm"), "x")
+    }
+
+    func testLargeOperatorLimitOverrides() {
+        let examples: [(String, NativeMathNode)] = [
+            ("\\sum_{i=1}^{n}", .largeOperator("∑", limits: true)),
+            ("\\sum\\nolimits_{i=1}^{n}", .largeOperator("∑", limits: false)),
+            ("\\int_0^1", .largeOperator("∫", limits: false)),
+            ("\\int\\limits_0^1", .largeOperator("∫", limits: true))
+        ]
+        for (source, expectedBase) in examples {
+            guard case let .row(nodes) = NativeMathParser.parse(source),
+                  case let .script(base, sub, sup) = nodes.first else {
+                return XCTFail("Expected scripted operator for \(source)")
+            }
+            XCTAssertEqual(base, expectedBase)
+            XCTAssertNotNil(sub)
+            XCTAssertNotNil(sup)
+        }
+    }
+}
+
+#if os(macOS)
+import AppKit
+import SwiftUI
+
+extension NativeMathParserTests {
+    @MainActor
+    func testRenderedDisplayOperatorAndCasesHaveExpectedHeight() {
+        func height(_ latex: String, display: Bool) -> CGFloat {
+            NSHostingView(rootView: NativeMathView(latex: latex, size: 20, display: display).fixedSize())
+                .fittingSize.height
+        }
+        let inline = height("\\sum_{i=1}^{n} i", display: false)
+        let display = height("\\sum_{i=1}^{n} i", display: true)
+        XCTAssertGreaterThan(display, inline)
+        XCTAssertGreaterThan(height("\\begin{cases}x&x>0\\\\-x&x\\leq0\\end{cases}", display: true),
+                             height("x", display: true))
+    }
+}
+#endif

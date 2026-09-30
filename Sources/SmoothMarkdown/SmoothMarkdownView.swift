@@ -1280,7 +1280,7 @@ public struct SmoothMarkdownView: View {
         if let builder = extensionBuilder(node) {
             builder.build(node, context: renderContext()).fixedSize()
         } else {
-            NativeMathView(latex: latex, size: 16)
+            NativeMathView(latex: latex, size: 16, display: false)
                 .fixedSize()
                 .accessibilityLabel(latex)
         }
@@ -1299,7 +1299,7 @@ public struct SmoothMarkdownView: View {
 
     private func nativeBlockMath(_ latex: String) -> some View {
         ScrollView(.horizontal) {
-            NativeMathView(latex: latex, size: 20)
+            NativeMathView(latex: latex, size: 20, display: true)
                 .fixedSize()
                 .accessibilityLabel(latex.isEmpty ? "Empty formula" : latex)
         }
