@@ -39,6 +39,11 @@ struct NativeMarkdownNode: Equatable {
 /// The first native AST pass reuses the editor's source-preserving block scanner.
 /// It deliberately keeps unrecognized blocks as raw nodes, rather than dropping source.
 struct NativeMarkdownASTParser {
+    private struct Reference {
+        let destination: String
+        let title: String?
+    }
+
     init() {}
 
     func parse(_ source: String) -> NativeMarkdownNode {
@@ -77,7 +82,7 @@ struct NativeMarkdownASTParser {
     }
 
     private func parse(_ block: MarkdownDocumentBlock, range: NSRange,
-                       references: [String: String]) -> NativeMarkdownNode {
+                       references: [String: Reference]) -> NativeMarkdownNode {
         func node(_ kind: NativeMarkdownNode.Kind, _ children: [NativeMarkdownNode] = []) -> NativeMarkdownNode {
             NativeMarkdownNode(kind: kind, source: block.source, sourceRange: range, children: children)
         }
@@ -181,7 +186,7 @@ struct NativeMarkdownASTParser {
     }
 
     private func listNodes(_ list: MarkdownSourceList, source: String, base: Int,
-                           references: [String: String]) -> [NativeMarkdownNode] {
+                           references: [String: Reference]) -> [NativeMarkdownNode] {
         let text = source as NSString
         func width(_ indent: String) -> Int {
             indent.reduce(0) { value, character in
@@ -229,7 +234,7 @@ struct NativeMarkdownASTParser {
     }
 
     private func inline(_ source: String, offset: Int,
-                        references: [String: String]) -> [NativeMarkdownNode] {
+                        references: [String: Reference]) -> [NativeMarkdownNode] {
         let characters = Array(source)
         var utf16Positions = [Int](repeating: 0, count: characters.count + 1)
         for position in characters.indices {
@@ -530,10 +535,14 @@ struct NativeMarkdownASTParser {
                     } else if end < characters.count, characters[end] == "[",
                               let referenceEnd = closing(["]"], after: end + 1) {
                         let reference = String(characters[(end + 1)..<referenceEnd])
-                        destination = references[normalizeReference(reference.isEmpty ? label : reference)]
+                        let match = references[normalizeReference(reference.isEmpty ? label : reference)]
+                        destination = match?.destination
+                        title = match?.title
                         end = referenceEnd + 1
-                    } else if !image {
-                        destination = references[normalizeReference(label)]
+                    } else {
+                        let match = references[normalizeReference(label)]
+                        destination = match?.destination
+                        title = match?.title
                     }
                     let labelChildren = inline(label, offset: offset + utf16Offset(open + 1),
                                                references: references)
@@ -632,27 +641,31 @@ struct NativeMarkdownASTParser {
         label.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
     }
 
-    private func referenceDefinitions(in document: MarkdownDocument) -> [String: String] {
-        var result: [String: String] = [:]
+    private func referenceDefinitions(in document: MarkdownDocument) -> [String: Reference] {
+        var result: [String: Reference] = [:]
         for block in document.blocks {
             if case .fencedCode = block.kind { continue }
             for line in block.source.components(separatedBy: "\n") {
                 guard let definition = referenceDefinition(line), !definition.label.hasPrefix("^") else { continue }
                 let key = normalizeReference(definition.label)
-                if result[key] == nil { result[key] = definition.destination }
+                if result[key] == nil {
+                    result[key] = Reference(destination: definition.destination, title: definition.title)
+                }
             }
         }
         return result
     }
 
-    private func referenceDefinition(_ line: String) -> (label: String, destination: String)? {
-        let pattern = #"^ {0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"[^"]*"|'[^']*'))?[ \t]*$"#
+    private func referenceDefinition(_ line: String) -> (label: String, destination: String, title: String?)? {
+        let pattern = #"^ {0,3}\[([^\]]+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
         guard let expression = try? NSRegularExpression(pattern: pattern),
               let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)),
               match.range(at: 1).location != NSNotFound,
               match.range(at: 2).location != NSNotFound else { return nil }
         let text = line as NSString
+        let title = (3...5).first(where: { match.range(at: $0).location != NSNotFound })
+            .map { NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: $0))) }
         return (text.substring(with: match.range(at: 1)),
-                NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: 2))))
+                NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: 2))), title)
     }
 }
