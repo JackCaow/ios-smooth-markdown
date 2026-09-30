@@ -167,4 +167,14 @@ final class NativeMarkdownASTParserTests: XCTestCase {
         XCTAssertEqual(nodes.map(\.source), ["`foo", "``bar``"])
         XCTAssertEqual(nodes[1].semanticText, "bar")
     }
+
+    func testEmphasisRequiresCommonMarkFlanking() {
+        let source = "a * foo bar* and a*\"foo\"* and foo_bar_baz and _foo_bar"
+        let nodes = NativeMarkdownASTParser().parse(source).children[0].children
+        XCTAssertEqual(nodes.map(\.kind), [.text])
+        XCTAssertEqual(nodes[0].source, source)
+        let valid = NativeMarkdownASTParser().parse("*italic* **bold** _also_")
+            .children[0].children
+        XCTAssertEqual(valid.map(\.kind), [.emphasis, .text, .strong, .text, .emphasis])
+    }
 }
