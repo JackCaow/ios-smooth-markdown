@@ -89,4 +89,35 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertEqual(actual, expected, "Example \(number)")
         }
     }
+
+    func testOfficialInlineLinkBoundaries() throws {
+        let valid: [Int: (String, String?)] = [
+            482: ("/uri", "title"), 483: ("/uri", nil), 484: ("./target.md", nil),
+            485: ("", nil), 486: ("", nil), 487: ("", nil),
+        ]
+        let invalid: Set<Int> = [488, 490, 493, 497, 508]
+        for example in try examples() {
+            guard let number = example["example"] as? Int,
+                  valid[number] != nil || invalid.contains(number) else { continue }
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            XCTAssertEqual(paragraph.kind, .paragraph, "Example \(number)")
+            let links = paragraph.children.filter { if case .link = $0.kind { return true }; return false }
+            if let expected = valid[number] {
+                let link = try XCTUnwrap(links.first, "Example \(number)")
+                XCTAssertEqual(link.kind, .link(expected.0), "Example \(number)")
+                XCTAssertEqual(link.title, expected.1, "Example \(number)")
+            } else {
+                XCTAssertTrue(links.isEmpty, "Example \(number)")
+                let html = try XCTUnwrap(example["html"] as? String)
+                let expected = NativeMarkdownTextDecoder.decode(String(html.dropFirst(3).dropLast(5)))
+                let actual = paragraph.children.map { node -> String in
+                    if let semanticText = node.semanticText { return semanticText }
+                    if node.kind == .softBreak { return "\n" }
+                    return ""
+                }.joined()
+                XCTAssertEqual(actual, expected, "Example \(number)")
+            }
+        }
+    }
 }

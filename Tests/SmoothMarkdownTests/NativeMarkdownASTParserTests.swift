@@ -177,4 +177,31 @@ final class NativeMarkdownASTParserTests: XCTestCase {
             .children[0].children
         XCTAssertEqual(valid.map(\.kind), [.emphasis, .text, .strong, .text, .emphasis])
     }
+
+    func testInlineLinkDestinationAndTitleGrammar() {
+        let source = #"[ok](foo(and(bar)) "title") [space](<foo bar> 'label') [escaped](foo\)bar)"#
+        let links = NativeMarkdownASTParser().parse(source).children[0].children
+            .filter { if case .link = $0.kind { return true }; return false }
+        XCTAssertEqual(links.map(\.kind), [.link("foo(and(bar))"), .link("foo bar"), .link("foo)bar")])
+        XCTAssertEqual(links.map(\.title), ["title", "label", nil])
+
+        for invalid in ["[link](/my uri)", "[link](foo\nbar)",
+                        #"[link](<foo\>)"#, "[link](foo(and(bar))",
+                        #"[link](/url "title "and" title")"#] {
+            let nodes = NativeMarkdownASTParser().parse(invalid).children[0].children
+            XCTAssertFalse(nodes.contains { if case .link = $0.kind { return true }; return false },
+                           invalid)
+        }
+    }
+
+    func testCRLFLineBreakKeepsUTF16SourceAndLinkSpacing() {
+        let source = "a  \r\nb [link](url\r\n\"title\")"
+        let tree = NativeMarkdownASTParser().parse(source)
+        let nodes = tree.children[0].children
+        XCTAssertTrue(nodes.contains { $0.kind == .hardBreak && $0.source == "  \r\n" })
+        XCTAssertTrue(nodes.contains { $0.kind == .link("url") && $0.title == "title" })
+        for node in nodes {
+            XCTAssertEqual((source as NSString).substring(with: node.sourceRange), node.source)
+        }
+    }
 }

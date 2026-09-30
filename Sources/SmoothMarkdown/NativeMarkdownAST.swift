@@ -16,6 +16,7 @@ struct NativeMarkdownNode: Equatable {
     let source: String
     let sourceRange: NSRange
     let children: [NativeMarkdownNode]
+    let title: String?
 
     var semanticText: String? {
         switch kind {
@@ -25,11 +26,13 @@ struct NativeMarkdownNode: Equatable {
         }
     }
 
-    init(kind: Kind, source: String, sourceRange: NSRange, children: [NativeMarkdownNode] = []) {
+    init(kind: Kind, source: String, sourceRange: NSRange,
+         children: [NativeMarkdownNode] = [], title: String? = nil) {
         self.kind = kind
         self.source = source
         self.sourceRange = sourceRange
         self.children = children
+        self.title = title
     }
 }
 
@@ -237,9 +240,12 @@ struct NativeMarkdownASTParser {
         var plainStart = 0
 
         func utf16Offset(_ position: Int) -> Int { utf16Positions[position] }
+        func isLineEnding(_ character: Character) -> Bool {
+            character == "\n" || character == "\r" || character == "\r\n"
+        }
         func append(_ kind: NativeMarkdownNode.Kind, start: Int, end: Int,
                     contentStart: Int? = nil, contentEnd: Int? = nil,
-                    parseContent: Bool = true) {
+                    parseContent: Bool = true, title: String? = nil) {
             let spelling = String(characters[start..<end])
             let children: [NativeMarkdownNode]
             if let contentStart, let contentEnd {
@@ -255,7 +261,8 @@ struct NativeMarkdownASTParser {
             } else { children = [] }
             result.append(.init(kind: kind, source: spelling,
                                 sourceRange: NSRange(location: offset + utf16Offset(start),
-                                                     length: (spelling as NSString).length), children: children))
+                                                     length: (spelling as NSString).length),
+                                children: children, title: title))
         }
         func flushPlain(until end: Int) {
             if plainStart < end { append(.text, start: plainStart, end: end) }
@@ -332,17 +339,104 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
+        func linkTail(after opening: Int) -> (destination: String, title: String?, end: Int)? {
+            guard characters.indices.contains(opening), characters[opening] == "(" else { return nil }
+            var cursor = opening + 1
+            func skipSpace() -> Bool {
+                var lineEndings = 0
+                while cursor < characters.count, characters[cursor] == " " ||
+                    characters[cursor] == "\t" || isLineEnding(characters[cursor]) {
+                    if isLineEnding(characters[cursor]) { lineEndings += 1 }
+                    if lineEndings > 1 { return false }
+                    cursor += 1
+                }
+                return true
+            }
+            guard skipSpace(), cursor < characters.count else { return nil }
+            let destinationStart: Int
+            let destinationEnd: Int
+            if characters[cursor] == "<" {
+                cursor += 1
+                destinationStart = cursor
+                while cursor < characters.count {
+                    if characters[cursor] == "\\", cursor + 1 < characters.count {
+                        cursor += 2; continue
+                    }
+                    if isLineEnding(characters[cursor]) || characters[cursor] == "<" { return nil }
+                    if characters[cursor] == ">" { break }
+                    cursor += 1
+                }
+                guard cursor < characters.count, characters[cursor] == ">" else { return nil }
+                destinationEnd = cursor
+                cursor += 1
+            } else {
+                destinationStart = cursor
+                var depth = 0
+                while cursor < characters.count {
+                    let character = characters[cursor]
+                    if character == "\\", cursor + 1 < characters.count {
+                        cursor += 2; continue
+                    }
+                    if character.isWhitespace || character == "<" || character == ">" ||
+                        character.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) {
+                        break
+                    }
+                    if character == "(" {
+                        depth += 1
+                        if depth > 32 { return nil }
+                    } else if character == ")" {
+                        if depth == 0 { break }
+                        depth -= 1
+                    }
+                    cursor += 1
+                }
+                guard depth == 0 else { return nil }
+                destinationEnd = cursor
+            }
+            let destination = NativeMarkdownTextDecoder.decode(
+                String(characters[destinationStart..<destinationEnd]))
+            let separatorStart = cursor
+            guard skipSpace(), cursor < characters.count else { return nil }
+            var title: String?
+            let titleDelimiter = characters[cursor] == "\"" || characters[cursor] == "'" ||
+                characters[cursor] == "("
+            if cursor > separatorStart && titleDelimiter {
+                let delimiter = characters[cursor] == "(" ? ")" : characters[cursor]
+                cursor += 1
+                let titleStart = cursor
+                var previousNewline = false
+                while cursor < characters.count {
+                    if characters[cursor] == "\\", cursor + 1 < characters.count {
+                        cursor += 2; previousNewline = false; continue
+                    }
+                    if characters[cursor] == delimiter { break }
+                    if isLineEnding(characters[cursor]) {
+                        if previousNewline { return nil }
+                        previousNewline = true
+                    } else if characters[cursor] != " " && characters[cursor] != "\t" {
+                        previousNewline = false
+                    }
+                    cursor += 1
+                }
+                guard cursor < characters.count else { return nil }
+                title = NativeMarkdownTextDecoder.decode(String(characters[titleStart..<cursor]))
+                cursor += 1
+                guard skipSpace(), cursor < characters.count else { return nil }
+            }
+            guard characters[cursor] == ")" else { return nil }
+            return (destination, title, cursor + 1)
+        }
 
         while index < characters.count {
             if characters[index] == "\\", index + 1 < characters.count {
-                if characters[index + 1] == "\n" {
+                if isLineEnding(characters[index + 1]) {
                     flushPlain(until: index)
                     append(.hardBreak, start: index, end: index + 2)
                     index += 2; plainStart = index; continue
                 }
                 index += 2; continue
             }
-            if characters[index] == "\n" {
+            if isLineEnding(characters[index]) {
                 let hard = index >= 2 && characters[index - 1] == " " && characters[index - 2] == " "
                 let start = hard ? max(plainStart, index - 2) : index
                 flushPlain(until: start)
@@ -402,12 +496,13 @@ struct NativeMarkdownASTParser {
                    let close = closing(["]"], after: open + 1) {
                     let label = String(characters[(open + 1)..<close])
                     var destination: String?
+                    var title: String?
                     var end = close + 1
                     if end < characters.count, characters[end] == "(",
-                       let destinationEnd = closing([")"], after: end + 1) {
-                        destination = NativeMarkdownTextDecoder.decode(
-                            String(characters[(end + 1)..<destinationEnd]))
-                        end = destinationEnd + 1
+                       let parsed = linkTail(after: end) {
+                        destination = parsed.destination
+                        title = parsed.title
+                        end = parsed.end
                     } else if end < characters.count, characters[end] == "[",
                               let referenceEnd = closing(["]"], after: end + 1) {
                         let reference = String(characters[(end + 1)..<referenceEnd])
@@ -419,7 +514,7 @@ struct NativeMarkdownASTParser {
                     if let destination {
                         flushPlain(until: index)
                         append(image ? .image(destination) : .link(destination), start: index,
-                               end: end, contentStart: open + 1, contentEnd: close)
+                               end: end, contentStart: open + 1, contentEnd: close, title: title)
                         index = end; plainStart = index; continue
                     }
                 }
