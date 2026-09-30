@@ -23,7 +23,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             else if html.hasPrefix("<hr ") { expected = .thematicBreak }
             else { continue }
             count += 1
-            let actual = NativeMarkdownASTParser().parse(example["markdown"] as! String).children.first(where: { if case .referenceDefinition = $0.kind { return false }; return true })?.kind
+            let actual = NativeMarkdownASTParser(enableGFM: false).parse(example["markdown"] as! String).children.first(where: { if case .referenceDefinition = $0.kind { return false }; return true })?.kind
             XCTAssertEqual(actual, expected, "CommonMark example \(example["example"] as! Int)")
         }
         XCTAssertEqual(count, 554)
@@ -45,7 +45,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
         for example in try examples() {
             guard let number = example["example"] as? Int, let kinds = expected[number],
                   let source = example["markdown"] as? String else { continue }
-            XCTAssertEqual(NativeMarkdownASTParser().parse(source).children.map(\.kind), kinds,
+            XCTAssertEqual(NativeMarkdownASTParser(enableGFM: false).parse(source).children.map(\.kind), kinds,
                            "CommonMark example \(number)")
         }
     }
@@ -64,7 +64,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
         for example in try examples() {
             let source = try XCTUnwrap(example["markdown"] as? String)
             let number = try XCTUnwrap(example["example"] as? Int)
-            let tree = NativeMarkdownASTParser().parse(source)
+            let tree = NativeMarkdownASTParser(enableGFM: false).parse(source)
             let text = source as NSString
             func check(_ node: NativeMarkdownNode) {
                 XCTAssertGreaterThanOrEqual(node.sourceRange.location, 0, "Example \(number)")
@@ -88,7 +88,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertTrue(html.hasPrefix("<p>") && html.hasSuffix("</p>\n"))
             let expectedHTMLText = String(html.dropFirst(3).dropLast(5))
             let expected = NativeMarkdownTextDecoder.decode(expectedHTMLText)
-            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser(enableGFM: false).parse(source).children.first)
             XCTAssertEqual(paragraph.kind, .paragraph, "Example \(number)")
             let actual = paragraph.children.map { node -> String in
                 if let semanticText = node.semanticText { return semanticText }
@@ -108,7 +108,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertTrue(html.hasPrefix("<p><code>") && html.hasSuffix("</code></p>\n"))
             let expectedHTMLText = String(html.dropFirst(9).dropLast(12))
             let expected = NativeMarkdownTextDecoder.decode(expectedHTMLText)
-            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser(enableGFM: false).parse(source).children.first)
             XCTAssertEqual(paragraph.kind, .paragraph, "Example \(number)")
             let code = try XCTUnwrap(paragraph.children.first(where: { $0.kind == .inlineCode }))
             XCTAssertEqual(code.semanticText, expected, "Example \(number)")
@@ -124,7 +124,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             let html = try XCTUnwrap(example["html"] as? String)
             XCTAssertTrue(html.hasPrefix("<p>") && html.hasSuffix("</p>\n"))
             let expected = NativeMarkdownTextDecoder.decode(String(html.dropFirst(3).dropLast(5)))
-            let tree = NativeMarkdownASTParser().parse(source)
+            let tree = NativeMarkdownASTParser(enableGFM: false).parse(source)
             XCTAssertEqual(tree.children.map(\.kind), [.paragraph], "Example \(number)")
             let actual = tree.children[0].children.map { node -> String in
                 if let semanticText = node.semanticText { return semanticText }
@@ -145,7 +145,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             guard let number = example["example"] as? Int,
                   valid[number] != nil || invalid.contains(number) else { continue }
             let source = try XCTUnwrap(example["markdown"] as? String)
-            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser(enableGFM: false).parse(source).children.first)
             XCTAssertEqual(paragraph.kind, .paragraph, "Example \(number)")
             let links = paragraph.children.filter { if case .link = $0.kind { return true }; return false }
             if let expected = valid[number] {
@@ -171,7 +171,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
         for example in try examples() {
             guard let number = example["example"] as? Int, selected.contains(number) else { continue }
             let source = try XCTUnwrap(example["markdown"] as? String)
-            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser(enableGFM: false).parse(source).children.first)
             let links = paragraph.children.filter { if case .link = $0.kind { return true }; return false }
             let images = paragraph.children.filter { if case .image = $0.kind { return true }; return false }
             switch number {
@@ -201,7 +201,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
         for example in try examples() {
             guard let number = example["example"] as? Int, let value = expected[number] else { continue }
             let source = try XCTUnwrap(example["markdown"] as? String)
-            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first(where: {
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser(enableGFM: false).parse(source).children.first(where: {
                 $0.kind == .paragraph
             }))
             let node = try XCTUnwrap(paragraph.children.first(where: { $0.kind == value.0 }),
@@ -240,7 +240,7 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             let number = try XCTUnwrap(example["example"] as? Int)
             let source = try XCTUnwrap(example["markdown"] as? String)
             let expected = try XCTUnwrap(example["html"] as? String)
-            XCTAssertEqual(render(NativeMarkdownASTParser().parse(source)), expected, "Example \(number)")
+            XCTAssertEqual(render(NativeMarkdownASTParser(enableGFM: false).parse(source)), expected, "Example \(number)")
         }
     }
 
@@ -251,7 +251,20 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             let number = try XCTUnwrap(example["example"] as? Int)
             let source = try XCTUnwrap(example["markdown"] as? String)
             let expected = try XCTUnwrap(example["html"] as? String)
-            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser().parse(source)),
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
+
+    func testOfficialAutolinkHTMLBreakAndCodeSpanSemantics() throws {
+        let sections = ["Autolinks", "Raw HTML", "Hard line breaks", "Soft line breaks", "Code spans"]
+        let selected = try examples().filter { sections.contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 78)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser(enableGFM: false).parse(source)),
                            expected, "Example \(number)")
         }
     }
