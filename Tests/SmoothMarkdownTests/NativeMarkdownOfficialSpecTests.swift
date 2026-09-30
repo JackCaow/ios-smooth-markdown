@@ -141,4 +141,24 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             }
         }
     }
+
+    func testOfficialReferenceLinksKeepTitlesAndFirstDefinition() throws {
+        let expected: [Int: (NativeMarkdownNode.Kind, String?)] = [
+            539: (.link("/url"), "title"),
+            544: (.link("/url1"), nil),
+            553: (.link("/url"), "title"),
+            572: (.image("/url"), "title"),
+            584: (.image("/url"), "title"),
+        ]
+        for example in try examples() {
+            guard let number = example["example"] as? Int, let value = expected[number] else { continue }
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let paragraph = try XCTUnwrap(NativeMarkdownASTParser().parse(source).children.first(where: {
+                $0.kind == .paragraph
+            }))
+            let node = try XCTUnwrap(paragraph.children.first(where: { $0.kind == value.0 }),
+                                     "Example \(number)")
+            XCTAssertEqual(node.title, value.1, "Example \(number)")
+        }
+    }
 }
