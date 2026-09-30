@@ -5,6 +5,51 @@ import XCTest
 /// Runs against the pinned official CommonMark examples when COMMONMARK_SPEC_JSON is set.
 /// This checks source preservation, not rendered HTML equivalence.
 final class NativeMarkdownOfficialSpecTests: XCTestCase {
+    func testOfficialFirstVisibleBlockKindAcrossExamples() throws {
+        var count = 0
+        for example in try examples() {
+            let html = example["html"] as! String
+            let expected: NativeMarkdownNode.Kind?
+            if html.hasPrefix("<p>") { expected = .paragraph }
+            else if html.hasPrefix("<h1>") { expected = .heading(1) }
+            else if html.hasPrefix("<h2>") { expected = .heading(2) }
+            else if html.hasPrefix("<h3>") { expected = .heading(3) }
+            else if html.hasPrefix("<h4>") { expected = .heading(4) }
+            else if html.hasPrefix("<h5>") { expected = .heading(5) }
+            else if html.hasPrefix("<h6>") { expected = .heading(6) }
+            else if html.hasPrefix("<ul>") { expected = .list(ordered: false) }
+            else if html.hasPrefix("<ol>") { expected = .list(ordered: true) }
+            else if html.hasPrefix("<blockquote>") { expected = .blockQuote }
+            else if html.hasPrefix("<hr ") { expected = .thematicBreak }
+            else { continue }
+            count += 1
+            let actual = NativeMarkdownASTParser().parse(example["markdown"] as! String).children.first(where: { if case .referenceDefinition = $0.kind { return false }; return true })?.kind
+            XCTAssertEqual(actual, expected, "CommonMark example \(example["example"] as! Int)")
+        }
+        XCTAssertEqual(count, 554)
+    }
+
+    func testOfficialBlockKinds() throws {
+        // CommonMark 0.31.2 examples across precedence, headings, code, quotes and lists.
+        let expected: [Int: [NativeMarkdownNode.Kind]] = [
+            43: [.thematicBreak, .thematicBreak, .thematicBreak],
+            44: [.paragraph], 45: [.paragraph],
+            62: [.heading(1), .heading(2), .heading(3), .heading(4), .heading(5), .heading(6)],
+            63: [.paragraph], 64: [.paragraph, .paragraph],
+            80: [.heading(1), .heading(2)],
+            107: [.indentedCode], 119: [.fencedCode("")], 120: [.fencedCode("")],
+            228: [.blockQuote], 231: [.indentedCode],
+            301: [.list(ordered: false), .list(ordered: false)],
+            302: [.list(ordered: true), .list(ordered: true)],
+        ]
+        for example in try examples() {
+            guard let number = example["example"] as? Int, let kinds = expected[number],
+                  let source = example["markdown"] as? String else { continue }
+            XCTAssertEqual(NativeMarkdownASTParser().parse(source).children.map(\.kind), kinds,
+                           "CommonMark example \(number)")
+        }
+    }
+
     private func examples() throws -> [[String: Any]] {
         guard let path = ProcessInfo.processInfo.environment["COMMONMARK_SPEC_JSON"] else {
             throw XCTSkip("Set COMMONMARK_SPEC_JSON to the CommonMark 0.31.2 spec.json path")

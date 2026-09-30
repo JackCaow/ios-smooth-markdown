@@ -2,6 +2,38 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class NativeMarkdownASTParserTests: XCTestCase {
+    func testCommonMarkBlockPrecedenceExamples() {
+        // CommonMark 0.31.2: setext headings, thematic breaks, and fenced code blocks.
+        let cases: [(String, [NativeMarkdownNode.Kind])] = [
+            ("Foo\n---\n", [.heading(2)]),
+            ("***\n", [.thematicBreak]),
+            ("- - -\n", [.thematicBreak]),
+            ("``` ruby\nputs 1\n```\n", [.fencedCode("ruby")]),
+            ("    code\n", [.indentedCode]),
+            ("# heading ###\n", [.heading(1)]),
+        ]
+        for (source, expected) in cases {
+            let tree = NativeMarkdownASTParser().parse(source)
+            XCTAssertEqual(tree.children.map(\.kind), expected, source)
+        }
+    }
+
+    func testGFMTablesAndTaskItemsUseSourceRanges() {
+        // GFM 0.29-gfm: table and task list extensions.
+        let source = "😀 | B\n---|---\nx | y\n\n- [x] done\n- [ ] later\n"
+        let tree = NativeMarkdownASTParser().parse(source)
+        XCTAssertEqual(tree.children.map(\.kind), [.table, .list(ordered: false)])
+        XCTAssertEqual(tree.children[0].children.count, 2)
+        XCTAssertEqual(tree.children[1].children.map(\.kind),
+                       [.listItem(checked: true), .listItem(checked: false)])
+        let text = source as NSString
+        func check(_ node: NativeMarkdownNode) {
+            XCTAssertEqual(text.substring(with: node.sourceRange), node.source)
+            node.children.forEach(check)
+        }
+        check(tree)
+    }
+
     func testSourcePreservingBlocksAndUTF16Ranges() {
         let source = "😀 intro\n\n## Bold **name**\n\n```swift\nlet x = 1\n```\n"
         let tree = NativeMarkdownASTParser().parse(source)
