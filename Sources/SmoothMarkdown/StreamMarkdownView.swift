@@ -43,8 +43,12 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         enableHTML: Bool = false,
         useEnhancedComponents: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
+        /// Flutter-style link callback. Receives the link as a string; both callbacks run when supplied.
+        onTapLink: ((String) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
+        /// Flutter-style image callback. Receives the original source, alt text, and title.
+        onTapImage: ((String, String?, String?) -> Void)? = nil,
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
         codeBuilder: ((String, String?) -> AnyView)? = nil,
@@ -67,9 +71,15 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.throttleMillis = throttleMillis
         self.enableHTML = enableHTML
         self.useEnhancedComponents = useEnhancedComponents
-        self.onLinkTap = onLinkTap
+        self.onLinkTap = onLinkTap == nil && onTapLink == nil ? nil : { url in
+            onLinkTap?(url)
+            onTapLink?(url.absoluteString)
+        }
         self.onImageTap = onImageTap
-        self.onImageTapWithMetadata = onImageTapWithMetadata
+        self.onImageTapWithMetadata = onImageTapWithMetadata == nil && onTapImage == nil ? nil : { source, alt, title in
+            onImageTapWithMetadata?(source, alt, title)
+            onTapImage?(source, alt, title)
+        }
         self.imageBuilder = imageBuilder
         self.onError = onError
         self.onComplete = onComplete

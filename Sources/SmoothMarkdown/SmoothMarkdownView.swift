@@ -67,8 +67,12 @@ public struct SmoothMarkdownView: View {
     public init(
         markdown: String,
         onLinkTap: ((URL) -> Void)? = nil,
+        /// Flutter-style link callback. Receives the link as a string; both callbacks run when supplied.
+        onTapLink: ((String) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
+        /// Flutter-style image callback. Receives the original source, alt text, and title.
+        onTapImage: ((String, String?, String?) -> Void)? = nil,
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         enableHTML: Bool = false,
         useEnhancedComponents: Bool = false,
@@ -86,9 +90,15 @@ public struct SmoothMarkdownView: View {
         scrollable: Bool = true
     ) {
         self.markdown = markdown
-        self.onLinkTap = onLinkTap
+        self.onLinkTap = onLinkTap == nil && onTapLink == nil ? nil : { url in
+            onLinkTap?(url)
+            onTapLink?(url.absoluteString)
+        }
         self.onImageTap = onImageTap
-        self.onImageTapWithMetadata = onImageTapWithMetadata
+        self.onImageTapWithMetadata = onImageTapWithMetadata == nil && onTapImage == nil ? nil : { source, alt, title in
+            onImageTapWithMetadata?(source, alt, title)
+            onTapImage?(source, alt, title)
+        }
         self.imageBuilder = imageBuilder
         self.enableHTML = enableHTML
         self.useEnhancedComponents = useEnhancedComponents

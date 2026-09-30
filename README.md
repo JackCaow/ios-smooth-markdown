@@ -41,6 +41,44 @@ struct ArticleView: View {
 when the parent already scrolls, such as a chat list. HTML and parser plugins are
 off by default. The `Demo` directory is a runnable example, not an app dependency.
 
+### Flutter and Android API mapping
+
+The SwiftUI entry points are `SmoothMarkdownView(markdown:)`,
+`StreamMarkdownView(chunks:)`, and `SmoothMarkdownEditor(controller:)`. The reader
+and stream accept the Flutter-style `onTapLink: (String) -> Void` and
+`onTapImage: (String, String?, String?) -> Void` callbacks. Their original
+`onLinkTap: (URL) -> Void`, `onImageTap: (URL) -> Void`, and
+`onImageTapWithMetadata: (String, String?, String?) -> Void` callbacks remain
+available. When both matching forms are supplied, both run, with the original
+callback first. Image callbacks receive the original Markdown or HTML source,
+alt text, and title. `imageBuilder`, `codeBuilder`, `useEnhancedComponents`,
+`enableCache`, `selectable`, `plugins`, and `builderRegistry` map directly to the
+Flutter reader concepts. Reader and stream default to standard components;
+editor Preview and Split default to enhanced components.
+
+```swift
+SmoothMarkdownView(
+    markdown: source,
+    onTapLink: { url in openLink(url) },
+    onTapImage: { source, alt, title in showImage(source, alt: alt, title: title) },
+    scrollable: false
+)
+```
+
+The native editor controller starts in Source mode. To match Flutter's default
+Formatted mode, set it explicitly before creating the view:
+
+```swift
+let controller = MarkdownEditorController(text: source)
+controller.mode = .formatted
+SmoothMarkdownEditor(controller: controller)
+```
+
+Math rendering differs from Flutter's default configuration: iOS currently
+recognizes `$...$` and `$$...$$` without an `enableLatex` switch, while Flutter
+requires `MarkdownConfig(enableLatex: true)`. Enable that Flutter option when
+the same document should render formulas on all platforms.
+
 ## Status
 
 On iOS, hosts can customize the menu shown for a selected native reader-text range:
