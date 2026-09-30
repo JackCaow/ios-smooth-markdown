@@ -1,8 +1,8 @@
 # Smooth Markdown for iOS
 
-A native SwiftUI Markdown reader, streaming reader, and editor. This package brings the core experience of [Flutter Smooth Markdown](https://github.com/JackCaow/flutter-smooth-markdown) to iOS; the `Demo` app mirrors the Flutter example's samples and feature pages.
+A native SwiftUI Markdown reader, streaming reader, and editor. The included `Demo` app provides sample documents and feature pages.
 
-The library is under active development. It supports common Markdown and GFM content, but full Flutter rendering and editor parity is not yet complete. See [current behavior and limitations](docs/reference.md).
+The library is under active development. It supports common Markdown and GFM content; advanced rendering and editing still have [documented limits](docs/reference.md).
 
 ## Install
 
@@ -115,11 +115,11 @@ SmoothMarkdownView(
 )
 ```
 
-The string-based tap callbacks align with Flutter and Android. Existing URL-based `onLinkTap` and `onImageTap` callbacks remain available. [Cross-platform API map](https://github.com/JackCaow/flutter-smooth-markdown/blob/main/docs/native-api-map.md) lists the shared entry points and differences.
+The string-based tap callbacks are convenient when the host app stores URLs as strings. Existing URL-based `onLinkTap` and `onImageTap` callbacks remain available.
 
 ## Run the demo
 
-The iOS demo contains the Flutter example's Markdown samples, streaming and chat pages, Mermaid gallery, editor, themes, and localization fixtures. Install XcodeGen, then from the repository root:
+The iOS demo contains Markdown samples, streaming and chat pages, a Mermaid gallery, an editor, themes, and localized UI. Install XcodeGen, then from the repository root:
 
 ```sh
 cd Demo
@@ -132,17 +132,15 @@ Select the **SmoothMarkdownDemo** scheme and an iOS Simulator. For a physical iP
 ## Compatibility and limits
 
 - `Package.swift` declares iOS 17+ and macOS 14+. The editor is iOS-specific; use the reader APIs for macOS.
-- HTML and parser plugins are opt-in. Math is recognized by the iOS reader without a separate `enableLatex` switch; Flutter requires `MarkdownConfig(enableLatex: true)` for the same content.
-- Native Mermaid and formatted editing support subsets of their Flutter counterparts. Custom renderers can interrupt continuous native text selection. See the [detailed reference](docs/reference.md) before relying on those behaviors.
+- HTML and parser plugins are opt-in. The reader recognizes supported math without a separate enable switch.
+- Mermaid and formatted editing support a defined subset of syntax and actions. Custom renderers can interrupt continuous native text selection. See the [detailed reference](docs/reference.md) before relying on those behaviors.
 
 ## Development and further reading
 
-Run `swift test` for package tests. The demo project is generated from `Demo/project.yml` with XcodeGen. Run `python3 tools/check_flutter_example_parity.py` to compare bundled demo fixtures with a sibling Flutter checkout; pass `--flutter-example-lib` for another location.
+Run `swift test` for package tests. The demo project is generated from `Demo/project.yml` with XcodeGen.
 
 - [Detailed API, implementation, and demo reference](docs/reference.md)
 - [Custom block builders](docs/custom-blocks.md)
 - [Typography](docs/typography.md)
-- [Flutter source](https://github.com/JackCaow/flutter-smooth-markdown)
-- [Android library](https://github.com/JackCaow/android-smooth-markdown)
 
 Licensed under [MIT](LICENSE).
