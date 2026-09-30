@@ -78,6 +78,24 @@ final class DemoExamplesUITests: XCTestCase {
         add(featureScreenshot)
     }
 
+    func testBasicFormattingInlineCodeBackgroundScreenshotOnPhysicalDevice() {
+        let app = XCUIApplication()
+        app.launch()
+        XCTAssertTrue(app.buttons["open-examples"].waitForExistence(timeout: 10))
+        XCTAssertEqual(selectedExample(in: app), "Basic Formatting")
+        let code = app.textViews.matching(NSPredicate(
+            format: "label CONTAINS %@ OR label CONTAINS %@",
+            "var x = 42;", "var\u{00A0}x\u{00A0}=\u{00A0}42;"
+        )).firstMatch
+        XCTAssertTrue(code.waitForExistence(timeout: 5))
+        XCTAssertTrue(code.isHittable, "Inline code must be visible before capturing layout")
+        Thread.sleep(forTimeInterval: 1)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Physical iPhone Basic Formatting inline code background"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
     func testReaderLayoutInPhysicalLandscape() {
         let device = XCUIDevice.shared
         device.orientation = .portrait
@@ -172,6 +190,28 @@ final class DemoExamplesUITests: XCTestCase {
         choose("feature-mermaid", in: app)
         let node = app.buttons["mermaid-node-A"]
         XCTAssertTrue(node.waitForExistence(timeout: 5))
+        node.tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+    }
+
+    func testMermaidGalleryZoomKeepsNodeCallbackAndSourceReachable() {
+        let app = XCUIApplication()
+        app.launch()
+        choose("feature-mermaid", in: app)
+        let viewport = app.otherElements["mermaid-interactive-viewport"]
+        XCTAssertTrue(viewport.waitForExistence(timeout: 5))
+        let node = app.buttons["mermaid-node-A"]
+        XCTAssertTrue(node.waitForExistence(timeout: 5))
+        viewport.pinch(withScale: 1.2, velocity: 1)
+        node.tap()
+        XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
+        viewport.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.9)).doubleTap()
+        app.buttons["mermaid-theme"].tap()
+        XCTAssertTrue(app.staticTexts["mermaid-source"].exists)
+        XCTAssertTrue(node.exists)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(viewport.waitForExistence(timeout: 5))
         node.tap()
         XCTAssertEqual(app.staticTexts["mermaid-position"].value as? String, "Last tapped node: A")
     }

@@ -58,6 +58,7 @@ final class DemoAIChatUITests: XCTestCase {
         XCTAssertTrue(app.buttons["ai-chat-settings"].exists)
         XCTAssertTrue(app.buttons["ai-chat-actions"].exists)
         XCTAssertTrue(app.scrollViews["ai-chat-message-list"].exists)
+        XCTAssertTrue(app.staticTexts["ai-chat-empty-hint"].exists)
         XCTAssertFalse(app.buttons["ai-chat-prompt-thinking"].exists)
         XCTAssertEqual(app.buttons.matching(identifier: "ai-chat-source").count, 0)
         Thread.sleep(forTimeInterval: 2)

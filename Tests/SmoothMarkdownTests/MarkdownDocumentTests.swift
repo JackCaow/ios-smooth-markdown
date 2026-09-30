@@ -57,6 +57,48 @@ final class MarkdownDocumentTests: XCTestCase {
         XCTAssertEqual(document.blocks[2].kind, .paragraph(markdown: "Body"))
     }
 
+    @MainActor
+    func testFrontmatterBodyEditKeepsEnvelopeAndOtherBlocksWithUndo() {
+        let source = "\u{FEFF}---  \r\ntitle: Old\r\ntags:\r\n  - swift\r\n---\t\r\n\r\n## Heading\r\n"
+        let controller = MarkdownEditorController(text: source)
+        let first = controller.semanticDocument.blocks[0]
+        XCTAssertEqual(MarkdownSourceFrontmatter.parsePrefix(source)?.content,
+                       "title: Old\r\ntags:\r\n  - swift")
+        XCTAssertTrue(controller.replaceFrontmatterContent(id: first.id,
+                                                              with: "title: New\ntags:\n  - ios"))
+        let changed = "\u{FEFF}---  \r\ntitle: New\r\ntags:\r\n  - ios\r\n---\t\r\n\r\n## Heading\r\n"
+        XCTAssertEqual(controller.text, changed)
+        XCTAssertEqual(controller.semanticDocument.blocks[1], MarkdownDocumentCodec().parse(source).blocks[1])
+        XCTAssertTrue(controller.undo())
+        XCTAssertEqual(controller.text, source)
+        XCTAssertTrue(controller.redo())
+        XCTAssertEqual(controller.text, changed)
+    }
+
+    @MainActor
+    func testFrontmatterRejectsEmbeddedCloserAndNonLeadingRule() {
+        let source = "---\ntitle: Test\n---\n\nBody"
+        let controller = MarkdownEditorController(text: source)
+        let first = controller.semanticDocument.blocks[0]
+        XCTAssertFalse(controller.replaceFrontmatterContent(id: first.id, with: "title: Broken\n---\nBody"))
+        XCTAssertEqual(controller.text, source)
+        XCTAssertFalse(controller.canUndo)
+        XCTAssertFalse(controller.replaceFrontmatterContent(id: "block-1", with: "replacement"))
+
+        let laterRule = MarkdownEditorController(text: "Body\n\n---\n\ntitle: Plain")
+        XCTAssertFalse(laterRule.replaceFrontmatterContent(id: "block-0", with: "title: Nope"))
+        XCTAssertNil(MarkdownSourceFrontmatter.parsePrefix(laterRule.text))
+    }
+
+    func testFrontmatterRequiresWholeLeadingEnvelope() {
+        let sources = ["---\ntitle: Open\n", " ---\ntitle: Indented\n---\n",
+                       "---\ntitle: Dash\n-- end\n", "Body\n---\ntitle: Later\n---"]
+        for source in sources {
+            XCTAssertNil(MarkdownSourceFrontmatter.parsePrefix(source))
+            XCTAssertEqual(MarkdownDocumentCodec().serialize(MarkdownDocumentCodec().parse(source)), source)
+        }
+    }
+
     func testEditingOneBlockPreservesOtherRawSourceAndIsUndoable() {
         let source = "#  Original\n\n<custom>&nbsp;*literal*</custom>\n\nBefore\n"
         let editor = MarkdownDocumentEditor(markdown: source)

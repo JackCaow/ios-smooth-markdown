@@ -5,6 +5,69 @@ import UIKit
 import AppKit
 #endif
 
+/// Flutter's default code builder: source text inside the configured decoration,
+/// without a language badge, copy control, or syntax coloring.
+struct StandardCodeBlockView: View {
+    let code: String
+    let language: String?
+    let styleSheet: MarkdownStyleSheet
+    let selectable: Bool
+    let onCopy: ((String, String?) -> Void)?
+    #if os(iOS)
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
+    #endif
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            #if os(iOS)
+            if selectable, let textSelectionMenuBuilder, !code.isEmpty {
+                HStack {
+                    Spacer(minLength: 0)
+                    ReaderSelectionActionsButton(selectedText: code, builder: textSelectionMenuBuilder,
+                                                 copy: copyCode,
+                                                 accessibilityIdentifier: "reader-code-actions")
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+            }
+            #endif
+            ScrollView(.horizontal) {
+                Text(code)
+                    .font(styleSheet.codeFont ?? .system(.body, design: .monospaced))
+                    .foregroundColor(styleSheet.codeTextColor ?? styleSheet.textColor)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .markdownTextSelection(selectable)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+            .padding(styleSheet.resolvedCodeBlockPadding)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            let decoration = styleSheet.resolvedCodeBlockDecoration
+            RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                .fill(decoration.backgroundColor ?? .clear)
+                .overlay {
+                    RoundedRectangle(cornerRadius: decoration.cornerRadius)
+                        .strokeBorder(decoration.borderColor ?? .clear, lineWidth: decoration.borderWidth)
+                }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: styleSheet.resolvedCodeBlockDecoration.cornerRadius))
+    }
+
+    private func copyCode() {
+        #if canImport(UIKit)
+        UIPasteboard.general.string = code
+        #elseif canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(code, forType: .string) else { return }
+        #else
+        return
+        #endif
+        onCopy?(code, language)
+    }
+}
+
 struct EnhancedCodeBlockView: View {
     let code: String
     let language: String?
@@ -15,6 +78,9 @@ struct EnhancedCodeBlockView: View {
     let onSelectSurroundingContent: (() -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
+    #if os(iOS)
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
+    #endif
     @State private var copied = false
     @State private var resetTask: Task<Void, Never>?
 
@@ -43,10 +109,30 @@ struct EnhancedCodeBlockView: View {
                             copyButton
                         }
                     }
+                    #if os(iOS)
+                    if selectable, let textSelectionMenuBuilder, !code.isEmpty {
+                        ReaderSelectionActionsButton(selectedText: code, builder: textSelectionMenuBuilder,
+                                                     copy: copyCode,
+                                                     accessibilityIdentifier: "reader-code-actions")
+                    }
+                    #endif
                 }
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
             }
+            #if os(iOS)
+            if !options.showCopyButton && (!options.showLanguageTag || language?.isEmpty != false),
+               selectable, let textSelectionMenuBuilder, !code.isEmpty {
+                HStack {
+                    Spacer(minLength: 0)
+                    ReaderSelectionActionsButton(selectedText: code, builder: textSelectionMenuBuilder,
+                                                 copy: copyCode,
+                                                 accessibilityIdentifier: "reader-code-actions")
+                }
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+            }
+            #endif
             ScrollView(.horizontal) {
                 Text(CodeSyntaxHighlighter.attributed(code, language: language,
                                                       dark: styleSheet.darkCodeHighlighting ?? (colorScheme == .dark),

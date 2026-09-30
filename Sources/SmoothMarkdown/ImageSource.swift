@@ -5,6 +5,16 @@ enum ImageSource: Equatable {
     case remote(URL, svg: Bool)
     case bundled(String, svg: Bool)
 
+    enum RemoteFailurePresentation: Equatable {
+        case bitmapErrorIcon
+        case svgAltText
+    }
+
+    var remoteFailurePresentation: RemoteFailurePresentation? {
+        guard case let .remote(_, svg) = self else { return nil }
+        return svg ? .svgAltText : .bitmapErrorIcon
+    }
+
     static func parse(_ source: String) -> ImageSource? {
         guard SafeHTML.isSafeImageSource(source) else { return nil }
         let svg = source.lowercased().hasSuffix(".svg")

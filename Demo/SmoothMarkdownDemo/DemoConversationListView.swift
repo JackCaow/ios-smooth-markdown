@@ -207,6 +207,7 @@ private struct DemoConversationDetailView: View {
             else { DemoConversationAvatar(conversation: conversation, size: 32) }
             VStack(alignment: .leading, spacing: 4) {
                 SmoothMarkdownView(markdown: message.content,
+                                   useEnhancedComponents: true,
                                    onTextLongPress: { selectParagraph in
                                        messageToCopy = message.content
                                        selectPressedParagraph = selectParagraph

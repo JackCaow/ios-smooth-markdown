@@ -30,6 +30,14 @@ struct MermaidLayoutResult {
     }
 }
 
+struct GanttTimelineTick: Equatable {
+    let date: Date
+    let x: CGFloat
+    let isMonth: Bool
+    let isWeek: Bool
+    let isDay: Bool
+}
+
 /// Deterministic layered placement for the native Mermaid subset.
 enum MermaidLayout {
     static func compute(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
@@ -57,22 +65,93 @@ enum MermaidLayout {
                                   height: CGFloat(200 + eventRows * 30)), nodes: [:], edges: [])
     }
 
+    private static var ganttCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
     private static func gantt(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
         guard let first = diagram.ganttTasks.map(\.startDate).min(),
               let last = diagram.ganttTasks.map(\.endDate).max() else { return .init(size: .zero, nodes: [:], edges: []) }
-        let days = max(1, Calendar(identifier: .gregorian).dateComponents([.day], from: first, to: last).day ?? 0)
-        return .init(size: CGSize(width: max(460, CGFloat(days + 1) * 12 + 210),
+        let days = max(1, (ganttCalendar.dateComponents([.day], from: first, to: last).day ?? 0) + 1)
+        return .init(size: CGSize(width: max(460, CGFloat(days) * ganttDayWidth(diagram) + 200),
                                   height: CGFloat(100 + diagram.ganttTasks.count * 48)), nodes: [:], edges: [])
+    }
+
+    /// The 460 pt minimum chart gives short schedules readable day columns.
+    /// Longer schedules retain the existing scrollable 12 pt/day scale.
+    static func ganttDayWidth(_ diagram: MermaidDiagram) -> CGFloat {
+        guard let first = diagram.ganttTasks.map(\.startDate).min(),
+              let last = diagram.ganttTasks.map(\.endDate).max() else { return 12 }
+        let days = max(1, (ganttCalendar.dateComponents([.day], from: first, to: last).day ?? 0) + 1)
+        return max(12, 260 / CGFloat(days))
     }
 
     static func ganttBars(_ diagram: MermaidDiagram) -> [CGRect] {
         guard let first = diagram.ganttTasks.map(\.startDate).min() else { return [] }
-        let calendar = Calendar(identifier: .gregorian)
+        let calendar = ganttCalendar
+        let dayWidth = ganttDayWidth(diagram)
         return diagram.ganttTasks.enumerated().map { index, task in
             let offset = max(0, calendar.dateComponents([.day], from: first, to: task.startDate).day ?? 0)
             let duration = max(1, (calendar.dateComponents([.day], from: task.startDate, to: task.endDate).day ?? 0) + 1)
-            return CGRect(x: 180 + CGFloat(offset) * 12, y: 82 + CGFloat(index) * 48,
-                          width: task.status == .milestone ? 12 : CGFloat(duration) * 12, height: 22)
+            return CGRect(x: 180 + CGFloat(offset) * dayWidth, y: 82 + CGFloat(index) * 48,
+                          width: task.status == .milestone ? min(12, dayWidth) : CGFloat(duration) * dayWidth, height: 22)
+        }
+    }
+
+    /// Calendar markers share the exact UTC day scale used by task bars.
+    /// Short schedules show days; longer schedules advance by weeks and months.
+    static func ganttTimelineTicks(_ diagram: MermaidDiagram) -> [GanttTimelineTick] {
+        guard let first = diagram.ganttTasks.map(\.startDate).min(),
+              let last = diagram.ganttTasks.map(\.endDate).max() else { return [] }
+        let calendar = ganttCalendar
+        let start = calendar.startOfDay(for: first)
+        let end = calendar.startOfDay(for: last)
+        let totalDays = max(1, (calendar.dateComponents([.day], from: start, to: end).day ?? 0) + 1)
+        let dayWidth = ganttDayWidth(diagram)
+        func tick(_ date: Date, month: Bool = false, week: Bool = false, day: Bool = false) -> GanttTimelineTick {
+            let offset = calendar.dateComponents([.day], from: start, to: date).day ?? 0
+            return .init(date: date, x: 180 + CGFloat(offset) * dayWidth,
+                         isMonth: month, isWeek: week, isDay: day)
+        }
+        if dayWidth >= 20 && totalDays <= 60 {
+            return (0..<totalDays).compactMap { offset in
+                guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return nil }
+                return tick(date, month: offset == 0 || calendar.component(.day, from: date) == 1, day: true)
+            }
+        }
+
+        // Build sparse markers directly from calendar boundaries. A very long,
+        // scrollable timeline keeps bounded label density instead of walking every day.
+        var markers: [Int: (date: Date, month: Bool, week: Bool)] = [0: (start, true, false)]
+        let weekStep = max(1, Int(ceil(Double(totalDays) / (7 * 350))))
+        var monday = start
+        while calendar.component(.weekday, from: monday) != 2 {
+            guard let next = calendar.date(byAdding: .day, value: 1, to: monday) else { break }
+            monday = next
+        }
+        while monday <= end {
+            let offset = calendar.dateComponents([.day], from: start, to: monday).day ?? 0
+            let previous = markers[offset]
+            markers[offset] = (monday, previous?.month ?? false, true)
+            guard let next = calendar.date(byAdding: .day, value: 7 * weekStep, to: monday), next > monday else { break }
+            monday = next
+        }
+        let monthCount = max(1, (calendar.dateComponents([.month], from: start, to: end).month ?? 0) + 1)
+        let monthStep = max(1, Int(ceil(Double(monthCount) / 240)))
+        var month = calendar.date(from: calendar.dateComponents([.year, .month], from: start)) ?? start
+        if month < start { month = calendar.date(byAdding: .month, value: 1, to: month) ?? end.addingTimeInterval(1) }
+        while month <= end {
+            let offset = calendar.dateComponents([.day], from: start, to: month).day ?? 0
+            let previous = markers[offset]
+            markers[offset] = (month, true, previous?.week ?? false)
+            guard let next = calendar.date(byAdding: .month, value: monthStep, to: month), next > month else { break }
+            month = next
+        }
+        return markers.keys.sorted().compactMap { offset in
+            guard let marker = markers[offset] else { return nil }
+            return tick(marker.date, month: marker.month, week: marker.week)
         }
     }
 
@@ -84,14 +163,13 @@ enum MermaidLayout {
               let last = diagram.ganttTasks.map(\.endDate).max() else { return nil }
         var localCalendar = Calendar(identifier: .gregorian)
         localCalendar.timeZone = timeZone
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let calendar = ganttCalendar
         let parts = localCalendar.dateComponents([.year, .month, .day], from: today)
         guard let day = calendar.date(from: parts) else { return nil }
         guard day >= calendar.startOfDay(for: first),
               day <= calendar.startOfDay(for: last) else { return nil }
         let offset = calendar.dateComponents([.day], from: calendar.startOfDay(for: first), to: day).day ?? 0
-        return 180 + CGFloat(offset) * 12
+        return 180 + CGFloat(offset) * ganttDayWidth(diagram)
     }
 
     private static func kanban(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
@@ -296,6 +374,9 @@ enum MermaidLayout {
         let base = min(max(CGFloat(node.label.utf16.count) * 8 + 28, 88), 280)
         switch node.shape {
         case .diamond: return base + 30
+        case .hexagon: return base + 40
+        case .parallelogram, .parallelogramAlt: return base + 36
+        case .trapezoid, .trapezoidAlt: return base + 32
         case .circle: return max(base, 80)
         default: return base
         }

@@ -6,14 +6,17 @@ public struct MermaidDiagramView: View {
     /// Overrides the device appearance for diagrams with an explicit fence theme.
     public let theme: MermaidTheme?
     public let onNodeTap: ((String) -> Void)?
+    /// Keep the inline reader's horizontal scrolling; interactive hosts manage both axes themselves.
+    public let scrollable: Bool
     @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
 
     public init(diagram: MermaidDiagram, theme: MermaidTheme? = nil,
-                onNodeTap: ((String) -> Void)? = nil) {
+                onNodeTap: ((String) -> Void)? = nil, scrollable: Bool = true) {
         self.diagram = diagram
         self.theme = theme
         self.onNodeTap = onNodeTap
+        self.scrollable = scrollable
     }
 
     private var resolvedTheme: MermaidTheme { theme ?? (colorScheme == .dark ? .dark : .light) }
@@ -22,8 +25,7 @@ public struct MermaidDiagramView: View {
         let layout = MermaidLayout.compute(diagram)
         let scale = max(1, diagramScale)
         let palette = resolvedTheme.palette
-        ScrollView(.horizontal) {
-            ZStack(alignment: .topLeading) {
+        let content = ZStack(alignment: .topLeading) {
             Canvas { context, _ in
                 var context = context
                 context.scaleBy(x: scale, y: scale)
@@ -120,8 +122,14 @@ public struct MermaidDiagramView: View {
                     }
                 }
             }
-            .frame(width: max(layout.size.width, 180) * scale,
-                   height: max(layout.size.height, 100) * scale)
+        .frame(width: max(layout.size.width, 180) * scale,
+               height: max(layout.size.height, 100) * scale)
+        Group {
+            if scrollable {
+                ScrollView(.horizontal) { content }
+            } else {
+                content
+            }
         }
         .background(palette.backgroundColor, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3)))
@@ -192,14 +200,45 @@ public struct MermaidDiagramView: View {
                          at: CGPoint(x: min(size.width / 2, 210), y: 22))
         }
         let bars = MermaidLayout.ganttBars(diagram)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        if let start = diagram.ganttTasks.map(\.startDate).min(), let end = diagram.ganttTasks.map(\.endDate).max() {
-            context.draw(Text(formatter.string(from: start)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
-                         at: CGPoint(x: 180, y: 60), anchor: .leading)
-            context.draw(Text(formatter.string(from: end)).font(.system(size: 11)).foregroundColor(ink.opacity(0.7)),
-                         at: CGPoint(x: size.width - 20, y: 60), anchor: .trailing)
+        let monthFormatter = DateFormatter()
+        monthFormatter.calendar = Calendar(identifier: .gregorian)
+        monthFormatter.locale = Locale(identifier: "en_US_POSIX")
+        monthFormatter.timeZone = TimeZone(secondsFromGMT: 0)
+        monthFormatter.dateFormat = "MMM yyyy"
+        let weekFormatter = DateFormatter()
+        weekFormatter.calendar = monthFormatter.calendar
+        weekFormatter.locale = monthFormatter.locale
+        weekFormatter.timeZone = monthFormatter.timeZone
+        weekFormatter.dateFormat = "M/d"
+        let dayFormatter = DateFormatter()
+        dayFormatter.calendar = monthFormatter.calendar
+        dayFormatter.locale = monthFormatter.locale
+        dayFormatter.timeZone = monthFormatter.timeZone
+        dayFormatter.dateFormat = "d"
+        let dayWidth = MermaidLayout.ganttDayWidth(diagram)
+        let gridBottom = max(104, bars.last?.maxY ?? 104)
+        var baseline = Path()
+        baseline.move(to: CGPoint(x: 180, y: 80))
+        baseline.addLine(to: CGPoint(x: size.width - 20, y: 80))
+        context.stroke(baseline, with: .color(ink.opacity(0.25)), lineWidth: 1)
+        for tick in MermaidLayout.ganttTimelineTicks(diagram) {
+            var grid = Path()
+            grid.move(to: CGPoint(x: tick.x, y: tick.isMonth ? 48 : 64))
+            grid.addLine(to: CGPoint(x: tick.x, y: gridBottom))
+            context.stroke(grid, with: .color(ink.opacity(tick.isMonth ? 0.25 : 0.12)),
+                           lineWidth: tick.isMonth ? 1.5 : 1)
+            if tick.isMonth {
+                context.draw(Text(monthFormatter.string(from: tick.date)).font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(ink.opacity(0.85)), at: CGPoint(x: tick.x + 4, y: 52), anchor: .leading)
+            }
+            if tick.isDay && dayWidth >= 25 {
+                context.draw(Text(dayFormatter.string(from: tick.date))
+                    .font(.system(size: 10)).foregroundColor(ink.opacity(0.7)),
+                             at: CGPoint(x: tick.x + dayWidth / 2, y: 68))
+            } else if tick.isWeek {
+                context.draw(Text(weekFormatter.string(from: tick.date)).font(.system(size: 10))
+                    .foregroundColor(ink.opacity(0.7)), at: CGPoint(x: tick.x + 4, y: 68), anchor: .leading)
+            }
         }
         for (index, task) in diagram.ganttTasks.enumerated() {
             guard index < bars.count else { continue }
@@ -434,15 +473,7 @@ public struct MermaidDiagramView: View {
         if placed.edge.arrow == .arrow {
             drawArrow(at: end, angle: angle, in: context, ink: ink)
         } else if placed.edge.arrow == .cross {
-            var cross = Path()
-            for sign in [-1.0, 1.0] {
-                let offset = CGFloat(sign) * 5
-                cross.move(to: CGPoint(x: end.x + offset * cos(angle + .pi / 2) - 5 * cos(angle),
-                                       y: end.y + offset * sin(angle + .pi / 2) - 5 * sin(angle)))
-                cross.addLine(to: CGPoint(x: end.x - offset * cos(angle + .pi / 2) - 5 * cos(angle),
-                                          y: end.y - offset * sin(angle + .pi / 2) - 5 * sin(angle)))
-            }
-            context.stroke(cross, with: .color(ink), lineWidth: 1.5)
+            drawCross(at: end, angle: angle, in: context, ink: ink)
         }
         if let label = placed.edge.label, !label.isEmpty {
             let middle = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 11)
@@ -484,6 +515,18 @@ public struct MermaidDiagramView: View {
         head.move(to: point)
         head.addLine(to: CGPoint(x: point.x - length * cos(angle + .pi / 6), y: point.y - length * sin(angle + .pi / 6)))
         context.stroke(head, with: .color(ink), lineWidth: 1.5)
+    }
+
+    private func drawCross(at point: CGPoint, angle: CGFloat, in context: GraphicsContext, ink: Color) {
+        var cross = Path()
+        for sign in [-1.0, 1.0] {
+            let offset = CGFloat(sign) * 5
+            cross.move(to: CGPoint(x: point.x + offset * cos(angle + .pi / 2) - 5 * cos(angle),
+                                   y: point.y + offset * sin(angle + .pi / 2) - 5 * sin(angle)))
+            cross.addLine(to: CGPoint(x: point.x - offset * cos(angle + .pi / 2) - 5 * cos(angle),
+                                      y: point.y - offset * sin(angle + .pi / 2) - 5 * sin(angle)))
+        }
+        context.stroke(cross, with: .color(ink), lineWidth: 1.5)
     }
 
     private func drawMarker(_ marker: MermaidMarker, at point: CGPoint, toward other: CGPoint,
@@ -531,11 +574,14 @@ public struct MermaidDiagramView: View {
         var path = Path()
         path.move(to: placed.start)
         path.addCurve(to: placed.end, control1: loop.control1, control2: loop.control2)
-        context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: 1.5,
+        context.stroke(path, with: .color(ink), style: StrokeStyle(lineWidth: placed.edge.line == .thick ? 2.5 : 1.5,
                                                                   dash: placed.edge.line == .dotted ? [5, 4] : []))
-        drawArrow(at: placed.end,
-                  angle: atan2(placed.end.y - loop.control2.y, placed.end.x - loop.control2.x),
-                  in: context, ink: ink)
+        let angle = atan2(placed.end.y - loop.control2.y, placed.end.x - loop.control2.x)
+        if placed.edge.arrow == .arrow {
+            drawArrow(at: placed.end, angle: angle, in: context, ink: ink)
+        } else if placed.edge.arrow == .cross {
+            drawCross(at: placed.end, angle: angle, in: context, ink: ink)
+        }
         if let label = placed.edge.label, let frame = loop.labelFrame {
             context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(background))
             context.draw(Text(label).font(.system(size: 11)).foregroundColor(ink),
@@ -555,6 +601,49 @@ public struct MermaidDiagramView: View {
             path.addLine(to: CGPoint(x: frame.maxX, y: frame.midY))
             path.addLine(to: CGPoint(x: frame.midX, y: frame.maxY))
             path.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
+            path.closeSubpath()
+            return path
+        case .hexagon:
+            let inset = frame.width * 0.15
+            var path = Path()
+            path.move(to: CGPoint(x: frame.minX + inset, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.maxX, y: frame.midY))
+            path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX + inset, y: frame.maxY))
+            path.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
+            path.closeSubpath()
+            return path
+        case .parallelogram, .parallelogramAlt:
+            let skew = frame.width * 0.15
+            var path = Path()
+            if shape == .parallelogram {
+                path.move(to: CGPoint(x: frame.minX + skew, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - skew, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            } else {
+                path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - skew, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX + skew, y: frame.maxY))
+            }
+            path.closeSubpath()
+            return path
+        case .trapezoid, .trapezoidAlt:
+            let inset = frame.width * 0.10
+            var path = Path()
+            if shape == .trapezoid {
+                path.move(to: CGPoint(x: frame.minX + inset, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX, y: frame.maxY))
+            } else {
+                path.move(to: CGPoint(x: frame.minX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX, y: frame.minY))
+                path.addLine(to: CGPoint(x: frame.maxX - inset, y: frame.maxY))
+                path.addLine(to: CGPoint(x: frame.minX + inset, y: frame.maxY))
+            }
             path.closeSubpath()
             return path
         case .asymmetric:

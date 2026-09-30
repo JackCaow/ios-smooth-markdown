@@ -44,6 +44,9 @@ public struct SmoothMarkdownEditor: View {
     private let customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)?
     private let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     private let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
+    private let builderRegistry: BuilderRegistry?
+    /// Controls the Reader used by Preview and Split modes, matching Flutter's editor default.
+    public let useEnhancedComponents: Bool
 
     public init(controller: MarkdownEditorController, onSave: ((String) -> Void)? = nil,
                 editorTheme: MarkdownEditorTheme? = nil,
@@ -72,7 +75,9 @@ public struct SmoothMarkdownEditor: View {
                 customSlashCommands: [MarkdownEditorSlashCommand] = [],
                 customBlockMatcher: ((MarkdownDocumentBlock) -> Bool)? = nil,
                 customBlockBuilder: MarkdownEditorCustomBlockBuilder? = nil,
-                customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil) {
+                customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder? = nil,
+                builderRegistry: BuilderRegistry? = nil,
+                useEnhancedComponents: Bool = true) {
         self.controller = controller
         self.onSave = onSave
         self.editorTheme = editorTheme
@@ -97,6 +102,8 @@ public struct SmoothMarkdownEditor: View {
         self.customBlockMatcher = customBlockMatcher
         self.customBlockBuilder = customBlockBuilder
         self.customBlockEditorBuilder = customBlockEditorBuilder
+        self.builderRegistry = builderRegistry
+        self.useEnhancedComponents = useEnhancedComponents
         self.hostIO = MarkdownEditorHostIO(controller: controller, onPickImage: onPickImage,
                                            onImportMarkdown: onImportMarkdown, onExportMarkdown: onExportMarkdown,
                                            onExportPDF: onExportPDF,
@@ -127,15 +134,15 @@ public struct SmoothMarkdownEditor: View {
                             .submitLabel(.search)
                             .onSubmit { selectSearchMatch(forward: true) }
                             .accessibilityIdentifier("editor-find-field")
-                        Text(searchMatches.isEmpty ? "Not found" : "\(min(searchIndex + 1, searchMatches.count))/\(searchMatches.count)")
+                        Text(searchMatchCount == 0 ? "Not found" : "\(min(searchIndex + 1, searchMatchCount))/\(searchMatchCount)")
                             .font(.caption.monospacedDigit())
                             .accessibilityIdentifier("editor-find-count")
                         Button("Previous", systemImage: "chevron.up") { selectSearchMatch(forward: false) }
-                            .disabled(searchMatches.isEmpty)
+                            .disabled(searchMatchCount == 0)
                             .labelStyle(.iconOnly)
                             .accessibilityIdentifier("editor-find-previous")
                         Button("Next", systemImage: "chevron.down") { selectSearchMatch(forward: true) }
-                            .disabled(searchMatches.isEmpty)
+                            .disabled(searchMatchCount == 0)
                             .labelStyle(.iconOnly)
                             .accessibilityIdentifier("editor-find-next")
                         Button("Close", systemImage: "xmark") { searchOpen = false; searchFieldFocused = false }
@@ -171,6 +178,9 @@ public struct SmoothMarkdownEditor: View {
                     case .formatted:
                         FormattedBlocksView(controller: controller, enableWikilinks: enableWikilinks,
                                             wikilinkSuggestions: wikilinkSuggestions,
+                                            findMatches: searchOpen ? formattedSearchMatches : [],
+                                            activeFindMatch: searchOpen && !formattedSearchMatches.isEmpty ?
+                                                formattedSearchMatches[min(searchIndex, formattedSearchMatches.count - 1)] : nil,
                                             capabilities: capabilities,
                                             enableSlashCommands: enableSlashCommands,
                                             customSlashCommands: customSlashCommands,
@@ -212,7 +222,11 @@ public struct SmoothMarkdownEditor: View {
             searchHasNavigated = false
             onChanged?(next)
         }
-        .onReceive(controller.$mode.dropFirst().removeDuplicates()) { next in onModeChanged?(next) }
+        .onReceive(controller.$mode.dropFirst().removeDuplicates()) { next in
+            searchIndex = 0
+            searchHasNavigated = false
+            onModeChanged?(next)
+        }
         .onReceive(controller.$selection.dropFirst().removeDuplicates()) { next in onSelectionChanged?(next) }
         .onReceive(controller.$text.dropFirst()) { _ in schedulePerformanceSnapshot() }
         .onReceive(controller.$mode.dropFirst()) { _ in schedulePerformanceSnapshot() }
@@ -249,7 +263,9 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private var previewView: some View {
-        SmoothMarkdownView(markdown: controller.text, plugins: previewPlugins)
+        SmoothMarkdownView(markdown: controller.text, useEnhancedComponents: useEnhancedComponents,
+                           plugins: previewPlugins,
+                           builderRegistry: builderRegistry)
             .padding(effectiveTheme.previewPadding ?? EdgeInsets())
             .background(effectiveTheme.previewBackgroundColor ?? .clear)
     }
@@ -293,7 +309,19 @@ public struct SmoothMarkdownEditor: View {
         }
     }
 
-    private var searchMatches: [NSRange] { controller.findMatches(searchQuery) }
+    private var sourceSearchMatches: [NSRange] { controller.findMatches(searchQuery) }
+    private var formattedSearchMatches: [MarkdownFormattedFindMatch] {
+        MarkdownFormattedFind.matches(in: controller.semanticDocument, query: searchQuery,
+                                      isCustomBlockRendered: { block in
+            guard customBlockBuilder != nil || customBlockEditorBuilder != nil else { return false }
+            if let customBlockMatcher { return customBlockMatcher(block) }
+            if case .plugin = block.kind { return true }
+            return false
+        })
+    }
+    private var searchMatchCount: Int {
+        controller.mode == .formatted ? formattedSearchMatches.count : sourceSearchMatches.count
+    }
 
     private var focusToggle: some View {
         Button(focusMode ? "Exit Focus" : "Focus",
@@ -311,16 +339,18 @@ public struct SmoothMarkdownEditor: View {
     }
 
     private func selectSearchMatch(forward: Bool) {
-        let matches = searchMatches
-        guard !matches.isEmpty else { return }
+        let count = searchMatchCount
+        guard count > 0 else { return }
         if searchHasNavigated {
-            searchIndex = (searchIndex + (forward ? 1 : matches.count - 1)) % matches.count
+            searchIndex = (searchIndex + (forward ? 1 : count - 1)) % count
         } else {
-            searchIndex = forward ? 0 : matches.count - 1
+            searchIndex = forward ? 0 : count - 1
             searchHasNavigated = true
         }
-        controller.mode = .source
-        controller.setSelection(matches[searchIndex])
+        if controller.mode != .formatted {
+            controller.mode = .source
+            controller.setSelection(sourceSearchMatches[searchIndex])
+        }
         searchFieldFocused = false
     }
 
@@ -457,11 +487,33 @@ private struct EditorSlashCommand {
 
 @available(iOS 17.0, *)
 private struct FormattedBlocksView: View {
+    private struct BlockTransformOption: Identifiable {
+        let title: String
+        let command: MarkdownEditorCommand
+        var id: String { title }
+    }
+
+    private static let blockTransformOptions: [BlockTransformOption] = [
+        .init(title: "Paragraph", command: .paragraph),
+        .init(title: "Heading 1", command: .heading1),
+        .init(title: "Heading 2", command: .heading2),
+        .init(title: "Heading 3", command: .heading3),
+        .init(title: "Heading 4", command: .heading4),
+        .init(title: "Heading 5", command: .heading5),
+        .init(title: "Heading 6", command: .heading6),
+        .init(title: "Bullet list", command: .unorderedList),
+        .init(title: "Numbered list", command: .orderedList),
+        .init(title: "Task list", command: .taskList),
+        .init(title: "Blockquote", command: .blockquote),
+    ]
+
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
@@ -473,6 +525,7 @@ private struct FormattedBlocksView: View {
     @State private var rangeEndID: String?
     @State private var textRangeStart: MarkdownSemanticTextPosition?
     @State private var textRangeEnd: MarkdownSemanticTextPosition?
+    @State private var textRangeSource: String?
     @State private var copiedRange = false
     @State private var showingEditingTips = false
     @State private var textRangeLinkDestination = "https://"
@@ -483,12 +536,41 @@ private struct FormattedBlocksView: View {
 
     private var textRange: MarkdownSemanticTextSelection? {
         guard let textRangeStart, let textRangeEnd else { return nil }
-        return .init(anchor: textRangeStart, focus: textRangeEnd)
+        return .init(anchor: textRangeStart, focus: textRangeEnd, source: textRangeSource)
+    }
+
+    private func blockRangeTransforms(from startID: String, to endID: String) -> [BlockTransformOption] {
+        Self.blockTransformOptions.filter {
+            capabilities.supports($0.command) && controller.canApplySemanticBlockCommandToBlockRange(
+                from: startID, to: endID, command: $0.command)
+        }
+    }
+
+    private func textRangeTransforms(_ range: MarkdownSemanticTextSelection) -> [BlockTransformOption] {
+        Self.blockTransformOptions.filter {
+            capabilities.supports($0.command) && controller.canApplySemanticBlockCommandToTextRange(
+                range, command: $0.command)
+        }
     }
 
     private var textHighlights: [String: NSRange] {
         guard let textRange else { return [:] }
         return controller.semanticTextHighlightRanges(textRange) ?? [:]
+    }
+
+    private var listItemHighlights: [String: MarkdownEditorController.ListLineHighlights] {
+        guard let textRange else { return [:] }
+        return controller.semanticListLineHighlightRanges(textRange) ?? [:]
+    }
+
+    private var quoteLineHighlights: [String: [Int: NSRange]] {
+        guard let textRange else { return [:] }
+        return controller.semanticQuoteLineHighlightRanges(textRange) ?? [:]
+    }
+
+    private var tableCellHighlights: [String: [Int: [Int: NSRange]]] {
+        guard let textRange else { return [:] }
+        return controller.semanticTableCellHighlightRanges(textRange) ?? [:]
     }
 
     private var visibleHighlights: [String: NSRange] {
@@ -552,6 +634,7 @@ private struct FormattedBlocksView: View {
     }
 
     var body: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
                 if dynamicTypeSize.isAccessibilitySize {
@@ -559,7 +642,7 @@ private struct FormattedBlocksView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Select rendered text in a heading or paragraph to format it. Open Edit Markdown for raw editing and other actions.")
                             Text("Tap Start range on a block, then End range on another block.")
-                            Text("Long press and drag between paragraphs or headings to select text. Start and End at selection also work with VoiceOver.")
+                            Text("Select text in prose, code, or a table cell, then use Start and End at selection. Long press and drag between text blocks also works.")
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -578,6 +661,20 @@ private struct FormattedBlocksView: View {
                     }
                     HStack(spacing: 8) {
                         if let rangeStartID, let rangeEndID {
+                            let transforms = blockRangeTransforms(from: rangeStartID, to: rangeEndID)
+                            if !transforms.isEmpty {
+                                Menu("Transform blocks") {
+                                    ForEach(transforms) { option in
+                                        Button(option.title) {
+                                            if controller.applySemanticBlockCommandToBlockRange(
+                                                from: rangeStartID, to: rangeEndID, command: option.command) {
+                                                clearRange()
+                                            }
+                                        }
+                                    }
+                                }
+                                .accessibilityIdentifier("block-range-transform")
+                            }
                             Button("Copy Markdown") {
                                 if let copied = controller.copySemanticBlockRange(from: rangeStartID, to: rangeEndID) {
                                     UIPasteboard.general.string = copied
@@ -603,12 +700,24 @@ private struct FormattedBlocksView: View {
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     if !dynamicTypeSize.isAccessibilitySize {
-                        Text("Long press and drag between paragraphs or headings to select text.")
+                        Text("Select text in prose, code, or a table cell. Use Start and End at selection across blocks.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     HStack(spacing: 8) {
                         if let textRange {
+                            let transforms = textRangeTransforms(textRange)
+                            if !transforms.isEmpty {
+                                Menu("Transform blocks") {
+                                    ForEach(transforms) { option in
+                                        Button(option.title) {
+                                            if controller.applySemanticBlockCommandToTextRange(
+                                                textRange, command: option.command) { clearRange() }
+                                        }
+                                    }
+                                }
+                                .accessibilityIdentifier("text-range-transform")
+                            }
                             Menu("Format text range") {
                                 if capabilities.supports(.bold) {
                                     Button("Bold") { _ = controller.applySemanticInlineMarkToTextRange(textRange, mark: .bold) }
@@ -626,9 +735,12 @@ private struct FormattedBlocksView: View {
                                 }
                                 if capabilities.supports(.link) {
                                     Button("Link") { showingTextRangeLinkEditor = true }
+                                        .disabled(!controller.canApplySemanticInlineMarkToTextRange(
+                                            textRange, mark: .link(destination: textRangeLinkDestination)))
                                 }
                             }
                             .accessibilityIdentifier("text-range-format")
+                            .disabled(!controller.canApplySemanticInlineMarkToTextRange(textRange))
                             Button("Copy text range") {
                                 if let copied = controller.copySemanticTextRange(textRange) {
                                     UIPasteboard.general.string = copied
@@ -648,6 +760,14 @@ private struct FormattedBlocksView: View {
                                 }
                             }
                             .accessibilityIdentifier("text-range-replace")
+                            Button("Paste Markdown blocks") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceSemanticTextRangeWithMarkdownBlocks(textRange,
+                                                                                         markdown: value) {
+                                    clearRange()
+                                }
+                            }
+                            .accessibilityIdentifier("text-range-paste-blocks")
                         }
                         if textRangeStart != nil {
                             Button("Clear text range") { clearRange() }
@@ -675,6 +795,34 @@ private struct FormattedBlocksView: View {
                             if capabilities.supports(.link) {
                                 Button("Link") { showingVisibleLinkEditor = true }
                             }
+                            Divider()
+                            Button("Copy Markdown") {
+                                if let copied = controller.copyVisibleTextRange(selected) {
+                                    UIPasteboard.general.string = copied
+                                    copiedRange = true
+                                }
+                            }
+                            .accessibilityIdentifier("visible-range-copy")
+                            Button("Delete selected text", role: .destructive) {
+                                if controller.deleteVisibleTextRange(selected) { clearRange() }
+                            }
+                            .disabled(!controller.canReplaceVisibleTextRange(selected))
+                            .accessibilityIdentifier("visible-range-delete")
+                            Button("Replace with plain text from clipboard") {
+                                if let value = UIPasteboard.general.string,
+                                   controller.replaceVisibleTextRange(selected, with: value) {
+                                    clearRange()
+                                }
+                            }
+                            .disabled(UIPasteboard.general.string.map {
+                                !controller.canReplaceVisibleTextRange(selected, with: $0)
+                            } ?? true)
+                            .accessibilityIdentifier("visible-range-replace")
+                            Button("Edit Markdown in Source mode") {
+                                controller.mode = .source
+                                clearRange()
+                            }
+                            .accessibilityIdentifier("visible-range-source-fallback")
                         }
                         .accessibilityIdentifier("visible-range-format")
                         Text("Rendered characters selected")
@@ -705,6 +853,8 @@ private struct FormattedBlocksView: View {
                             FormattedBlockRow(controller: controller, block: block,
                                               enableWikilinks: enableWikilinks,
                                               wikilinkSuggestions: wikilinkSuggestions,
+                                              findMatches: findMatches.filter { $0.blockID == block.id },
+                                              activeFindMatch: activeFindMatch?.blockID == block.id ? activeFindMatch : nil,
                                               capabilities: capabilities,
                                               enableSlashCommands: enableSlashCommands,
                                               customSlashCommands: customSlashCommands,
@@ -712,11 +862,15 @@ private struct FormattedBlocksView: View {
                                               customBlockBuilder: customBlockBuilder,
                                               customBlockEditorBuilder: customBlockEditorBuilder,
                                               crossBlockHighlight: textHighlights[block.id],
+                                              listItemHighlights: listItemHighlights[block.id],
+                                              quoteLineHighlights: quoteLineHighlights[block.id],
+                                              tableCellHighlights: tableCellHighlights[block.id],
                                               visibleCrossBlockHighlight: visibleHighlights[block.id],
                                               onCrossBlockDrag: { selection in
                         guard controller.copySemanticTextRange(selection) != nil else { return }
                         textRangeStart = selection.anchor
                         textRangeEnd = selection.focus
+                        textRangeSource = controller.text
                         copiedRange = false
                     },
                                               onVisibleSelection: { range in
@@ -732,6 +886,16 @@ private struct FormattedBlocksView: View {
                         if isStart {
                             textRangeStart = position
                             textRangeEnd = nil
+                            textRangeSource = controller.text
+                        } else {
+                            textRangeEnd = position
+                        }
+                        copiedRange = false
+                    }, onCaptureListTextPosition: { position, isStart in
+                        if isStart {
+                            textRangeStart = position
+                            textRangeEnd = nil
+                            textRangeSource = controller.text
                         } else {
                             textRangeEnd = position
                         }
@@ -742,6 +906,7 @@ private struct FormattedBlocksView: View {
                         .background(isInSelectedRange(block.id) ?
                                     (editorTheme.selectionColor ?? Color.accentColor.opacity(0.12)) : .clear,
                                     in: RoundedRectangle(cornerRadius: 9))
+                        .id(block.id)
                     case .pendingParagraph:
                         PendingListParagraphField(controller: controller)
                     }
@@ -749,6 +914,13 @@ private struct FormattedBlocksView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(contentPadding ?? EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
+        }
+        .onChange(of: activeFindMatch) { _, match in
+            guard let match else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                scrollProxy.scrollTo(match.blockID, anchor: .center)
+            }
+        }
         }
         .alert("Link URL", isPresented: $showingTextRangeLinkEditor) {
             TextField("https://example.com", text: $textRangeLinkDestination)
@@ -789,6 +961,7 @@ private struct FormattedBlocksView: View {
         rangeEndID = nil
         textRangeStart = nil
         textRangeEnd = nil
+        textRangeSource = nil
         visibleTextRange = nil
         copiedRange = false
     }
@@ -858,11 +1031,33 @@ private struct PendingListParagraphField: UIViewRepresentable {
 
 @available(iOS 17.0, *)
 private struct FormattedBlockRow: View {
+    private struct CodeLanguageOption: Identifiable {
+        let id: String
+        let title: String
+    }
+
+    /// Matches the language picker in Flutter's formatted code block header.
+    private static let codeLanguages: [CodeLanguageOption] = [
+        .init(id: "", title: "Plain text"), .init(id: "javascript", title: "JavaScript"),
+        .init(id: "typescript", title: "TypeScript"), .init(id: "python", title: "Python"),
+        .init(id: "rust", title: "Rust"), .init(id: "json", title: "JSON"),
+        .init(id: "sql", title: "SQL"), .init(id: "css", title: "CSS"),
+        .init(id: "html", title: "HTML"), .init(id: "bash", title: "Bash"),
+        .init(id: "markdown", title: "Markdown"), .init(id: "yaml", title: "YAML"),
+        .init(id: "go", title: "Go"), .init(id: "java", title: "Java"),
+        .init(id: "cpp", title: "C++"), .init(id: "c", title: "C"),
+        .init(id: "swift", title: "Swift"), .init(id: "ruby", title: "Ruby"),
+        .init(id: "php", title: "PHP"), .init(id: "diff", title: "Diff"),
+        .init(id: "dockerfile", title: "Dockerfile"), .init(id: "mermaid", title: "Mermaid"),
+    ]
+
     @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let block: MarkdownDocumentBlock
     let enableWikilinks: Bool
     let wikilinkSuggestions: [String]
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
     let capabilities: MarkdownEditorCapabilities
     let enableSlashCommands: Bool
     let customSlashCommands: [MarkdownEditorSlashCommand]
@@ -870,11 +1065,15 @@ private struct FormattedBlockRow: View {
     let customBlockBuilder: MarkdownEditorCustomBlockBuilder?
     let customBlockEditorBuilder: MarkdownEditorCustomBlockBuilder?
     let crossBlockHighlight: NSRange?
+    let listItemHighlights: MarkdownEditorController.ListLineHighlights?
+    let quoteLineHighlights: [Int: NSRange]?
+    let tableCellHighlights: [Int: [Int: NSRange]]?
     let visibleCrossBlockHighlight: NSRange?
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let onVisibleSelection: (NSRange) -> Void
     let onVisibleCrossBlockDrag: (MarkdownVisibleTextPosition, MarkdownVisibleTextPosition) -> Void
     let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
+    let onCaptureListTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var customBlockEditing = false
     @State private var customBlockExpectedText: String?
     @State private var inlineSelection = NSRange(location: 0, length: 0)
@@ -883,6 +1082,18 @@ private struct FormattedBlockRow: View {
     @State private var linkDestination = "https://"
     @State private var showLinkEditor = false
     @State private var editingMarkdown = false
+
+    private var hasWholeBlockTextRangeHighlight: Bool {
+        guard crossBlockHighlight != nil else { return false }
+        switch block.kind {
+        case .paragraph, .heading: return false
+        case .list: return listItemHighlights == nil
+        case .fencedCode: return false
+        case .table: return tableCellHighlights == nil
+        case .raw: return quoteLineHighlights == nil
+        case .horizontalRule, .plugin: return true
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -901,26 +1112,69 @@ private struct FormattedBlockRow: View {
                 proseContent(font: .preferredFont(forTextStyle: .body), rawIdentifier: "paragraph-\(block.id)",
                              visibleIdentifier: "rendered-paragraph-\(block.id)")
             case let .fencedCode(_, info, _):
-                blockLabel(info.isEmpty ? "Code" : "Code · \(info)")
-                TextEditor(text: contentBinding)
-                    .font(.system(.body, design: .monospaced))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                HStack {
+                    blockLabel("Code")
+                    Spacer(minLength: 8)
+                    codeLanguageMenu(info: info)
+                }
+                HStack(spacing: 8) {
+                    Button("Start at code selection") {
+                        onCaptureTextPosition(.init(blockID: block.id, offset: inlineSelection.location), true)
+                    }
+                    .accessibilityIdentifier("code-range-start-\(block.id)")
+                    Button("End at code selection") {
+                        onCaptureTextPosition(.init(blockID: block.id, offset: NSMaxRange(inlineSelection)), false)
+                    }
+                    .accessibilityIdentifier("code-range-end-\(block.id)")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                SemanticInlineTextView(
+                    text: controller.semanticDocument.blockById(block.id)?.plainText ?? block.plainText,
+                    selectedRange: inlineSelection,
+                    font: .preferredFont(forTextStyle: .body),
+                    identifier: "code-\(block.id)", blockID: block.id,
+                    crossBlockHighlight: crossBlockHighlight,
+                    onEdit: { controller.replaceSemanticBlockContent(id: block.id, with: $0) },
+                    onStructuredPaste: { _, _ in false },
+                    onSelection: { inlineSelection = $0 },
+                    onCrossBlockDrag: onCrossBlockDrag,
+                    suggestionsVisible: false,
+                    onSuggestionKey: { _ in }, isCode: true)
                     .frame(minHeight: 120)
-                    .accessibilityIdentifier("code-\(block.id)")
             case let .table(table):
-                FormattedTableView(controller: controller, blockID: block.id, table: table)
+                FormattedTableView(controller: controller, blockID: block.id, table: table,
+                                   textHighlights: tableCellHighlights,
+                                   findMatches: findMatches, activeFindMatch: activeFindMatch,
+                                   onCaptureTextPosition: onCaptureTextPosition)
             case let .list(list):
-                FormattedListView(controller: controller, blockID: block.id, list: list)
+                FormattedListView(controller: controller, blockID: block.id, list: list,
+                                   textHighlights: listItemHighlights,
+                                   findMatches: findMatches, activeFindMatch: activeFindMatch,
+                                   onCaptureTextPosition: onCaptureListTextPosition)
             case .horizontalRule:
                 blockLabel("Divider")
                 Divider()
+            case .raw where block.id == controller.semanticDocument.blocks.first?.id &&
+                MarkdownSourceFrontmatter.parsePrefix(block.source)?.source == block.source:
+                blockLabel("Frontmatter")
+                if let frontmatter = MarkdownSourceFrontmatter.parsePrefix(block.source) {
+                    FrontmatterContentField(controller: controller, blockID: block.id,
+                                            content: frontmatter.content)
+                }
+            case .raw where MarkdownSourceQuote(source: block.source) != nil:
+                FormattedQuoteView(controller: controller, blockID: block.id,
+                                   quote: MarkdownSourceQuote(source: block.source)!,
+                                   highlights: quoteLineHighlights,
+                                   findMatches: findMatches, activeFindMatch: activeFindMatch,
+                                   onCaptureTextPosition: onCaptureTextPosition)
             case .plugin, .raw:
                 blockLabel("Source only")
-                Text(block.source.trimmingCharacters(in: .whitespacesAndNewlines))
+                Text(highlightedRawText)
                     .font(.system(.caption, design: .monospaced))
-                    .lineLimit(4)
                     .textSelection(.enabled)
+                    .accessibilityIdentifier("raw-text-\(block.id)")
+                    .accessibilityValue("Find matches: \(rawFindMatches.count)\(activeFindMatch?.field == .rawText ? ", active" : "")")
                 Button("Edit source") {
                     if let range = controller.semanticDocument.sourceRange(of: block.id) {
                         controller.setSelection(range)
@@ -933,7 +1187,9 @@ private struct FormattedBlockRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(editorTheme.blockPadding ?? EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-        .background(Color(uiColor: .secondarySystemBackground),
+        .background(hasWholeBlockTextRangeHighlight ?
+                    (editorTheme.selectionColor ?? Color.accentColor).opacity(0.22) :
+                    Color(uiColor: .secondarySystemBackground),
                     in: RoundedRectangle(cornerRadius: max(0, editorTheme.blockBorderRadius ?? 8)))
         .overlay {
             if let color = editorTheme.blockBorderColor {
@@ -954,6 +1210,53 @@ private struct FormattedBlockRow: View {
             wikilinkSelectedIndex = 0
             slashSelectedIndex = 0
         }
+    }
+
+    private var rawFindMatches: [NSRange] {
+        findMatches.compactMap { $0.field == .rawText ? $0.range : nil }
+    }
+
+    private var highlightedRawText: AttributedString {
+        let text = MarkdownFormattedFind.rawDisplayText(block.source)
+        let value = NSMutableAttributedString(string: text)
+        let length = (text as NSString).length
+        for range in rawFindMatches where range.location >= 0 && NSMaxRange(range) <= length {
+            value.addAttribute(.backgroundColor, value: UIColor.systemYellow.withAlphaComponent(0.30), range: range)
+        }
+        if let match = activeFindMatch, match.field == .rawText,
+           match.range.location >= 0, NSMaxRange(match.range) <= length {
+            value.addAttribute(.backgroundColor, value: UIColor.systemOrange.withAlphaComponent(0.48), range: match.range)
+        }
+        return AttributedString(value)
+    }
+
+    private func codeLanguageMenu(info: String) -> some View {
+        let current = info.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+        let known = Self.codeLanguages.first { $0.id == current }
+        let title = known?.title ?? current
+        return Menu {
+            if known == nil {
+                Button("Current: \(current)") { }.disabled(true)
+            }
+            ForEach(Self.codeLanguages) { option in
+                Button {
+                    if option.id != current { _ = controller.setCodeBlockLanguage(id: block.id, to: option.id) }
+                } label: {
+                    if option.id == current {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+                .accessibilityIdentifier("code-language-choice-\(option.id.isEmpty ? "plain" : option.id)")
+            }
+        } label: {
+            Text(title)
+                .font(.caption)
+                .lineLimit(1)
+        }
+        .accessibilityLabel("Code language: \(title)")
+        .accessibilityIdentifier("code-language-\(block.id)")
     }
 
     private var customBlockView: AnyView? {
@@ -1137,6 +1440,8 @@ private struct FormattedBlockRow: View {
         if MarkdownInlineMarkEditor.visibleText(of: markdown) != nil {
             VisibleInlineTextView(markdown: markdown, font: font, identifier: visibleIdentifier,
                                   blockID: block.id, crossBlockHighlight: visibleCrossBlockHighlight,
+                                  searchHighlights: findMatches.compactMap { $0.field == .prose ? $0.range : nil },
+                                  activeSearchHighlight: activeFindMatch?.field == .prose ? activeFindMatch?.range : nil,
                                   onSelection: onVisibleSelection, onCrossBlockDrag: onVisibleCrossBlockDrag)
                 .frame(minHeight: 44)
             DisclosureGroup("Edit Markdown", isExpanded: $editingMarkdown) {
@@ -1257,13 +1562,57 @@ private struct FormattedBlockRow: View {
     }
 }
 
+/// Keeps keyboard editing local to the field while each accepted change enters
+/// the editor's ordinary source undo history.
+private struct FrontmatterContentField: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let content: String
+    @State private var draft: String
+
+    init(controller: MarkdownEditorController, blockID: String, content: String) {
+        self.controller = controller
+        self.blockID = blockID
+        self.content = content
+        _draft = State(initialValue: content.replacingOccurrences(of: "\r\n", with: "\n"))
+    }
+
+    var body: some View {
+        TextEditor(text: $draft)
+            .font(.system(.body, design: .monospaced))
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .frame(minHeight: 110)
+            .accessibilityLabel("Frontmatter content")
+            .accessibilityIdentifier("frontmatter-content-\(blockID)")
+            .onChange(of: draft) { _, value in
+                let canonical = content.replacingOccurrences(of: "\r\n", with: "\n")
+                guard value != canonical else { return }
+                if !controller.replaceFrontmatterContent(id: blockID, with: value) {
+                    draft = canonical
+                }
+            }
+            .onChange(of: content) { _, value in
+                let normalized = value.replacingOccurrences(of: "\r\n", with: "\n")
+                if draft != normalized { draft = normalized }
+            }
+    }
+}
+
 @available(iOS 17.0, *)
 private struct FormattedTableView: View {
     @Environment(\.markdownEditorTheme) private var editorTheme
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let table: MarkdownSourceTable
+    let textHighlights: [Int: [Int: NSRange]]?
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
     @State private var selectedCells: MarkdownSemanticTableCellSelection?
+    @State private var focusedCell: (row: Int, column: Int, selection: NSRange)?
+    @State private var keepSelectionAfterPaste = false
+    @State private var pasteError = false
 
     private func isSelected(row: Int, column: Int) -> Bool {
         guard let selectedCells,
@@ -1289,6 +1638,22 @@ private struct FormattedTableView: View {
                     Button("Column") { edit { $0.insertingColumnAfter($0.columnCount - 1) } }
                 }
             }
+            if let focusedCell {
+                HStack(spacing: 8) {
+                    Button("Start at cell selection") {
+                        onCaptureTextPosition(.init(blockID: blockID, offset: focusedCell.selection.location,
+                                                    tableRow: focusedCell.row, tableColumn: focusedCell.column), true)
+                    }
+                    .accessibilityIdentifier("table-text-range-start-\(blockID)")
+                    Button("End at cell selection") {
+                        onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(focusedCell.selection),
+                                                    tableRow: focusedCell.row, tableColumn: focusedCell.column), false)
+                    }
+                    .accessibilityIdentifier("table-text-range-end-\(blockID)")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
             if let selectedCells {
                 HStack(spacing: 8) {
                     Menu("Format cells") {
@@ -1303,6 +1668,18 @@ private struct FormattedTableView: View {
                             UIPasteboard.general.string = copied
                         }
                     }
+                    Button("Paste cells") {
+                        if let pasted = UIPasteboard.general.string {
+                            keepSelectionAfterPaste = true
+                            if !controller.pasteSemanticTableCells(pasted, into: selectedCells) {
+                                keepSelectionAfterPaste = false
+                                pasteError = true
+                            }
+                        } else {
+                            pasteError = true
+                        }
+                    }
+                    .accessibilityIdentifier("table-range-paste")
                     Button("Clear cells", role: .destructive) {
                         if controller.clearSemanticTableCells(selectedCells) { self.selectedCells = nil }
                     }
@@ -1319,8 +1696,15 @@ private struct FormattedTableView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: 0, column: column, isHeader: true,
+                                                   alignment: table.alignments[column],
                                                    isRangeSelected: isSelected(row: 0, column: column),
-                                                   onRangeDrag: selectCells)
+                                                   textHighlight: textHighlights?[0]?[column],
+                                                   searchHighlights: searchHighlights(row: 0, column: column),
+                                                   activeSearchHighlight: activeSearchHighlight(row: 0, column: column),
+                                                   onRangeDrag: selectCells,
+                                                   onSelection: { row, column, range in
+                                                       focusedCell = (row, column, range)
+                                                   })
                                 Menu(alignmentLabel(table.alignments[column])) {
                                     Button("Align default") { edit { $0.settingColumnAlignment(column, to: nil) } }
                                     Button("Align left") { edit { $0.settingColumnAlignment(column, to: .left) } }
@@ -1341,8 +1725,15 @@ private struct FormattedTableView: View {
                             ForEach(table.headers.indices, id: \.self) { column in
                                 FormattedTableCell(controller: controller, blockID: blockID,
                                                    row: row, column: column, isHeader: false,
+                                                   alignment: table.alignments[column],
                                                    isRangeSelected: isSelected(row: row + 1, column: column),
-                                                   onRangeDrag: selectCells)
+                                                   textHighlight: textHighlights?[row + 1]?[column],
+                                                   searchHighlights: searchHighlights(row: row + 1, column: column),
+                                                   activeSearchHighlight: activeSearchHighlight(row: row + 1, column: column),
+                                                   onRangeDrag: selectCells,
+                                                   onSelection: { row, column, range in
+                                                       focusedCell = (row, column, range)
+                                                   })
                                     .frame(width: 150)
                             }
                             Menu("Row \(row + 1)") {
@@ -1357,11 +1748,32 @@ private struct FormattedTableView: View {
                 .padding(editorTheme.tablePadding ?? EdgeInsets())
             }
         }
-        .onChange(of: controller.text) { _, _ in selectedCells = nil }
+        .onChange(of: controller.text) { _, _ in
+            if keepSelectionAfterPaste, let selectedCells,
+               controller.semanticTableCellRectangle(selectedCells) != nil {
+                keepSelectionAfterPaste = false
+            } else {
+                keepSelectionAfterPaste = false
+                selectedCells = nil
+            }
+        }
+        .alert("Table paste not applied", isPresented: $pasteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The clipboard must contain a rectangular grid matching the selected cells. No cells were changed.")
+        }
     }
 
     private func edit(_ transform: (MarkdownSourceTable) -> MarkdownSourceTable) {
         controller.updateSemanticTable(id: blockID, transform)
+    }
+
+    private func searchHighlights(row: Int, column: Int) -> [NSRange] {
+        findMatches.compactMap { $0.field == .tableCell(row: row, column: column) ? $0.range : nil }
+    }
+
+    private func activeSearchHighlight(row: Int, column: Int) -> NSRange? {
+        activeFindMatch?.field == .tableCell(row: row, column: column) ? activeFindMatch?.range : nil
     }
 
     private func alignmentLabel(_ alignment: MarkdownTableAlignment?) -> String {
@@ -1377,19 +1789,46 @@ private struct FormattedTableView: View {
 @available(iOS 17.0, *)
 private struct FormattedTableCell: View {
     @ObservedObject var controller: MarkdownEditorController
+    @State private var pasteError = false
     let blockID: String
     let row: Int
     let column: Int
     let isHeader: Bool
+    let alignment: MarkdownTableAlignment?
     let isRangeSelected: Bool
+    let textHighlight: NSRange?
+    let searchHighlights: [NSRange]
+    let activeSearchHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
+    let onSelection: (Int, Int, NSRange) -> Void
 
     var body: some View {
         FormattedTableInputField(text: textBinding, placeholder: isHeader ? "Header" : "Cell",
                                  identifier: "table-\(blockID)-\(isHeader ? "header" : "row-\(row)")-col-\(column)",
                                  blockID: blockID, row: isHeader ? 0 : row + 1, column: column,
                                  isHeader: isHeader,
-                                 isRangeSelected: isRangeSelected, onRangeDrag: onRangeDrag)
+                                 alignment: alignment,
+                                 isRangeSelected: isRangeSelected, textHighlight: textHighlight,
+                                 searchHighlights: searchHighlights, activeSearchHighlight: activeSearchHighlight,
+                                 onRangeDrag: onRangeDrag,
+                                 onSelection: onSelection,
+                                 onGridPaste: { source in
+                                     controller.pasteTableCells(source, inTable: blockID,
+                                                                row: isHeader ? 0 : row + 1,
+                                                                column: column)
+                                 }, onSourcePaste: { source, range, visibleText in
+                                     controller.pasteIntoTableCellSource(source, inTable: blockID,
+                                                                         row: isHeader ? 0 : row + 1,
+                                                                         column: column, visibleText: visibleText,
+                                                                         visibleRange: range)
+                                 }, onPasteRejected: {
+                                     pasteError = true
+                                 })
+        .alert("Table paste not applied", isPresented: $pasteError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The cell selection could not be mapped safely to its Markdown source. The clipboard is unchanged; switch to Source mode to paste it there.")
+        }
     }
 
     private var textBinding: Binding<String> {
@@ -1417,8 +1856,16 @@ private struct FormattedTableInputField: UIViewRepresentable {
     let row: Int
     let column: Int
     let isHeader: Bool
+    let alignment: MarkdownTableAlignment?
     let isRangeSelected: Bool
+    let textHighlight: NSRange?
+    let searchHighlights: [NSRange]
+    let activeSearchHighlight: NSRange?
     let onRangeDrag: (Int, Int, Int, Int) -> Void
+    let onSelection: (Int, Int, NSRange) -> Void
+    let onGridPaste: (String) -> Bool
+    let onSourcePaste: (String, NSRange, String) -> Bool
+    let onPasteRejected: () -> Void
 
     func makeUIView(context: Context) -> FormattedRangeTextField {
         let field = FormattedRangeTextField()
@@ -1443,7 +1890,13 @@ private struct FormattedTableInputField: UIViewRepresentable {
     }
 
     private func configure(_ field: FormattedRangeTextField) {
+        field.textAlignment = MarkdownTableColumnPresentation(alignment).fieldTextAlignment
         field.rangeIdentity = .table(blockID: blockID, row: row, column: column)
+        field.crossCellHighlight = textHighlight
+        field.crossCellHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        field.tableSearchHighlights = searchHighlights
+        field.tableActiveSearchHighlight = activeSearchHighlight
+        field.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         let background = editorTheme.tableCellBackground(isSelected: isRangeSelected, isHeader: isHeader)
         field.backgroundColor = background.map(UIColor.init) ??
             (isRangeSelected ? UIColor.systemBlue.withAlphaComponent(0.2) : .clear)
@@ -1472,7 +1925,27 @@ private struct FormattedTableInputField: UIViewRepresentable {
         init(parent: FormattedTableInputField) { self.parent = parent }
 
         @objc func textChanged(_ field: UITextField) { parent.text = field.text ?? "" }
+        private func reportSelection(_ field: UITextField) {
+            guard let selected = field.selectedTextRange else { return }
+            let start = field.offset(from: field.beginningOfDocument, to: selected.start)
+            let end = field.offset(from: field.beginningOfDocument, to: selected.end)
+            parent.onSelection(parent.row, parent.column, NSRange(location: start, length: end - start))
+        }
+        func textFieldDidChangeSelection(_ textField: UITextField) { reportSelection(textField) }
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            guard textField.markedTextRange == nil,
+                  string.contains("\t") || string.contains("\n") || string.contains("\r") else { return true }
+            let visibleText = textField.text ?? ""
+            if MarkdownEditorController.shouldRouteFocusedTablePasteAsGrid(
+                string, visibleText: visibleText, selection: range), parent.onGridPaste(string) {
+                return false
+            }
+            if !parent.onSourcePaste(string, range, visibleText) { parent.onPasteRejected() }
+            return false
+        }
         func textFieldDidBeginEditing(_ textField: UITextField) {
+            reportSelection(textField)
             if let field = textField as? FormattedRangeTextField { parent.configure(field) }
         }
         func textFieldDidEndEditing(_ textField: UITextField) {
@@ -1487,10 +1960,18 @@ private struct FormattedListView: View {
     @ObservedObject var controller: MarkdownEditorController
     let blockID: String
     let list: MarkdownSourceList
-    @State private var focusRequest: (index: Int, token: UUID)?
+    let textHighlights: MarkdownEditorController.ListLineHighlights?
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
+    @State private var focusRequest: (index: Int, continuationIndex: Int?, offset: Int, token: UUID)?
+    @State private var itemSelections: [Int: NSRange] = [:]
+    @State private var continuationSelections: [Int: [Int: NSRange]] = [:]
+    @State private var trailingSelections: [Int: [Int: NSRange]] = [:]
     @State private var selectedItems: MarkdownSemanticListItemSelection?
     @State private var rangeLinkDestination = "https://"
     @State private var showingRangeLinkEditor = false
+    @State private var showingPasteFailure = false
 
     private func isSelected(_ index: Int) -> Bool {
         guard let selectedItems else { return false }
@@ -1499,9 +1980,20 @@ private struct FormattedListView: View {
         return (first...last).contains(index)
     }
 
+    private func requestedFocus(for index: Int, continuationIndex: Int? = nil) -> (token: UUID, offset: Int)? {
+        guard let focusRequest, focusRequest.index == index,
+              focusRequest.continuationIndex == continuationIndex else { return nil }
+        return (focusRequest.token, focusRequest.offset)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LIST").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+                .alert("Paste could not be applied", isPresented: $showingPasteFailure) {
+                    Button("OK") { }
+                } message: {
+                    Text("The list changed before the paste. Your text is still on the clipboard; tap the row and paste again.")
+                }
             if let selectedItems {
                 HStack(spacing: 8) {
                     Menu("Format items") {
@@ -1540,6 +2032,7 @@ private struct FormattedListView: View {
                         } else {
                             Text(item.marker).font(.system(.body, design: .monospaced))
                         }
+                        let sourceAtRender = controller.text
                         FormattedListItemField(text: Binding(get: {
                             guard let block = controller.semanticDocument.blockById(blockID),
                                   case let .list(current) = block.kind,
@@ -1548,6 +2041,12 @@ private struct FormattedListView: View {
                         }, set: { value in
                             controller.updateSemanticList(id: blockID) { $0.replacingItemContent(at: index, with: value) }
                         }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            crossItemHighlight: textHighlights?.primary[index],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .listItem(index) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .listItem(index) ? activeFindMatch?.range : nil,
+                            onSelection: { itemSelections[index] = $0 },
                             onRangeDrag: { anchor, focus in
                                 let selection = MarkdownSemanticListItemSelection(blockID: blockID,
                                                                                    anchorIndex: anchor,
@@ -1556,14 +2055,26 @@ private struct FormattedListView: View {
                                     selectedItems = selection
                                 }
                             },
-                            focusRequest: focusRequest?.index == index ? focusRequest?.token : nil,
+                            focusRequest: requestedFocus(for: index),
                             onSubmit: { contentOffset in
                                 let split = contentOffset < (item.content as NSString).length
                                 if controller.submitSemanticListItem(id: blockID, at: index, contentOffset: contentOffset), split {
-                                    focusRequest = (index + 1, UUID())
+                                    focusRequest = (index + 1, nil, 0, UUID())
                                 }
                         }, onIndent: { outdent in
                             _ = changeIndent(at: index, outdent: outdent)
+                        }, onStructuredPaste: { range, markdown, displayedText in
+                            if let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                id: blockID, index: index, range: range, markdown: markdown,
+                                ifTextIs: sourceAtRender) {
+                                focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                                return true
+                            }
+                            if controller.pasteListLineVerbatimInSource(id: blockID, index: index,
+                                                                        range: range, markdown: markdown,
+                                                                        displayedText: displayedText) { return true }
+                            showingPasteFailure = true
+                            return false
                         })
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)")
                         .frame(maxWidth: .infinity)
@@ -1578,9 +2089,26 @@ private struct FormattedListView: View {
                         .accessibilityLabel("Indent item \(index + 1)")
                         .disabled(list.indentingItem(at: index) == nil)
                     }
+                    if let selected = itemSelections[index] {
+                        HStack(spacing: 8) {
+                            Button("Start at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                                            listItemIndex: index), true)
+                            }
+                            .accessibilityIdentifier("text-range-start-\(blockID)-item-\(index)")
+                            Button("End at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                                            listItemIndex: index), false)
+                            }
+                            .accessibilityIdentifier("text-range-end-\(blockID)-item-\(index)")
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                    }
                     ForEach(item.continuations.indices, id: \.self) { lineIndex in
                         let continuation = item.continuations[lineIndex]
-                        TextField("Continuation", text: Binding(get: {
+                        let sourceAtRender = controller.text
+                        FormattedListItemField(text: Binding(get: {
                             guard let block = controller.semanticDocument.blockById(blockID),
                                   case let .list(current) = block.kind,
                                   current.items.indices.contains(index),
@@ -1592,16 +2120,126 @@ private struct FormattedListView: View {
                             controller.updateSemanticList(id: blockID) {
                                 $0.replacingContinuationContent(at: index, lineIndex: lineIndex, with: value)
                             }
-                        }))
+                        }), blockID: blockID, index: index, isRangeSelected: isSelected(index),
+                            crossItemHighlight: textHighlights?.continuations[index]?[lineIndex],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .listContinuation(item: index, line: lineIndex) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .listContinuation(item: index, line: lineIndex) ?
+                                activeFindMatch?.range : nil,
+                            onSelection: { continuationSelections[index, default: [:]][lineIndex] = $0 },
+                            onRangeDrag: { anchor, focus in
+                                let selection = MarkdownSemanticListItemSelection(blockID: blockID,
+                                                                                   anchorIndex: anchor,
+                                                                                   focusIndex: focus)
+                                if controller.copySemanticListItemRange(selection) != nil {
+                                    selectedItems = selection
+                                }
+                            }, focusRequest: requestedFocus(for: index, continuationIndex: lineIndex),
+                            onSubmit: nil, onIndent: { outdent in
+                                _ = changeIndent(at: index, outdent: outdent)
+                            }, onStructuredPaste: { range, markdown, displayedText in
+                                if let focus = controller.replaceSemanticListLineWithMarkdownBlocks(
+                                    id: blockID, index: index, continuationIndex: lineIndex,
+                                    range: range, markdown: markdown,
+                                    ifTextIs: sourceAtRender) {
+                                    focusRequest = (focus.index, focus.continuationIndex, focus.offset, UUID())
+                                    return true
+                                }
+                                if controller.pasteListLineVerbatimInSource(id: blockID, index: index,
+                                                                            continuationIndex: lineIndex,
+                                                                            range: range, markdown: markdown,
+                                                                            displayedText: displayedText) { return true }
+                                showingPasteFailure = true
+                                return false
+                            })
                         .padding(.leading, CGFloat(continuation.indent.count - item.indent.count) * 8)
                         .accessibilityIdentifier("list-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                        if let selected = continuationSelections[index]?[lineIndex] {
+                            HStack(spacing: 8) {
+                                Button("Start at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                        listItemIndex: index, listContinuationIndex: lineIndex), true)
+                                }
+                                .accessibilityIdentifier("text-range-start-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                                Button("End at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                        listItemIndex: index, listContinuationIndex: lineIndex), false)
+                                }
+                                .accessibilityIdentifier("text-range-end-\(blockID)-item-\(index)-continuation-\(lineIndex)")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
                     }
                 }
                 .padding(.leading, CGFloat(item.indent.count) * 8)
                 .padding(4)
-                .background(isSelected(index) ?
+                .background(isSelected(index) || textHighlights?.primary[index] != nil ||
+                            textHighlights?.continuations[index] != nil ?
                             (editorTheme.selectionColor ?? Color.accentColor.opacity(0.15)) : .clear,
                             in: RoundedRectangle(cornerRadius: 6))
+                ForEach(list.trailingOwners(after: index), id: \.self) { parentIndex in
+                    ForEach(list.items[parentIndex].trailingContinuations.indices, id: \.self) { lineIndex in
+                        let continuation = list.items[parentIndex].trailingContinuations[lineIndex]
+                        FormattedListItemField(text: Binding(get: {
+                            guard let block = controller.semanticDocument.blockById(blockID),
+                                  case let .list(current) = block.kind,
+                                  current.items.indices.contains(parentIndex),
+                                  current.items[parentIndex].trailingContinuations.indices.contains(lineIndex) else {
+                                return continuation.content
+                            }
+                            return current.items[parentIndex].trailingContinuations[lineIndex].content
+                        }, set: { value in
+                            controller.updateSemanticList(id: blockID) {
+                                $0.replacingTrailingContinuationContent(at: parentIndex,
+                                                                        lineIndex: lineIndex, with: value)
+                            }
+                        }), blockID: blockID, index: parentIndex, isRangeSelected: isSelected(parentIndex),
+                            crossItemHighlight: textHighlights?.trailing[parentIndex]?[lineIndex],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .listTrailing(item: parentIndex, line: lineIndex) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .listTrailing(item: parentIndex, line: lineIndex) ?
+                                activeFindMatch?.range : nil,
+                            onSelection: { trailingSelections[parentIndex, default: [:]][lineIndex] = $0 },
+                            onRangeDrag: { anchor, focus in
+                                let selection = MarkdownSemanticListItemSelection(blockID: blockID,
+                                                                                   anchorIndex: anchor,
+                                                                                   focusIndex: focus)
+                                if controller.copySemanticListItemRange(selection) != nil {
+                                    selectedItems = selection
+                                }
+                            }, focusRequest: nil, onSubmit: nil, onIndent: { _ in },
+                            onStructuredPaste: { range, markdown, displayedText in
+                                if controller.pasteListLineVerbatimInSource(id: blockID, index: parentIndex,
+                                                                            trailingIndex: lineIndex,
+                                                                            range: range, markdown: markdown,
+                                                                            displayedText: displayedText) { return true }
+                                showingPasteFailure = true
+                                return false
+                            })
+                            .padding(.leading, CGFloat(continuation.indent.count) * 8 + 4)
+                            .padding(.top, 4)
+                            .accessibilityIdentifier("list-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                        if let selected = trailingSelections[parentIndex]?[lineIndex] {
+                            HStack(spacing: 8) {
+                                Button("Start at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: selected.location,
+                                        listItemIndex: parentIndex, listTrailingIndex: lineIndex), true)
+                                }
+                                .accessibilityIdentifier("text-range-start-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                                Button("End at selection") {
+                                    onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selected),
+                                        listItemIndex: parentIndex, listTrailingIndex: lineIndex), false)
+                                }
+                                .accessibilityIdentifier("text-range-end-\(blockID)-item-\(parentIndex)-trailing-\(lineIndex)")
+                            }
+                            .font(.caption)
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
             }
         }
         .alert("Link URL", isPresented: $showingRangeLinkEditor) {
@@ -1617,7 +2255,12 @@ private struct FormattedListView: View {
         } message: {
             Text("Only http, https, mailto, and tel links are accepted.")
         }
-        .onChange(of: controller.text) { _, _ in selectedItems = nil }
+        .onChange(of: controller.text) { _, _ in
+            selectedItems = nil
+            itemSelections.removeAll()
+            continuationSelections.removeAll()
+            trailingSelections.removeAll()
+        }
     }
 
     private func changeIndent(at index: Int, outdent: Bool) -> Bool {
@@ -1640,7 +2283,45 @@ enum FormattedRangeFieldIdentity: Equatable {
 class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
     var rangeIdentity: FormattedRangeFieldIdentity?
     var onRangeDrag: ((FormattedRangeFieldIdentity, FormattedRangeFieldIdentity) -> Void)?
+    var crossCellHighlight: NSRange? { didSet { setNeedsLayout() } }
+    var crossCellHighlightColor: UIColor? { didSet { setNeedsLayout() } }
+    var tableSearchHighlights: [NSRange] = [] { didSet { setNeedsLayout() } }
+    var tableActiveSearchHighlight: NSRange? { didSet { setNeedsLayout() } }
     private var dragAnchor: FormattedRangeFieldIdentity?
+    private let cellRangeLayer = CAShapeLayer()
+    private let tableSearchLayer = CAShapeLayer()
+    private let tableActiveSearchLayer = CAShapeLayer()
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if cellRangeLayer.superlayer == nil { layer.insertSublayer(cellRangeLayer, at: 0) }
+        if tableSearchLayer.superlayer == nil { layer.insertSublayer(tableSearchLayer, above: cellRangeLayer) }
+        if tableActiveSearchLayer.superlayer == nil { layer.insertSublayer(tableActiveSearchLayer, above: tableSearchLayer) }
+        cellRangeLayer.frame = bounds
+        tableSearchLayer.frame = bounds
+        tableActiveSearchLayer.frame = bounds
+        cellRangeLayer.fillColor = (crossCellHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        cellRangeLayer.path = highlightPath(crossCellHighlight.map { [$0] } ?? []).cgPath
+        tableSearchLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.30).cgColor
+        tableSearchLayer.path = highlightPath(tableSearchHighlights).cgPath
+        tableActiveSearchLayer.fillColor = UIColor.systemOrange.withAlphaComponent(0.48).cgColor
+        tableActiveSearchLayer.path = highlightPath(tableActiveSearchHighlight.map { [$0] } ?? []).cgPath
+    }
+
+    private func highlightPath(_ highlights: [NSRange]) -> UIBezierPath {
+        let path = UIBezierPath()
+        let length = ((text ?? "") as NSString).length
+        for highlight in highlights where highlight.location >= 0 && highlight.length > 0 &&
+            NSMaxRange(highlight) <= length {
+            guard let first = position(from: beginningOfDocument, offset: highlight.location),
+                  let last = position(from: first, offset: highlight.length),
+                  let range = textRange(from: first, to: last) else { continue }
+            for rect in selectionRects(for: range) where !rect.rect.isEmpty {
+                path.append(UIBezierPath(roundedRect: rect.rect, cornerRadius: 2))
+            }
+        }
+        return path
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1689,6 +2370,44 @@ class FormattedRangeTextField: UITextField, UIGestureRecognizerDelegate {
 final class FormattedListKeyboardTextField: FormattedRangeTextField {
     var onIndent: ((Bool) -> Void)?
     var onReturnAtCaret: ((Int) -> Void)?
+    var crossItemHighlight: NSRange? { didSet { setNeedsLayout() } }
+    var crossItemHighlightColor: UIColor? { didSet { setNeedsLayout() } }
+    var searchHighlights: [NSRange] = [] { didSet { setNeedsLayout() } }
+    var activeSearchHighlight: NSRange? { didSet { setNeedsLayout() } }
+    private let rangeLayer = CAShapeLayer()
+    private let searchLayer = CAShapeLayer()
+    private let activeSearchLayer = CAShapeLayer()
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if rangeLayer.superlayer == nil { layer.insertSublayer(rangeLayer, at: 0) }
+        if searchLayer.superlayer == nil { layer.insertSublayer(searchLayer, above: rangeLayer) }
+        if activeSearchLayer.superlayer == nil { layer.insertSublayer(activeSearchLayer, above: searchLayer) }
+        rangeLayer.frame = bounds
+        searchLayer.frame = bounds
+        activeSearchLayer.frame = bounds
+        rangeLayer.fillColor = (crossItemHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        rangeLayer.path = highlightPath(crossItemHighlight.map { [$0] } ?? []).cgPath
+        searchLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.30).cgColor
+        searchLayer.path = highlightPath(searchHighlights).cgPath
+        activeSearchLayer.fillColor = UIColor.systemOrange.withAlphaComponent(0.48).cgColor
+        activeSearchLayer.path = highlightPath(activeSearchHighlight.map { [$0] } ?? []).cgPath
+    }
+
+    private func highlightPath(_ highlights: [NSRange]) -> UIBezierPath {
+        let path = UIBezierPath()
+        let length = ((text ?? "") as NSString).length
+        for highlight in highlights where highlight.location != NSNotFound && highlight.length > 0 &&
+            highlight.location >= 0 && NSMaxRange(highlight) <= length {
+            guard let first = position(from: beginningOfDocument, offset: highlight.location),
+                  let last = position(from: first, offset: highlight.length),
+                  let range = textRange(from: first, to: last) else { continue }
+            for rect in selectionRects(for: range) where !rect.rect.isEmpty {
+                path.append(UIBezierPath(roundedRect: rect.rect, cornerRadius: 2))
+            }
+        }
+        return path
+    }
 
     /// Return from a one-line field only when the caret is collapsed.
     @discardableResult
@@ -1711,16 +2430,79 @@ final class FormattedListKeyboardTextField: FormattedRangeTextField {
 }
 
 @available(iOS 17.0, *)
+private struct FormattedQuoteView: View {
+    @ObservedObject var controller: MarkdownEditorController
+    let blockID: String
+    let quote: MarkdownSourceQuote
+    let highlights: [Int: NSRange]?
+    let findMatches: [MarkdownFormattedFindMatch]
+    let activeFindMatch: MarkdownFormattedFindMatch?
+    let onCaptureTextPosition: (MarkdownSemanticTextPosition, Bool) -> Void
+    @State private var selections: [Int: NSRange] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("QUOTE").font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            ForEach(quote.lines.indices, id: \.self) { index in
+                let line = quote.lines[index]
+                let selection = selections[index] ?? NSRange(location: 0, length: 0)
+                HStack(alignment: .top, spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.accentColor.opacity(0.55))
+                        .frame(width: 3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Button("Start at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: selection.location,
+                                                            quoteLineIndex: index), true)
+                            }
+                            .accessibilityIdentifier("quote-range-start-\(blockID)-\(index)")
+                            Button("End at selection") {
+                                onCaptureTextPosition(.init(blockID: blockID, offset: NSMaxRange(selection),
+                                                            quoteLineIndex: index), false)
+                            }
+                            .accessibilityIdentifier("quote-range-end-\(blockID)-\(index)")
+                        }
+                        .font(.caption2)
+                        .buttonStyle(.bordered)
+                        SemanticInlineTextView(
+                            text: line.content, selectedRange: selection,
+                            font: .preferredFont(forTextStyle: .body),
+                            identifier: "quote-line-\(blockID)-\(index)", blockID: blockID,
+                            crossBlockHighlight: highlights?[index],
+                            searchHighlights: findMatches.compactMap {
+                                $0.field == .quoteLine(index) ? $0.range : nil
+                            },
+                            activeSearchHighlight: activeFindMatch?.field == .quoteLine(index) ? activeFindMatch?.range : nil,
+                            onEdit: { controller.replaceSemanticQuoteLine(id: blockID, lineIndex: index, with: $0) },
+                            onStructuredPaste: { _, _ in false },
+                            onSelection: { selections[index] = $0 },
+                            onCrossBlockDrag: { _ in },
+                            suggestionsVisible: false,
+                            onSuggestionKey: { _ in })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@available(iOS 17.0, *)
 private struct FormattedListItemField: UIViewRepresentable {
     @Environment(\.markdownEditorTheme) private var editorTheme
     @Binding var text: String
     let blockID: String
     let index: Int
     let isRangeSelected: Bool
+    let crossItemHighlight: NSRange?
+    var searchHighlights: [NSRange] = []
+    var activeSearchHighlight: NSRange? = nil
+    let onSelection: ((NSRange) -> Void)?
     let onRangeDrag: (Int, Int) -> Void
-    let focusRequest: UUID?
-    let onSubmit: (Int) -> Void
+    let focusRequest: (token: UUID, offset: Int)?
+    let onSubmit: ((Int) -> Void)?
     let onIndent: (Bool) -> Void
+    let onStructuredPaste: (NSRange, String, String) -> Bool
 
     func makeUIView(context: Context) -> FormattedListKeyboardTextField {
         let field = FormattedListKeyboardTextField()
@@ -1735,6 +2517,11 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.text = text
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.crossItemHighlight = crossItemHighlight
+        field.crossItemHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        field.searchHighlights = searchHighlights
+        field.activeSearchHighlight = activeSearchHighlight
+        field.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         field.rangeIdentity = .list(blockID: blockID, index: index)
         field.onRangeDrag = { anchor, focus in
             guard case let .list(firstBlock, firstIndex) = anchor,
@@ -1751,6 +2538,11 @@ private struct FormattedListItemField: UIViewRepresentable {
         context.coordinator.parent = self
         field.onIndent = onIndent
         field.onReturnAtCaret = onSubmit
+        field.crossItemHighlight = crossItemHighlight
+        field.crossItemHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        field.searchHighlights = searchHighlights
+        field.activeSearchHighlight = activeSearchHighlight
+        field.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         field.rangeIdentity = .list(blockID: blockID, index: index)
         field.onRangeDrag = { anchor, focus in
             guard case let .list(firstBlock, firstIndex) = anchor,
@@ -1761,11 +2553,13 @@ private struct FormattedListItemField: UIViewRepresentable {
         field.backgroundColor = isRangeSelected ?
             (editorTheme.selectionColor.map(UIColor.init) ?? UIColor.systemBlue.withAlphaComponent(0.2)) : .clear
         if field.text != text { field.text = text }
-        if let focusRequest, context.coordinator.handledFocusRequest != focusRequest {
-            context.coordinator.handledFocusRequest = focusRequest
+        if let focusRequest, context.coordinator.handledFocusRequest != focusRequest.token {
+            context.coordinator.handledFocusRequest = focusRequest.token
             field.becomeFirstResponder()
-            field.selectedTextRange = field.textRange(from: field.beginningOfDocument,
-                                                      to: field.beginningOfDocument)
+            if let caret = field.position(from: field.beginningOfDocument,
+                                          offset: min(focusRequest.offset, ((field.text ?? "") as NSString).length)) {
+                field.selectedTextRange = field.textRange(from: caret, to: caret)
+            }
         }
     }
 
@@ -1781,9 +2575,33 @@ private struct FormattedListItemField: UIViewRepresentable {
             parent.text = field.text ?? ""
         }
 
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            textFieldDidChangeSelection(textField)
+        }
+
+        func textFieldDidChangeSelection(_ textField: UITextField) {
+            guard let range = textField.selectedTextRange else { return }
+            let start = textField.offset(from: textField.beginningOfDocument, to: range.start)
+            let end = textField.offset(from: textField.beginningOfDocument, to: range.end)
+            parent.onSelection?(NSRange(location: min(start, end), length: abs(end - start)))
+        }
+
         func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+            guard parent.onSubmit != nil else { return true }
             (textField as? FormattedListKeyboardTextField)?.submitAtCurrentCaret()
             return false
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            if textField.markedTextRange == nil, string.contains("\n") || string.contains("\r") {
+                // A single-line field cannot safely absorb rejected block syntax.
+                // Route prose paragraphs and blank lines through the same
+                // source-preserving fallback as structured Markdown.
+                _ = parent.onStructuredPaste(range, string, textField.text ?? "")
+                return false
+            }
+            return true
         }
     }
 }
@@ -1816,23 +2634,41 @@ private final class SemanticRangeTextView: WikilinkInputTextView {
     var isRenderedSelectionSurface = false
     var crossBlockHighlight: NSRange? { didSet { setNeedsLayout() } }
     var crossBlockHighlightColor: UIColor? { didSet { setNeedsLayout() } }
+    var searchHighlights: [NSRange] = [] { didSet { setNeedsLayout() } }
+    var activeSearchHighlight: NSRange? { didSet { setNeedsLayout() } }
     private let rangeLayer = CAShapeLayer()
+    private let searchLayer = CAShapeLayer()
+    private let activeSearchLayer = CAShapeLayer()
 
     override func layoutSubviews() {
         super.layoutSubviews()
         if rangeLayer.superlayer == nil { layer.insertSublayer(rangeLayer, at: 0) }
+        if searchLayer.superlayer == nil { layer.insertSublayer(searchLayer, above: rangeLayer) }
+        if activeSearchLayer.superlayer == nil { layer.insertSublayer(activeSearchLayer, above: searchLayer) }
         rangeLayer.frame = bounds
+        searchLayer.frame = bounds
+        activeSearchLayer.frame = bounds
         rangeLayer.fillColor = (crossBlockHighlightColor ?? tintColor.withAlphaComponent(0.22)).cgColor
+        rangeLayer.path = highlightPath(crossBlockHighlight.map { [$0] } ?? []).cgPath
+        searchLayer.fillColor = UIColor.systemYellow.withAlphaComponent(0.30).cgColor
+        searchLayer.path = highlightPath(searchHighlights).cgPath
+        activeSearchLayer.fillColor = UIColor.systemOrange.withAlphaComponent(0.48).cgColor
+        activeSearchLayer.path = highlightPath(activeSearchHighlight.map { [$0] } ?? []).cgPath
+    }
+
+    private func highlightPath(_ highlights: [NSRange]) -> UIBezierPath {
         let path = UIBezierPath()
-        if let highlight = crossBlockHighlight, highlight.length > 0,
-           let first = position(from: beginningOfDocument, offset: highlight.location),
-           let last = position(from: first, offset: highlight.length),
-           let range = textRange(from: first, to: last) {
+        let length = ((text ?? "") as NSString).length
+        for highlight in highlights where highlight.location != NSNotFound && highlight.length > 0 &&
+            highlight.location >= 0 && NSMaxRange(highlight) <= length {
+            guard let first = position(from: beginningOfDocument, offset: highlight.location),
+                  let last = position(from: first, offset: highlight.length),
+                  let range = textRange(from: first, to: last) else { continue }
             for selectionRect in selectionRects(for: range) where !selectionRect.rect.isEmpty {
                 path.append(UIBezierPath(roundedRect: selectionRect.rect, cornerRadius: 2))
             }
         }
-        rangeLayer.path = path.cgPath
+        return path
     }
 
     override func tintColorDidChange() {
@@ -1850,12 +2686,15 @@ private struct SemanticInlineTextView: UIViewRepresentable {
     let identifier: String
     let blockID: String
     let crossBlockHighlight: NSRange?
+    var searchHighlights: [NSRange] = []
+    var activeSearchHighlight: NSRange? = nil
     let onEdit: (String) -> Bool
     let onStructuredPaste: (NSRange, String) -> Bool
     let onSelection: (NSRange) -> Void
     let onCrossBlockDrag: (MarkdownSemanticTextSelection) -> Void
     let suggestionsVisible: Bool
     let onSuggestionKey: (WikilinkSuggestionKey) -> Void
+    var isCode = false
 
     func makeUIView(context: Context) -> UITextView {
         let view = SemanticRangeTextView()
@@ -1863,6 +2702,9 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.semanticBlockID = blockID
         view.crossBlockHighlight = crossBlockHighlight
         view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        view.searchHighlights = searchHighlights
+        view.activeSearchHighlight = activeSearchHighlight
+        view.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         let drag = UILongPressGestureRecognizer(target: context.coordinator,
                                                 action: #selector(Coordinator.handleRangeDrag(_:)))
         drag.minimumPressDuration = 0.4
@@ -1873,10 +2715,11 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         view.backgroundColor = .clear
         view.textContainerInset = UIEdgeInsets(top: 6, left: 4, bottom: 6, right: 4)
         view.textContainer.lineFragmentPadding = 0
-        view.font = font
+        view.font = isCode ? UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular) : font
         view.adjustsFontForContentSizeCategory = true
         view.text = text
-        view.autocorrectionType = .default
+        view.autocorrectionType = isCode ? .no : .default
+        view.autocapitalizationType = isCode ? .none : .sentences
         view.accessibilityIdentifier = identifier
         view.suggestionsVisible = suggestionsVisible
         view.onSuggestionKey = onSuggestionKey
@@ -1887,11 +2730,14 @@ private struct SemanticInlineTextView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.isUpdating = true
         defer { context.coordinator.isUpdating = false }
-        view.font = font
+        view.font = isCode ? UIFont.monospacedSystemFont(ofSize: font.pointSize, weight: .regular) : font
         if let view = view as? SemanticRangeTextView {
             view.semanticBlockID = blockID
             view.crossBlockHighlight = crossBlockHighlight
             view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+            view.searchHighlights = searchHighlights
+            view.activeSearchHighlight = activeSearchHighlight
+            view.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         }
         if let view = view as? WikilinkInputTextView {
             view.suggestionsVisible = suggestionsVisible
@@ -1987,6 +2833,8 @@ private struct VisibleInlineTextView: UIViewRepresentable {
     let identifier: String
     let blockID: String
     let crossBlockHighlight: NSRange?
+    let searchHighlights: [NSRange]
+    let activeSearchHighlight: NSRange?
     let onSelection: (NSRange) -> Void
     let onCrossBlockDrag: (MarkdownVisibleTextPosition, MarkdownVisibleTextPosition) -> Void
 
@@ -1997,6 +2845,9 @@ private struct VisibleInlineTextView: UIViewRepresentable {
         view.isRenderedSelectionSurface = true
         view.crossBlockHighlight = crossBlockHighlight
         view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+        view.searchHighlights = searchHighlights
+        view.activeSearchHighlight = activeSearchHighlight
+        view.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         view.isEditable = false
         view.isSelectable = true
         view.isScrollEnabled = false
@@ -2024,6 +2875,9 @@ private struct VisibleInlineTextView: UIViewRepresentable {
             view.semanticBlockID = blockID
             view.crossBlockHighlight = crossBlockHighlight
             view.crossBlockHighlightColor = editorTheme.selectionColor.map(UIColor.init)
+            view.searchHighlights = searchHighlights
+            view.activeSearchHighlight = activeSearchHighlight
+            view.accessibilityValue = "Find matches: \(searchHighlights.count)\(activeSearchHighlight == nil ? "" : ", active")"
         }
         if context.coordinator.lastMarkdown != markdown || context.coordinator.lastFontSize != font.pointSize {
             context.coordinator.isUpdating = true

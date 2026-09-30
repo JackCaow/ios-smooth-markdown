@@ -5,12 +5,14 @@ import UIKit
 struct FixtureDemoView: View {
     @StateObject private var controller = MarkdownEditorController(text: editorFixtureText())
     @State private var showEditor = ProcessInfo.processInfo.arguments.contains("--cross-block-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--list-text-endpoint-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--visible-inline-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
+        ProcessInfo.processInfo.arguments.contains("--formatted-find-fixture") ||
         ProcessInfo.processInfo.arguments.contains("--host-io-fixture")
     @State private var enableHTML = false
     @State private var showStructured = false
@@ -79,6 +81,15 @@ struct FixtureDemoView: View {
                 Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
                 Text("Copied: \(clipboardPreview)").accessibilityIdentifier("table-range-clipboard")
                 SmoothMarkdownView(markdown: "Before table.\n\n| Name | Value |\n| --- | --- |\n| Alpha | 42 |\n\nAfter table.",
+                                   styleSheet: .light(), selectable: true)
+            }
+        } else if ProcessInfo.processInfo.arguments.contains("--reader-multi-image-range-fixture") {
+            VStack(spacing: 0) {
+                Text("Image taps: \(imageTapCount)").accessibilityIdentifier("image-tap-count")
+                Button("Show clipboard") { clipboardPreview = UIPasteboard.general.string ?? "" }
+                Text("Copied: \(clipboardPreview)").accessibilityIdentifier("image-range-clipboard")
+                SmoothMarkdownView(markdown: "Before image.\n\n![Bundled vector](native-vector.svg)\n\nMiddle text.\n\n![Bundled vector](native-vector.svg)\n\nAfter image.",
+                                   onImageTapWithMetadata: { _, _, _ in imageTapCount += 1 },
                                    styleSheet: .light(), selectable: true)
             }
         } else if ProcessInfo.processInfo.arguments.contains("--reader-image-range-fixture") {
@@ -151,12 +162,14 @@ struct FixtureDemoView: View {
         }
         .onAppear {
             if ProcessInfo.processInfo.arguments.contains("--cross-block-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--list-text-endpoint-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--inline-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--visible-inline-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--selection-list-editor-fixture") ||
                 ProcessInfo.processInfo.arguments.contains("--empty-list-editor-fixture") ||
-                ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") {
+                ProcessInfo.processInfo.arguments.contains("--nested-list-editor-fixture") ||
+                ProcessInfo.processInfo.arguments.contains("--formatted-find-fixture") {
                 controller.mode = .formatted
             }
         }
@@ -167,12 +180,18 @@ struct FixtureDemoView: View {
 private func editorFixtureText() -> String {
     let arguments = ProcessInfo.processInfo.arguments
     if arguments.contains("--cross-block-editor-fixture") { return crossBlockEditorFixture }
+    if arguments.contains("--list-text-endpoint-fixture") {
+        return "Lead\n\n- BeforeX\n- middle\n- YAfter\n\nTail"
+    }
     if arguments.contains("--inline-editor-fixture") { return inlineEditorFixture }
     if arguments.contains("--visible-inline-editor-fixture") {
         return "Start **bold** end\n\n# Next [link](https://example.com) end"
     }
     if arguments.contains("--empty-list-editor-fixture") { return emptyListEditorFixture }
     if arguments.contains("--nested-list-editor-fixture") { return nestedListEditorFixture }
+    if arguments.contains("--formatted-find-fixture") {
+        return "- Parent\n  target continuation\n- target next\n\n| target header | Other |\n| --- | --- |\n| target body | x |\n\n$$\ntarget raw\n$$"
+    }
     if arguments.contains("--list-editor-fixture") { return listEditorFixture }
     if arguments.contains("--selection-list-editor-fixture") { return "- First\n- Second\n- Third" }
     if arguments.contains("--host-io-fixture") { return hostIOFixture }

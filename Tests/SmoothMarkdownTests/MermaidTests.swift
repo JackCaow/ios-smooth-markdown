@@ -95,6 +95,63 @@ final class MermaidTests: XCTestCase {
         XCTAssertNil(MermaidParser.parse("pie\ntitle Empty"))
     }
 
+    func testFlutterFlowchartPolygonShapesHaveDistinctNativeModelsAndLayoutSpace() throws {
+        let source = #"""
+        flowchart LR
+        A{{Hexagon}} --> B[/Input/]
+        B --> C[\Output\]
+        C --> D[/Wider bottom\]
+        D --> E[\Wider top/]
+        """#
+        let diagram = try XCTUnwrap(MermaidParser.parse(source))
+        XCTAssertEqual(diagram.nodes.map(\.shape),
+                       [.hexagon, .parallelogram, .parallelogramAlt, .trapezoid, .trapezoidAlt])
+        XCTAssertEqual(diagram.edges.count, 4)
+        let layout = MermaidLayout.compute(diagram)
+        XCTAssertEqual(layout.nodes.count, 5)
+        XCTAssertEqual(layout.edges.count, 4)
+        for node in diagram.nodes {
+            XCTAssertGreaterThan(layout.nodes[node.id]?.width ?? 0, CGFloat(node.label.utf16.count * 8 + 28))
+        }
+    }
+
+    func testFlutterInlineCommentsAndUnsupportedFlowchartStatementsDoNotDropContent() {
+        let diagram = MermaidParser.parse("graph LR\nA{{Hex}} --> B[/Input/] %% comment\nB --> C")
+        XCTAssertEqual(diagram?.nodes.map(\.id), ["A", "B", "C"])
+        XCTAssertEqual(diagram?.edges.count, 2)
+        XCTAssertNil(MermaidParser.parse("graph LR\nA --> B\nclassDef highlight fill:#f9f"))
+        XCTAssertNil(MermaidParser.parse("graph LR\nA --> B\nC[unfinished"))
+    }
+
+    func testFlutterFlowchartLineOperatorsKeepStrokeArrowAndLabels() throws {
+        let source = """
+        flowchart LR
+        A -->|solid arrow| B
+        B ---|solid line| C
+        C -.->|dotted arrow| D
+        D ...|dotted line| E
+        E ==>|thick arrow| F
+        F ===|thick line| G
+        G ---->|long arrow| H
+        H ====|long thick line| I
+        """
+        let diagram = try XCTUnwrap(MermaidParser.parse(source))
+        XCTAssertEqual(diagram.nodes.map(\.id), ["A", "B", "C", "D", "E", "F", "G", "H", "I"])
+        XCTAssertEqual(diagram.edges.map(\.line),
+                       [.solid, .solid, .dotted, .dotted, .thick, .thick, .solid, .thick])
+        XCTAssertEqual(diagram.edges.map(\.arrow),
+                       [.arrow, .none, .arrow, .none, .arrow, .none, .arrow, .none])
+        XCTAssertEqual(diagram.edges.map(\.label), ["solid arrow", "solid line", "dotted arrow",
+                                                  "dotted line", "thick arrow", "thick line",
+                                                  "long arrow", "long thick line"])
+        XCTAssertEqual(MermaidLayout.compute(diagram).edges.count, diagram.edges.count)
+        XCTAssertNil(MermaidParser.parse("flowchart LR\nA -..-> B"))
+        let loops = try XCTUnwrap(MermaidParser.parse("flowchart LR\nA ...|quiet| A\nA ===|heavy| A"))
+        XCTAssertEqual(loops.edges.map(\.arrow), [.none, .none])
+        XCTAssertEqual(loops.edges.map(\.line), [.dotted, .thick])
+        XCTAssertEqual(MermaidLayout.compute(loops).edges.compactMap(\.selfLoop).count, 2)
+    }
+
     func testFlowchartChainAndLayoutAreDeterministic() {
         let diagram = MermaidParser.parse("graph TD\nA[Start] --> B{Choose} --> C[Done]")!
         XCTAssertEqual(diagram.edges.count, 2)
@@ -217,10 +274,67 @@ final class MermaidTests: XCTestCase {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         let utc = TimeZone(secondsFromGMT: 0)!
         XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-01")!, timeZone: utc), 180)
-        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-02")!, timeZone: utc), 192)
+        XCTAssertEqual(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-02")!, timeZone: utc),
+                       180 + MermaidLayout.ganttDayWidth(diagram))
         XCTAssertNil(MermaidLayout.ganttTodayMarkerX(diagram, today: formatter.date(from: "2024-06-04")!, timeZone: utc))
         let hidden = MermaidParser.parse(source.replacingOccurrences(of: "section Build", with: "todayMarker off\n          section Build"))!
         XCTAssertNil(MermaidLayout.ganttTodayMarkerX(hidden, today: formatter.date(from: "2024-06-02")!, timeZone: utc))
+    }
+
+    func testGanttTimelineHasWeeklyAndMonthlyMarkersAlignedWithBars() {
+        let diagram = MermaidParser.parse("""
+        gantt
+          title Schedule
+          section Planning
+            Design :design, 2024-01-01, 30d
+            Review :review, 2024-02-01, 3d
+        """)!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        func tick(_ year: Int, _ month: Int, _ day: Int) -> GanttTimelineTick? {
+            ticks.first { calendar.dateComponents([.year, .month, .day], from: $0.date) ==
+                DateComponents(year: year, month: month, day: day) }
+        }
+        XCTAssertEqual(tick(2024, 1, 1)?.x, 180)
+        XCTAssertEqual(tick(2024, 1, 1)?.isMonth, true)
+        XCTAssertEqual(tick(2024, 1, 1)?.isWeek, true)
+        XCTAssertEqual(tick(2024, 1, 8)?.x, 264)
+        XCTAssertEqual(tick(2024, 1, 8)?.isMonth, false)
+        XCTAssertEqual(tick(2024, 2, 1)?.x, 552)
+        XCTAssertEqual(tick(2024, 2, 1)?.isMonth, true)
+        XCTAssertEqual(MermaidLayout.ganttBars(diagram)[1].minX, tick(2024, 2, 1)?.x)
+        XCTAssertTrue(ticks.allSatisfy { $0.x <= MermaidLayout.compute(diagram).size.width })
+    }
+
+    func testGanttShortTimelineHasDailyMarkersAndReadableDayWidth() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-06-01, 3d")!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        let width = MermaidLayout.ganttDayWidth(diagram)
+        XCTAssertGreaterThanOrEqual(width, 25)
+        XCTAssertEqual(ticks.count, 3)
+        XCTAssertTrue(ticks.allSatisfy { $0.isDay })
+        XCTAssertEqual(ticks.map(\.x), [180, 180 + width, 180 + 2 * width])
+        XCTAssertEqual(MermaidLayout.ganttBars(diagram)[0].width, 3 * width)
+    }
+
+    func testGanttLongTimelineKeepsMarkerCountBounded() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-01-01, 2044-01-01")!
+        let ticks = MermaidLayout.ganttTimelineTicks(diagram)
+        XCTAssertLessThanOrEqual(ticks.count, 600)
+        XCTAssertEqual(ticks.first?.x, 180)
+        XCTAssertTrue(ticks.contains { $0.isMonth && $0.x > 180 })
+        XCTAssertTrue(ticks.contains { $0.isWeek && $0.x > 180 })
+    }
+
+    func testGanttDayScaleRemainsContinuousAcrossDaylightSavingChange() {
+        let diagram = MermaidParser.parse("gantt\nTask :a, 2024-03-09, 4d")!
+        let bar = MermaidLayout.ganttBars(diagram)[0]
+        XCTAssertEqual(bar.width, 4 * MermaidLayout.ganttDayWidth(diagram))
+        let monday = MermaidLayout.ganttTimelineTicks(diagram).first { $0.isWeek }
+        XCTAssertNil(monday) // Short charts use day markers instead of separate weekly markers.
+        XCTAssertEqual(MermaidLayout.ganttTimelineTicks(diagram)[2].x,
+                       bar.minX + 2 * MermaidLayout.ganttDayWidth(diagram))
     }
 
     func testKanbanFixtureYAMLMetadataWIPAndFallback() {

@@ -12,22 +12,31 @@ enum InlineContent {
 
     enum Run {
         case text(String, Style, [SafeHTML.Tag], code: Bool)
+        case custom(Markup, Style)
         case image(SafeHTML.ImageSpec)
         case footnote(String)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
+
+        func hasLink(_ url: URL) -> Bool {
+            if case let .text(_, style, _, _) = self { return style.link == url }
+            return false
+        }
     }
 
-    static func runs(in node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry? = nil) -> [Run] {
+    static func runs(in node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry? = nil,
+                     hasCustomBuilder: ((Markup) -> Bool)? = nil) -> [Run] {
         var result: [Run] = []
         var tags: [SafeHTML.Tag] = []
-        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: plugins, to: &result)
+        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: plugins,
+               hasCustomBuilder: hasCustomBuilder, to: &result)
         return result
     }
 
     private static func append(
         _ node: Markup, style: Style, tags: inout [SafeHTML.Tag],
-        enableHTML: Bool, plugins: ParserPluginRegistry?, to result: inout [Run]
+        enableHTML: Bool, plugins: ParserPluginRegistry?,
+        hasCustomBuilder: ((Markup) -> Bool)?, to result: inout [Run]
     ) {
         for child in node.children {
             // Flutter treats the body of an HTML <code> tag as one verbatim inline
@@ -44,6 +53,10 @@ enum InlineContent {
                     let raw = (child as? Markdown.Text)?.string ?? child.format()
                     result.append(.text(raw, style, tags, code: true))
                 }
+                continue
+            }
+            if !(child is Markdown.Text), hasCustomBuilder?(child) == true {
+                result.append(.custom(child, style))
                 continue
             }
             if let html = child as? InlineHTML {
@@ -81,7 +94,15 @@ enum InlineContent {
                             case let .text(value):
                                 for math in MathSyntax.inlineParts(in: value) {
                                     switch math {
-                                    case let .text(plain): result.append(.text(plain, style, tags, code: false))
+                                    case let .text(plain):
+                                        if let hasCustomBuilder {
+                                            let textNode: Markup = plain == text.string ? text : Markdown.Text(plain)
+                                            if hasCustomBuilder(textNode) {
+                                                result.append(.custom(textNode, style))
+                                                continue
+                                            }
+                                        }
+                                        result.append(.text(plain, style, tags, code: false))
                                     case let .math(latex): result.append(.math(latex))
                                     }
                                 }
@@ -109,7 +130,8 @@ enum InlineContent {
                    let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) {
                     nested.link = url
                 }
-                append(child, style: nested, tags: &tags, enableHTML: enableHTML, plugins: plugins, to: &result)
+                append(child, style: nested, tags: &tags, enableHTML: enableHTML, plugins: plugins,
+                       hasCustomBuilder: hasCustomBuilder, to: &result)
             }
         }
     }

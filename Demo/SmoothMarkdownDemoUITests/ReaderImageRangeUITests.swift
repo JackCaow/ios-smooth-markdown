@@ -1,6 +1,63 @@
 import XCTest
 
 final class ReaderImageRangeUITests: XCTestCase {
+    func testNativeDragSelectionCrossesTwoBundledImages() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reader-multi-image-range-fixture"]
+        app.launch()
+
+        let reader = app.textViews["reader-native-image-selection"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons.matching(identifier: "Bundled vector").count, 2)
+        let start = reader.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.06))
+        let end = reader.coordinate(withNormalizedOffset: CGVector(dx: 0.38, dy: 0.96))
+        start.press(forDuration: 1, thenDragTo: end)
+        let selected = XCTAttachment(screenshot: app.screenshot())
+        selected.name = "Native selection across two images"
+        selected.lifetime = .keepAlways
+        add(selected)
+        let copy = app.menuItems["Copy"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 5))
+        copy.tap()
+        app.buttons["Show clipboard"].tap()
+        let copied = app.staticTexts["image-range-clipboard"].label
+        XCTAssertTrue(copied.contains("Before"), copied)
+        XCTAssertTrue(copied.contains("Middle"), copied)
+        XCTAssertTrue(copied.contains("After"), copied)
+        XCTAssertFalse(copied.contains("Bundled vector"), copied)
+    }
+
+    func testNativeDragSelectionCrossesBundledImage() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--reader-image-range-fixture"]
+        app.launch()
+
+        let reader = app.textViews["reader-native-image-selection"]
+        XCTAssertTrue(reader.waitForExistence(timeout: 10))
+        let image = app.buttons["Bundled vector"]
+        XCTAssertTrue(image.waitForExistence(timeout: 10))
+        image.tap()
+        XCTAssertTrue(app.staticTexts["Image taps: 1"].exists)
+
+        let start = reader.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.13))
+        // The image reserves a full line fragment. End well inside the final
+        // paragraph rather than on the line break immediately after the image.
+        let end = reader.coordinate(withNormalizedOffset: CGVector(dx: 0.40, dy: 0.94))
+        start.press(forDuration: 1, thenDragTo: end)
+        let selected = XCTAttachment(screenshot: app.screenshot())
+        selected.name = "Native text selection spanning image"
+        selected.lifetime = .keepAlways
+        add(selected)
+        let copy = app.menuItems["Copy"]
+        XCTAssertTrue(copy.waitForExistence(timeout: 5))
+        copy.tap()
+        app.buttons["Show clipboard"].tap()
+        let copied = app.staticTexts["image-range-clipboard"].label
+        XCTAssertTrue(copied.contains("Before"), copied)
+        XCTAssertTrue(copied.contains("After"), copied)
+        XCTAssertFalse(copied.contains("Bundled vector"), copied)
+    }
+
     func testImageTapAndLongPressRangeCopy() {
         let app = XCUIApplication()
         app.launchArguments = ["--reader-image-range-fixture"]

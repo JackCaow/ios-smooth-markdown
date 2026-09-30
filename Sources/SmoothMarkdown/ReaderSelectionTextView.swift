@@ -4,11 +4,15 @@ import UIKit
 
 private let codeSpaceAttribute = NSAttributedString.Key("SmoothMarkdownCodeSpace")
 private let inlineCodeBackgroundAttribute = NSAttributedString.Key("SmoothMarkdownInlineCodeBackground")
+private let keycapAttribute = NSAttributedString.Key("SmoothMarkdownKeycap")
+private let keycapPaddingAttribute = NSAttributedString.Key("SmoothMarkdownKeycapPadding")
+private let externalLinkCueAttribute = NSAttributedString.Key("SmoothMarkdownExternalLinkCue")
 
 /// A single read-only UITextView gives adjacent Markdown blocks one native selection range.
 @available(iOS 17.0, *)
 struct ReaderSelectionTextView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderSelectionDocument
     let styleSheet: MarkdownStyleSheet
     let onLinkTap: ((URL) -> Void)?
@@ -16,6 +20,15 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     let selectable: Bool
     /// Used by a range spanning a visual block to place a UTF-16 text endpoint.
     let onCharacterTap: ((Int) -> Void)?
+    var useEnhancedComponents: Bool = false
+
+    private var quotePadding: EdgeInsets {
+        let base = styleSheet.blockquotePadding
+        return useEnhancedComponents
+            ? EdgeInsets(top: base.top, leading: base.leading + 36,
+                         bottom: base.bottom, trailing: base.trailing)
+            : base
+    }
 
     static func makeTextView() -> QuoteTextView {
         // Decorations use NSLayoutManager glyph coordinates. Creating a default
@@ -76,6 +89,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         context.coordinator.onLinkTap = onLinkTap
         context.coordinator.onTextLongPress = onTextLongPress
         context.coordinator.onCharacterTap = onCharacterTap
+        context.coordinator.textSelectionMenuBuilder = textSelectionMenuBuilder
         context.coordinator.longPress?.isEnabled = onTextLongPress != nil
         context.coordinator.characterTap?.isEnabled = onCharacterTap != nil
         view.accessibilityIdentifier = onCharacterTap == nil ? nil : "reader-character-endpoint-text"
@@ -93,11 +107,14 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         view.ruleRegions = built.ruleRegions
         view.headingRegions = built.headingRegions
         view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.ruleThickness = styleSheet.horizontalRuleThickness
-        view.quoteBarColor = UIColor(decoration.borderColor ?? .accentColor)
-        view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
-        view.quoteBorderWidth = decoration.borderWidth
-        view.quotePadding = styleSheet.blockquotePadding
+        view.enhancedBlockquotes = useEnhancedComponents
+        view.quoteBarColor = useEnhancedComponents ? (view.tintColor ?? UIColor.systemBlue).withAlphaComponent(0.6)
+                                                   : UIColor(decoration.borderColor ?? .accentColor)
+        view.quoteBackgroundColor = useEnhancedComponents ? nil : decoration.backgroundColor.map(UIColor.init)
+        view.quoteBorderWidth = useEnhancedComponents ? 4 : decoration.borderWidth
+        view.quotePadding = quotePadding
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: QuoteTextView, context: Context) -> CGSize? {
@@ -122,6 +139,8 @@ struct ReaderSelectionTextView: UIViewRepresentable {
         var onLinkTap: ((URL) -> Void)?
         var onTextLongPress: ((@escaping () -> Void) -> Void)?
         var onCharacterTap: ((Int) -> Void)?
+        var textSelectionMenuBuilder: ReaderTextSelectionMenuBuilder?
+        weak var selectionController: SmoothSelectionController?
         weak var textView: QuoteTextView?
         weak var longPress: UILongPressGestureRecognizer?
         weak var characterTap: UITapGestureRecognizer?
@@ -205,9 +224,39 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                  menuFor configuration: UIEditMenuConfiguration,
                                  suggestedActions: [UIMenuElement]) -> UIMenu? {
             guard let textView, textView.selectedRange.length > 0 else { return nil }
+            if let textSelectionMenuBuilder {
+                return customMenu(in: textView, range: textView.selectedRange,
+                                  suggestedActions: suggestedActions,
+                                  builder: textSelectionMenuBuilder)
+            }
             return UIMenu(children: [UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) {
                 [weak textView] _ in textView?.copy(nil)
             }])
+        }
+
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
+                      suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard let textSelectionMenuBuilder else { return nil }
+            return customMenu(in: textView, range: range, suggestedActions: suggestedActions,
+                              builder: textSelectionMenuBuilder)
+        }
+
+        private func customMenu(in textView: UITextView, range: NSRange,
+                                suggestedActions: [UIMenuElement],
+                                builder: ReaderTextSelectionMenuBuilder) -> UIMenu? {
+            guard range.location >= 0, range.length > 0,
+                  NSMaxRange(range) <= textView.textStorage.length else { return nil }
+            let selected: String
+            if let projection = (textView as? ReaderDocumentSelectionTextView)?.projection {
+                guard let copied = projection.copiedText(in: range) else { return nil }
+                selected = copied
+            } else {
+                selected = QuoteTextView.transformedCopyText(in: textView.textStorage,
+                    ruleRegions: (textView as? QuoteTextView)?.ruleRegions ?? [], range: range)
+                    ?? (textView.textStorage.string as NSString).substring(with: range)
+            }
+            guard !selected.isEmpty else { return nil }
+            return builder(selected, suggestedActions)
         }
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
                       defaultAction: UIAction) -> UIAction? {
@@ -242,27 +291,35 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let weight: UIFont.Weight
             switch line.kind {
             case let .heading(level): headingLevel = level; weight = .semibold
-            case .paragraph, .list, .quote, .rule: headingLevel = nil; weight = .regular
+            case .detailsSummary: headingLevel = nil; weight = .semibold
+            case .paragraph, .list, .quote, .rule, .footnoteDefinition:
+                headingLevel = nil; weight = .regular
             }
             let paragraph = NSMutableParagraphStyle()
             paragraph.firstLineHeadIndent = CGFloat(line.indent) * styleSheet.listIndent
-                + CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.leading
-            if let headingLevel, headingLevel <= 2 {
+                + CGFloat(line.quoteDepth) * quotePadding.leading
+            if line.kind == .detailsSummary { paragraph.firstLineHeadIndent += 28 }
+            if line.kind == .footnoteDefinition { paragraph.firstLineHeadIndent += 16 }
+            if useEnhancedComponents, let headingLevel, headingLevel <= 2 {
                 paragraph.firstLineHeadIndent += 16
             }
             paragraph.headIndent = paragraph.firstLineHeadIndent
             if line.quoteDepth > 0 {
-                paragraph.tailIndent = -CGFloat(line.quoteDepth) * styleSheet.blockquotePadding.trailing
+                paragraph.tailIndent = -CGFloat(line.quoteDepth) * quotePadding.trailing
                 paragraph.paragraphSpacingBefore = CGFloat(line.quoteIDs.filter { firstQuoteLine[$0] == index }.count)
-                    * styleSheet.blockquotePadding.top
+                    * quotePadding.top
                 let closingCount = line.quoteIDs.filter { lastQuoteLine[$0] == index }.count
                 paragraph.paragraphSpacing = closingCount > 0
-                    ? CGFloat(closingCount) * styleSheet.blockquotePadding.bottom + styleSheet.blockSpacing
+                    ? CGFloat(closingCount) * quotePadding.bottom + styleSheet.blockSpacing
                     : styleSheet.quoteSpacing
             } else {
                 paragraph.paragraphSpacing = line.kind == .list ? styleSheet.listSpacing : styleSheet.blockSpacing
             }
-            if let headingLevel, headingLevel <= 2 {
+            if line.kind == .detailsSummary || line.kind == .footnoteDefinition {
+                paragraph.paragraphSpacingBefore += 8
+                paragraph.paragraphSpacing += 8
+            }
+            if useEnhancedComponents, let headingLevel, headingLevel <= 2 {
                 paragraph.paragraphSpacingBefore += 8
                 paragraph.paragraphSpacing += 10
             }
@@ -279,15 +336,19 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             let heightFactor: CGFloat = headingLevel.map { $0 <= 2 ? 1.3 : 1.4 } ?? 1.5
             paragraph.minimumLineHeight = baseFont.pointSize * heightFactor
             paragraph.lineBreakStrategy = headingLevel == nil ? [] : .pushOut
-            for run in line.runs {
-                let inlineStyle = styleSheet.resolvedInlineStyle(
-                    bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
-                    link: run.style.link != nil, code: run.code)
+            for (runIndex, run) in line.runs.enumerated() {
+                let inlineStyle = styleSheet.resolvedHTMLStyle(
+                    styleSheet.resolvedInlineStyle(
+                        bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
+                        link: run.style.link != nil, code: run.code),
+                    underline: run.htmlUnderline, highlight: run.highlighted)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
+                let keycapStyle = styleSheet.kbdStyle
                 let scaledFont = MarkdownTypography.font(textStyle: textStyle,
-                                                         weight: fontWeight, customSize: inlineStyle.fontSize,
+                                                         weight: fontWeight,
+                                                         customSize: run.keycap ? (keycapStyle?.fontSize ?? 13) : inlineStyle.fontSize,
                                                          traits: traits)
-                let font = inlineStyle.monospaced == true
+                let font = run.keycap || inlineStyle.monospaced == true
                     ? UIFont.monospacedSystemFont(ofSize: scaledFont.pointSize, weight: fontWeight)
                     : scaledFont
                 var attributes: [NSAttributedString.Key: Any] = [
@@ -309,7 +370,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 if inlineStyle.strikethrough == true {
                     attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
                 }
-                if inlineStyle.underline == true {
+                if inlineStyle.underline == true || (useEnhancedComponents && run.style.link != nil) {
                     attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
                 }
                 if let background = inlineStyle.backgroundColor {
@@ -321,28 +382,69 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 if let link = run.style.link {
                     attributes[.link] = link
                 }
+                if run.keycap {
+                    if let color = keycapStyle?.textColor { attributes[.foregroundColor] = UIColor(color) }
+                    // An integer keeps adjacent <kbd> elements as separate boxes.
+                    attributes[keycapAttribute] = output.length + runIndex
+                }
+                if run.footnoteReference {
+                    // Match SmoothMarkdownView.footnoteReference while retaining
+                    // the reference inside the native paragraph selection range.
+                    attributes[.font] = MarkdownTypography.font(textStyle: .footnote,
+                                                                 weight: .regular, customSize: nil,
+                                                                 traits: traits)
+                    attributes[.baselineOffset] = 5
+                    attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
+                }
+                if run.footnoteDefinitionLabel {
+                    attributes[.font] = MarkdownTypography.font(textStyle: textStyle,
+                                                                 weight: .bold, customSize: nil,
+                                                                 traits: traits)
+                    attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
+                }
+                if run.pluginAccent { attributes[.foregroundColor] = UIColor.blue }
                 // Keep short inline code together when wrapping. NBSP has the
                 // same UTF-16 length as a space, so native selection offsets stay
                 // valid; the marker restores exact source text on Copy.
                 let codeText = NSMutableString(string: run.text)
                 var replacedSpaces: [Int] = []
-                if run.code {
+                if run.code || run.keycap {
                     for offset in 0..<codeText.length where codeText.character(at: offset) == 32 {
                         codeText.replaceCharacters(in: NSRange(location: offset, length: 1), with: "\u{00A0}")
                         replacedSpaces.append(offset)
                     }
                 }
                 let attributedRun = NSMutableAttributedString(string: codeText as String, attributes: attributes)
+                if useEnhancedComponents, let link = run.style.link,
+                   MarkdownEnhancedComponents.isExternalLink(link), attributedRun.length > 0,
+                   (runIndex + 1 == line.runs.count || line.runs[runIndex + 1].style.link != link) {
+                    let last = NSRange(location: attributedRun.length - 1, length: 1)
+                    // Reserve paint space without adding characters to selection or Copy.
+                    attributedRun.addAttributes([.kern: 13, externalLinkCueAttribute: true], range: last)
+                }
                 for offset in replacedSpaces {
                     attributedRun.addAttribute(codeSpaceAttribute, value: true,
                                                range: NSRange(location: offset, length: 1))
                 }
-                output.append(attributedRun)
+                if run.keycap {
+                    let paddingFont = UIFont.systemFont(ofSize: 1)
+                    let padding: [NSAttributedString.Key: Any] = [
+                        .font: paddingFont, .foregroundColor: UIColor.clear,
+                        .paragraphStyle: paragraph, .kern: 4.5,
+                        keycapAttribute: output.length + runIndex,
+                        keycapPaddingAttribute: true,
+                    ]
+                    output.append(NSAttributedString(string: ReaderSelectionDocument.keycapPadding,
+                                                     attributes: padding))
+                    output.append(attributedRun)
+                    output.append(NSAttributedString(string: ReaderSelectionDocument.keycapPadding,
+                                                     attributes: padding))
+                } else { output.append(attributedRun) }
             }
             if line.kind == .rule {
                 ruleRegions.append(NSRange(location: start, length: output.length - start))
             }
-            if let headingLevel, headingLevel <= 2, output.length > start {
+            if useEnhancedComponents, let headingLevel, headingLevel <= 2, output.length > start {
                 headingRegions.append(NSRange(location: start, length: output.length - start))
             }
             for (depth, id) in line.quoteIDs.enumerated() {
@@ -365,7 +467,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
 }
 
 @available(iOS 17.0, *)
-final class QuoteTextView: UITextView {
+class QuoteTextView: UITextView {
     struct Region {
         let range: NSRange
         let depth: Int
@@ -375,11 +477,13 @@ final class QuoteTextView: UITextView {
     var ruleRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
     var headingRegions: [NSRange] = [] { didSet { setNeedsDisplay() } }
     var ruleColor: UIColor = .secondaryLabel { didSet { setNeedsDisplay() } }
+    var keycapBorderColor: UIColor = .separator { didSet { setNeedsDisplay() } }
     var ruleThickness: CGFloat = 1 { didSet { setNeedsDisplay() } }
     var quoteBarColor: UIColor = .tintColor { didSet { setNeedsDisplay() } }
     var quoteBackgroundColor: UIColor? { didSet { setNeedsDisplay() } }
     var quoteBorderWidth: CGFloat = 4 { didSet { setNeedsDisplay() } }
     var quotePadding = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16) { didSet { setNeedsDisplay() } }
+    var enhancedBlockquotes = false { didSet { setNeedsDisplay() } }
 
     @objc func selectAllReaderText() -> Bool {
         guard textStorage.length > 0 else { return false }
@@ -410,6 +514,7 @@ final class QuoteTextView: UITextView {
             .sorted { $0.location > $1.location }
         let selected = NSMutableString(string: (text.string as NSString).substring(with: range))
         var restoredCodeSpace = false
+        var paddingOffsets: [Int] = []
         for offset in 0..<range.length where selected.character(at: offset) == 160 {
             if text.attribute(codeSpaceAttribute, at: range.location + offset,
                               effectiveRange: nil) != nil {
@@ -417,9 +522,16 @@ final class QuoteTextView: UITextView {
                 restoredCodeSpace = true
             }
         }
-        guard restoredCodeSpace || !selectedRules.isEmpty else { return nil }
-        for rule in selectedRules {
-            selected.deleteCharacters(in: NSRange(location: rule.location - range.location, length: rule.length))
+        for offset in 0..<range.length where selected.character(at: offset) == 0x2007 {
+            if text.attribute(keycapPaddingAttribute, at: range.location + offset,
+                              effectiveRange: nil) != nil { paddingOffsets.append(offset) }
+        }
+        guard restoredCodeSpace || !selectedRules.isEmpty || !paddingOffsets.isEmpty else { return nil }
+        let deletions = selectedRules.map { NSRange(location: $0.location - range.location, length: $0.length) }
+            + paddingOffsets.map { NSRange(location: $0, length: 1) }
+        for deletion in deletions.sorted(by: { $0.location > $1.location }) {
+            // A thematic-break anchor and a keycap inset can never share a run.
+            selected.deleteCharacters(in: deletion)
         }
         return selected as String
     }
@@ -441,13 +553,33 @@ final class QuoteTextView: UITextView {
         // Geometry below must come from the completed layout used by the text.
         layoutManager.ensureLayout(for: textContainer)
         let quoteFrames = quoteFrames()
-        if let quoteBackgroundColor {
+        if enhancedBlockquotes, let context = UIGraphicsGetCurrentContext() {
+            let dark = traitCollection.userInterfaceStyle == .dark
+            let start = UIColor(white: dark ? 0.10 : 0.98, alpha: 1)
+            let end = UIColor(white: dark ? 0.15 : 0.95, alpha: 1)
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                         colors: [start.cgColor, end.cgColor] as CFArray,
+                                         locations: [0, 1]) {
+                for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
+                    context.saveGState()
+                    context.clip(to: frame)
+                    context.drawLinearGradient(gradient,
+                        start: CGPoint(x: frame.minX, y: frame.minY),
+                        end: CGPoint(x: frame.maxX, y: frame.maxY), options: [])
+                    context.restoreGState()
+                    ("❝" as NSString).draw(at: CGPoint(x: frame.minX + 12, y: frame.minY + 8),
+                        withAttributes: [.font: UIFont.systemFont(ofSize: 24),
+                                         .foregroundColor: tintColor.withAlphaComponent(0.4)])
+                }
+            }
+        } else if let quoteBackgroundColor {
             quoteBackgroundColor.setFill()
             for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
                 UIRectFill(frame)
             }
         }
         drawInlineCodeBackgrounds()
+        drawKeycaps()
         if ruleThickness > 0 {
             ruleColor.setFill()
             for range in ruleRegions where range.location < textStorage.length {
@@ -461,6 +593,7 @@ final class QuoteTextView: UITextView {
         }
         super.draw(rect)
         drawHeadingDecorations()
+        drawExternalLinkCues()
         guard quoteBorderWidth > 0 else { return }
         quoteBarColor.setFill()
         for (frame, _) in quoteFrames {
@@ -502,6 +635,35 @@ final class QuoteTextView: UITextView {
         }
     }
 
+    private func drawKeycaps() {
+        guard textStorage.length > 0 else { return }
+        textStorage.enumerateAttribute(keycapAttribute,
+                                       in: NSRange(location: 0, length: textStorage.length)) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphs.length > 0 else { return }
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { lineRect, _, _, lineGlyphs, _ in
+                let segment = NSIntersectionRange(glyphs, lineGlyphs)
+                guard segment.length > 0 else { return }
+                let glyphRect = self.layoutManager.boundingRect(forGlyphRange: segment, in: self.textContainer)
+                let character = min(range.location + 1, self.textStorage.length - 1)
+                guard let font = self.textStorage.attribute(.font, at: character,
+                                                            effectiveRange: nil) as? UIFont else { return }
+                let baseline = lineRect.minY + self.layoutManager.location(forGlyphAt: segment.location).y
+                let frame = CGRect(x: self.textContainerInset.left + glyphRect.minX,
+                                   y: self.textContainerInset.top + baseline - font.ascender - 1,
+                                   width: glyphRect.width,
+                                   height: font.ascender - font.descender + 2)
+                let path = UIBezierPath(roundedRect: frame, cornerRadius: 4)
+                self.keycapBorderColor.withAlphaComponent(0.12).setFill()
+                path.fill()
+                self.keycapBorderColor.setStroke()
+                path.lineWidth = 1
+                path.stroke()
+            }
+        }
+    }
+
     private func drawHeadingDecorations() {
         guard let context = UIGraphicsGetCurrentContext(),
               let barGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -534,6 +696,21 @@ final class QuoteTextView: UITextView {
             context.drawLinearGradient(underlineGradient, start: CGPoint(x: x, y: underlineY),
                                        end: CGPoint(x: x + underlineWidth, y: underlineY), options: [])
             context.restoreGState()
+        }
+    }
+
+    private func drawExternalLinkCues() {
+        guard textStorage.length > 0 else { return }
+        textStorage.enumerateAttribute(externalLinkCueAttribute,
+                                       in: NSRange(location: 0, length: textStorage.length)) { value, range, _ in
+            guard value != nil, range.length > 0 else { return }
+            let glyph = self.layoutManager.glyphIndexForCharacter(at: NSMaxRange(range) - 1)
+            let bounds = self.layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1),
+                                                          in: self.textContainer)
+            ("↗" as NSString).draw(at: CGPoint(x: self.textContainerInset.left + bounds.maxX + 1,
+                                                y: self.textContainerInset.top + bounds.minY + 1),
+                                   withAttributes: [.font: UIFont.systemFont(ofSize: 12),
+                                                    .foregroundColor: self.tintColor ?? UIColor.systemBlue])
         }
     }
 }

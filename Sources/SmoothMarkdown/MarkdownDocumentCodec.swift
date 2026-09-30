@@ -19,7 +19,11 @@ public struct MarkdownDocumentCodec {
         let pluginLines = lines.map(\.text)
         var blocks: [MarkdownDocumentBlock] = []
         var pendingTrivia = ""
-        var index = 0
+        let frontmatter = MarkdownSourceFrontmatter.parsePrefix(markdown)
+        if let frontmatter {
+            blocks.append(.init(id: "block-0", kind: .raw, source: frontmatter.source))
+        }
+        var index = frontmatter?.lineCount ?? 0
         while index < lines.count {
             if lines[index].isBlank {
                 pendingTrivia += lines[index].raw
@@ -27,14 +31,12 @@ public struct MarkdownDocumentCodec {
                 continue
             }
             let start = index
-            let isFrontmatter = start == 0 && lines[start].text.trimmingCharacters(in: .whitespaces) == "---" &&
-                lines.dropFirst().contains { $0.text.trimmingCharacters(in: .whitespaces) == "---" }
-            let classification: Classification = isFrontmatter ? .raw : classify(lines[index].text)
+            let classification = classify(lines[index].text)
             let kind: MarkdownSemanticBlock
-            if !isFrontmatter, let pluginBlock = pluginBlock(at: index, lines: lines, pluginLines: pluginLines) {
+            if let pluginBlock = pluginBlock(at: index, lines: lines, pluginLines: pluginLines) {
                 index += pluginBlock.match.linesConsumed
                 kind = .plugin(id: pluginBlock.id, match: pluginBlock.match)
-            } else if !isFrontmatter, index + 1 < lines.count,
+            } else if index + 1 < lines.count,
                MarkdownSourceTable.parse(lines[index...index + 1].map(\.text).joined(separator: "\n")) != nil {
                 index += 2
                 while index < lines.count, !lines[index].isBlank, isTableBodyLine(lines[index].text),
@@ -61,22 +63,26 @@ public struct MarkdownDocumentCodec {
                 index += 1
             case .list:
                 index += 1
-                while index < lines.count && !lines[index].isBlank &&
-                    !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
+                while index < lines.count {
+                    if lines[index].isBlank {
+                        var next = index
+                        while next < lines.count && lines[next].isBlank { next += 1 }
+                        guard next < lines.count,
+                              !isDefiniteBreak(lines[next].text, at: next, lines: lines, pluginLines: pluginLines),
+                              MarkdownSourceList.parse(lines[start...next].map(\.raw).joined()) != nil
+                        else { break }
+                        index = next + 1
+                        continue
+                    }
+                    if isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { break }
+                    index += 1
+                }
                 let source = lines[start..<index].map(\.raw).joined()
                 kind = MarkdownSourceList.parse(source).map(MarkdownSemanticBlock.list) ?? .raw
             case .raw:
                 index += 1
-                if start == 0 && lines[start].text.trimmingCharacters(in: .whitespaces) == "---" {
-                    while index < lines.count {
-                        let closing = lines[index].text.trimmingCharacters(in: .whitespaces) == "---"
-                        index += 1
-                        if closing { break }
-                    }
-                } else {
-                    while index < lines.count && !lines[index].isBlank &&
-                        !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
-                }
+                while index < lines.count && !lines[index].isBlank &&
+                    !isDefiniteBreak(lines[index].text, at: index, lines: lines, pluginLines: pluginLines) { index += 1 }
                 kind = .raw
             case .paragraph:
                 index += 1

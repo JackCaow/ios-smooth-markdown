@@ -5,14 +5,26 @@ import Markdown
 struct ReaderSelectionDocument {
     /// A selectable anchor for a visually drawn thematic break. Removed on copy.
     static let ruleAnchor = "\u{FFFC}"
+    /// Nonbreaking figure spaces reserve the keycap's horizontal inset in TextKit.
+    /// Copy strips only spaces carrying the keycap padding attribute.
+    static let keycapPadding = "\u{2007}"
     struct Run: Equatable {
         let text: String
         let style: InlineContent.Style
         let code: Bool
+        var image: SafeHTML.ImageSpec? = nil
+        var formula: String? = nil
+        var keycap = false
+        var htmlUnderline = false
+        var highlighted = false
+        var pluginAccent = false
+        /// Rendered `[label]` from a Markdown `[^label]` reference.
+        var footnoteReference = false
+        var footnoteDefinitionLabel = false
     }
 
     struct Line: Equatable {
-        enum Kind: Equatable { case paragraph, heading(Int), list, quote, rule }
+        enum Kind: Equatable { case paragraph, heading(Int), list, quote, rule, detailsSummary, footnoteDefinition }
         let kind: Kind
         let runs: [Run]
         let indent: Int
@@ -25,22 +37,152 @@ struct ReaderSelectionDocument {
 
     /// The exact UTF-16 text projection supplied to ReaderSelectionTextView.
     var selectionText: String {
-        lines.map { $0.runs.map(\.text).joined() }.joined(separator: "\n")
+        lines.map { line in
+            line.runs.map { $0.keycap ? Self.keycapPadding + $0.text + Self.keycapPadding : $0.text }.joined()
+        }.joined(separator: "\n")
     }
 
     var copiedText: String {
-        lines.map { $0.kind == .rule ? "" : $0.runs.map(\.text).joined() }.joined(separator: "\n")
+        lines.compactMap { line -> String? in
+            if line.kind == .rule { return "" }
+            if line.runs.contains(where: { $0.image != nil }),
+               line.runs.allSatisfy({ $0.image != nil || $0.text.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                return nil
+            }
+            return line.runs.filter { $0.image == nil }.map { $0.formula ?? $0.text }.joined()
+        }.joined(separator: "\n")
     }
 
-    static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+    var canMapNativeOffsets: Bool { !lines.contains { $0.kind == .rule } }
+
+    /// Map native UTF-16 endpoints through invisible keycap insets without
+    /// dropping a literal figure space supplied by the document author.
+    func copiedTextSlice(lowerUTF16: Int?, upperUTF16: Int?) -> String? {
+        guard canMapNativeOffsets,
+              let slice = ReaderBlockRangeDocument.textSlice(selectionText,
+                                                              lowerUTF16: lowerUTF16,
+                                                              upperUTF16: upperUTF16) else { return nil }
+        let lower = lowerUTF16 ?? 0
+        let upper = upperUTF16 ?? selectionText.utf16.count
+        var replacements: [(offset: Int, text: String)] = []
+        var offset = 0
+        for (index, line) in lines.enumerated() {
+            if index > 0 { offset += 1 }
+            for run in line.runs {
+                if run.keycap {
+                    if (lower..<upper).contains(offset) { replacements.append((offset - lower, "")) }
+                    offset += 1 + run.text.utf16.count
+                    if (lower..<upper).contains(offset) { replacements.append((offset - lower, "")) }
+                    offset += 1
+                } else {
+                    if run.image != nil, (lower..<upper).contains(offset) {
+                        replacements.append((offset - lower, ""))
+                    } else if let formula = run.formula, (lower..<upper).contains(offset) {
+                        replacements.append((offset - lower, formula))
+                    }
+                    offset += run.text.utf16.count
+                }
+            }
+        }
+        let copied = NSMutableString(string: slice)
+        for replacement in replacements.reversed() {
+            copied.replaceCharacters(in: NSRange(location: replacement.offset, length: 1),
+                                     with: replacement.text)
+        }
+        return copied as String
+    }
+
+    static func compose(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?,
+                        visualBlockAnchors: Bool = false) -> ReaderSelectionDocument? {
+        composeItems(nodes.map(ReaderBlockRangeDocument.Item.markup), enableHTML: enableHTML,
+                     plugins: plugins, visualBlockAnchors: visualBlockAnchors)
+    }
+
+    static func composeItems(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
+                             plugins: ParserPluginRegistry?,
+                             visualBlockAnchors: Bool = false) -> ReaderSelectionDocument? {
         var lines: [Line] = []
         var nextQuoteID = 0
-        for node in nodes {
+        for item in items {
+            if case .displayMath = item {
+                guard visualBlockAnchors else { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case let .detailsSummary(details) = item {
+                guard visualBlockAnchors else { return nil }
+                let summary = MarkdownSyntax.parse(details.summary, enableHTML: enableHTML).child(at: 0)
+                let runs = summary.flatMap { inlineRuns($0, enableHTML: enableHTML, plugins: plugins) }
+                    ?? [.init(text: "Details", style: .init(), code: false)]
+                lines.append(.init(kind: .detailsSummary, runs: runs, indent: 0,
+                                   quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case let .footnoteDefinition(definition) = item {
+                guard visualBlockAnchors else { return nil }
+                let parsed = MarkdownSyntax.parse(definition.content, enableHTML: enableHTML)
+                guard let content = parsed.child(at: 0) as? Paragraph,
+                      let contentRuns = inlineRuns(content, enableHTML: enableHTML,
+                                                   plugins: plugins) else { return nil }
+                let label = Run(text: "[\(definition.label)]: ", style: .init(), code: false,
+                                footnoteDefinitionLabel: true)
+                lines.append(.init(kind: .footnoteDefinition, runs: [label] + contentRuns,
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if case .plugin = item {
+                guard visualBlockAnchors else { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            guard case let .markup(node) = item else { return nil }
+            if visualBlockAnchors, node is CodeBlock || node is Markdown.Table {
+                if node is Markdown.Table,
+                   ReaderBlockRangeDocument.tableText(node, enableHTML: enableHTML,
+                                                      plugins: plugins) == nil { return nil }
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
+            if visualBlockAnchors, enableHTML, let html = node as? HTMLBlock,
+               let image = SafeHTML.imageTag(html.rawHTML) {
+                lines.append(.init(kind: .paragraph,
+                                   runs: [.init(text: ReaderVisibleDocumentProjection.attachment,
+                                                style: .init(), code: false, image: image)],
+                                   indent: 0, quoteDepth: 0, quoteIDs: []))
+                continue
+            }
             guard let part = linesForBlock(node, enableHTML: enableHTML, plugins: plugins,
                                            indent: 0, quoteIDs: [], nextQuoteID: &nextQuoteID) else { return nil }
+            // The legacy prose view has no image host. Only the measured
+            // whole-document TextKit path may consume image anchors.
+            if !visualBlockAnchors && part.contains(where: { $0.runs.contains {
+                $0.image != nil || $0.formula != nil
+            } }) {
+                return nil
+            }
             lines.append(contentsOf: part)
         }
         return lines.isEmpty ? nil : .init(lines: lines)
+    }
+
+    /// Single paragraphs normally use SwiftUI Text when reader selection is off.
+    /// Route copyable inline code through the same native text layout used by
+    /// selectable paragraphs so its background follows the glyph baseline.
+    static func inlineCodeParagraph(_ paragraph: Paragraph, enableHTML: Bool,
+                                    plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+        guard let document = compose([paragraph], enableHTML: enableHTML, plugins: plugins),
+              document.lines.contains(where: { line in line.runs.contains(where: \.code) })
+        else { return nil }
+        return document
     }
 
     static func isSelectable(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> Bool {
@@ -117,21 +259,67 @@ struct ReaderSelectionDocument {
         return output.isEmpty ? nil : output
     }
 
-    static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
+    static func copyableInlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?,
+                                   allowVisualAttachments: Bool = false) -> [Run]? {
         var output: [Run] = []
         for part in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins) {
             switch part {
             case let .text(value, style, tags, code):
-                if !tags.isEmpty { return nil }
-                output.append(.init(text: value, style: style, code: code))
-            case .image, .footnote, .math, .plugin: return nil
+                if tags.contains(where: { $0.name == "kbd" }) {
+                    guard tags.allSatisfy({ $0.name == "kbd" }), !code else { return nil }
+                    output.append(.init(text: value, style: style, code: false, keycap: true))
+                } else {
+                    guard tags.allSatisfy({ ["u", "ins", "mark"].contains($0.name) }) else { return nil }
+                    output.append(.init(text: value, style: style, code: code,
+                                        htmlUnderline: tags.contains { $0.name == "u" || $0.name == "ins" },
+                                        highlighted: tags.contains { $0.name == "mark" }))
+                }
+            case let .footnote(label):
+                output.append(.init(text: "[\(label)]", style: .init(), code: false,
+                                    footnoteReference: true))
+            case let .image(image):
+                guard allowVisualAttachments, ImageSource.parse(image.source) != nil else { return nil }
+                output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
+                                    style: .init(), code: false, image: image))
+            case let .math(latex):
+                guard allowVisualAttachments else { return nil }
+                output.append(.init(text: ReaderVisibleDocumentProjection.attachment,
+                                    style: .init(), code: false, formula: latex))
+            case let .plugin(plugin, match):
+                guard plugin is MentionPlugin || plugin is HashtagPlugin || plugin is EmojiPlugin else { return nil }
+                output.append(.init(text: match.text, style: .init(), code: false,
+                                    pluginAccent: plugin is MentionPlugin || plugin is HashtagPlugin))
+            case .custom: return nil
             }
+        }
+        let keycapRunCount = output.filter(\.keycap).count
+        if keycapRunCount > 0 {
+            // A styled child can split one <kbd> into several text runs. Until
+            // keycap groups carry a stable tag identity, drawing each as a
+            // separate box would misrepresent one Flutter keycap.
+            var openingTags = 0
+            func countOpenings(_ markup: Markup) {
+                if let html = markup as? InlineHTML,
+                   let tag = SafeHTML.lexTag(html.rawHTML), tag.name == "kbd",
+                   !tag.isClosing, !tag.isSelfClosing { openingTags += 1 }
+                for child in markup.children { countOpenings(child) }
+            }
+            countOpenings(node)
+            guard keycapRunCount == openingTags else { return nil }
         }
         return output
     }
 
     private static func inlineRuns(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> [Run]? {
-        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins)
+        copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins, allowVisualAttachments: true)
+    }
+
+    /// Table cells and other inline containers also need the same native keycap path.
+    static func inline(_ node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry?) -> ReaderSelectionDocument? {
+        guard let runs = copyableInlineRuns(node, enableHTML: enableHTML, plugins: plugins),
+              runs.contains(where: \.keycap) else { return nil }
+        let kind: Line.Kind = (node as? Heading).map { .heading($0.level) } ?? .paragraph
+        return .init(lines: [.init(kind: kind, runs: runs, indent: 0, quoteDepth: 0, quoteIDs: [])])
     }
 }
 
@@ -141,6 +329,9 @@ struct ReaderBlockRangeDocument {
     enum Item {
         case markup(Markup)
         case displayMath(String)
+        case detailsSummary(DetailsSyntax.Block)
+        case footnoteDefinition(FootnoteSyntax.Definition)
+        case plugin(BlockPluginMatch)
     }
 
     struct Segment {
@@ -170,6 +361,8 @@ struct ReaderBlockRangeDocument {
             case let .displayMath(latex):
                 flushText()
                 result.append(.init(nodes: [], kind: .displayMath(latex)))
+            case .detailsSummary, .footnoteDefinition, .plugin:
+                return nil
             case let .markup(node):
                 if ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) {
                     flushText()
@@ -213,13 +406,15 @@ struct ReaderBlockRangeDocument {
             case .text:
                 guard let document = ReaderSelectionDocument.compose(segment.nodes, enableHTML: enableHTML,
                                                                      plugins: plugins),
-                      ((lower == nil && upper == nil) || document.selectionText == document.copiedText)
+                      ((lower == nil && upper == nil) || document.canMapNativeOffsets)
                 else { return nil }
-                text = document.copiedText
+                text = lower == nil && upper == nil ? document.copiedText
+                    : document.copiedTextSlice(lowerUTF16: lower, upperUTF16: upper)
             }
             guard let text else { return nil }
             if (lower != nil || upper != nil) && segment.kind != .text { return nil }
-            guard let slice = Self.textSlice(text, lowerUTF16: lower, upperUTF16: upper) else { return nil }
+            guard let slice = segment.kind == .text ? Optional(text)
+                : Self.textSlice(text, lowerUTF16: lower, upperUTF16: upper) else { return nil }
             if !slice.isEmpty { parts.append(slice) }
         }
         guard !parts.isEmpty else { return nil }
@@ -231,7 +426,7 @@ struct ReaderBlockRangeDocument {
         }
     }
 
-    private static func textSlice(_ text: String, lowerUTF16: Int?, upperUTF16: Int?) -> String? {
+    fileprivate static func textSlice(_ text: String, lowerUTF16: Int?, upperUTF16: Int?) -> String? {
         let length = text.utf16.count
         let lower = lowerUTF16 ?? 0
         let upper = upperUTF16 ?? length
@@ -266,7 +461,9 @@ enum ReaderMathSelectionGroup {
     case bridge([ReaderBlockRangeDocument.Item])
 
     static func group(_ items: [ReaderBlockRangeDocument.Item], enableHTML: Bool,
-                      plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false) -> [ReaderMathSelectionGroup] {
+                      plugins: ParserPluginRegistry?, allowCodeBlocks: Bool = false,
+                      hasCustomBuilder: (Markup) -> Bool = { _ in false },
+                      hasCustomDisplayMath: (String) -> Bool = { _ in false }) -> [ReaderMathSelectionGroup] {
         var output: [ReaderMathSelectionGroup] = []
         var pending: [ReaderBlockRangeDocument.Item] = []
         func flush() {
@@ -286,15 +483,28 @@ enum ReaderMathSelectionGroup {
                 }
                 output.append(contentsOf: ReaderSelectionGroup.group(nodes, enableHTML: enableHTML,
                                                                       plugins: plugins,
-                                                                      allowCodeBlocks: allowCodeBlocks).map(Self.legacy))
+                                                                      allowCodeBlocks: allowCodeBlocks,
+                                                                      hasCustomBuilder: hasCustomBuilder).map(Self.legacy))
             }
             pending.removeAll()
         }
         for item in items {
             switch item {
-            case .displayMath:
-                pending.append(item)
+            case let .displayMath(latex):
+                if hasCustomDisplayMath(latex) {
+                    flush()
+                    output.append(.math(latex))
+                } else {
+                    pending.append(item)
+                }
+            case .detailsSummary, .footnoteDefinition, .plugin:
+                flush()
             case let .markup(node):
+                if hasCustomBuilder(node) {
+                    flush()
+                    output.append(.legacy(.individual(node)))
+                    continue
+                }
                 if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                     ReaderSelectionGroup.isStandaloneImage(node, enableHTML: enableHTML) ||
                     (allowCodeBlocks && node is Markdown.CodeBlock) ||
@@ -334,7 +544,8 @@ enum ReaderSelectionGroup {
     }
 
     static func group(_ nodes: [Markup], enableHTML: Bool, plugins: ParserPluginRegistry?,
-                      enabled: Bool = true, allowCodeBlocks: Bool = false) -> [ReaderSelectionGroup] {
+                      enabled: Bool = true, allowCodeBlocks: Bool = false,
+                      hasCustomBuilder: (Markup) -> Bool = { _ in false }) -> [ReaderSelectionGroup] {
         guard enabled else { return nodes.map(ReaderSelectionGroup.individual) }
         var result: [ReaderSelectionGroup] = []
         var pending: [Markup] = []
@@ -358,6 +569,11 @@ enum ReaderSelectionGroup {
             pending.removeAll()
         }
         for node in nodes {
+            if hasCustomBuilder(node) {
+                flush()
+                result.append(.individual(node))
+                continue
+            }
             if ReaderSelectionDocument.isSelectable(node, enableHTML: enableHTML, plugins: plugins) ||
                 isStandaloneImage(node, enableHTML: enableHTML) ||
                 (allowCodeBlocks && node is Markdown.CodeBlock) ||

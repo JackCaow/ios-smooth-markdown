@@ -7,6 +7,7 @@ larger accessibility categories scale without a fixed font cap.
 | Content | Text role at standard size | Weight |
 | --- | --- | --- |
 | Reader body and editor prose | `.body` (17 pt) | Regular |
+| HTML subscript and superscript | 75% of `.body` (12.75 pt) | Inherits inline weight |
 | Reader headings H1–H6 | `.title` / `.title2` / `.title3` / `.headline` / `.subheadline` / `.footnote` | Semibold |
 | Chat message body | `.subheadline` (15 pt) | Regular |
 | Demo page and chat bar title | `.title3` / `.headline` | Semibold |
@@ -17,6 +18,8 @@ adjacent blocks. Its `readerParagraphTextStyle` and `readerHeadingTextStyles`
 must match any custom SwiftUI paragraph and heading font roles in a
 `MarkdownStyleSheet`. The Demo sets both paths together for chat bubbles.
 Explicit inline point sizes scale relative to the surrounding semantic role.
+HTML scripts use body-relative baseline shifts that scale with Dynamic Type;
+hosts can override their separate text styles in `MarkdownStyleSheet`.
 Mermaid Canvas drawings scale their geometry and node tap targets with text size.
 
 Check the reader, source sheet, three chat demos, editor, and Mermaid gallery at

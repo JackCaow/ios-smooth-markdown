@@ -14,14 +14,17 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     public let streamID: String?
     public let throttleMillis: Int64
     public let enableHTML: Bool
+    public let useEnhancedComponents: Bool
     public let codeBlockOptions: CodeBlockOptions
     public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
     public let onTextLongPress: ((@escaping () -> Void) -> Void)?
     public let styleSheet: MarkdownStyleSheet
     public let plugins: ParserPluginRegistry?
+    public let builderRegistry: BuilderRegistry?
     /// Enables native selection, as in `SmoothMarkdownView`.
     public let selectable: Bool
+    public let selectionController: SmoothSelectionController?
     public let enableCrossBlockSelection: Bool
     public let scrollable: Bool
     /// Shown until the first text is published; defaults to an empty view.
@@ -38,6 +41,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         streamID: String? = nil,
         throttleMillis: Int64 = 50,
         enableHTML: Bool = false,
+        useEnhancedComponents: Bool = false,
         onLinkTap: ((URL) -> Void)? = nil,
         onImageTap: ((URL) -> Void)? = nil,
         onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil,
@@ -50,7 +54,9 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         onComplete: ((String) -> Void)? = nil,
         styleSheet: MarkdownStyleSheet = .default(),
         plugins: ParserPluginRegistry? = nil,
+        builderRegistry: BuilderRegistry? = nil,
         selectable: Bool = false,
+        selectionController: SmoothSelectionController? = nil,
         enableCrossBlockSelection: Bool = true,
         scrollable: Bool = true,
         loadingView: AnyView? = nil,
@@ -60,6 +66,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.streamID = streamID
         self.throttleMillis = throttleMillis
         self.enableHTML = enableHTML
+        self.useEnhancedComponents = useEnhancedComponents
         self.onLinkTap = onLinkTap
         self.onImageTap = onImageTap
         self.onImageTapWithMetadata = onImageTapWithMetadata
@@ -72,7 +79,9 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         self.onTextLongPress = onTextLongPress
         self.styleSheet = styleSheet
         self.plugins = plugins
+        self.builderRegistry = builderRegistry
         self.selectable = selectable
+        self.selectionController = selectionController
         self.enableCrossBlockSelection = enableCrossBlockSelection
         self.scrollable = scrollable
         self.loadingView = loadingView
@@ -81,7 +90,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
     }
 
     public var body: some View {
-        Group {
+        VStack(alignment: .leading, spacing: 0) {
             if activeIdentity == taskIdentity, let streamError, let errorBuilder {
                 errorBuilder(streamError)
             } else if activeIdentity != taskIdentity || accumulator.visibleText.isEmpty {
@@ -90,10 +99,14 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                 SmoothMarkdownView(markdown: accumulator.visibleText, onLinkTap: onLinkTap, onImageTap: onImageTap,
                                    onImageTapWithMetadata: onImageTapWithMetadata,
                                    imageBuilder: imageBuilder,
-                                   enableHTML: enableHTML, codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
+                                   enableHTML: enableHTML, useEnhancedComponents: useEnhancedComponents,
+                                   codeBlockOptions: codeBlockOptions, codeBuilder: codeBuilder,
                                    onCodeCopy: onCodeCopy, onTextLongPress: onTextLongPress,
-                                   styleSheet: styleSheet, plugins: plugins, enableCache: false,
-                                   selectable: selectable, enableCrossBlockSelection: enableCrossBlockSelection,
+                                   styleSheet: styleSheet, plugins: plugins, builderRegistry: builderRegistry,
+                                   enableCache: false,
+                                   selectable: selectable,
+                                   selectionController: selectionController,
+                                   enableCrossBlockSelection: enableCrossBlockSelection,
                                    scrollable: scrollable)
             }
         }
