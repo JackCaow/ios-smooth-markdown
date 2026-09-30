@@ -90,6 +90,7 @@ extension NativeMathParserTests {
         XCTAssertEqual(NativeMathGlyphs.styled("RZ", alphabet: "mathbb"), "ℝℤ")
         XCTAssertEqual(NativeMathGlyphs.styled("Ag", alphabet: "mathfrak"), "𝔄𝔤")
         XCTAssertEqual(NativeMathGlyphs.styled("x", alphabet: "mathrm"), "x")
+        XCTAssertEqual(NativeMathGlyphs.styled("F", alphabet: "mathcal"), "ℱ")
     }
 
     func testLargeOperatorLimitOverrides() {
@@ -130,3 +131,180 @@ extension NativeMathParserTests {
     }
 }
 #endif
+
+extension NativeMathParserTests {
+    func testColorAndStretchyDelimitersRetainStructure() {
+        XCTAssertEqual(NativeMathParser.parse("\\textcolor{#ff0000}{x}"),
+                       .row([.color("#ff0000", .row([.text("x")]))]))
+        XCTAssertEqual(NativeMathParser.parse("\\left(\\frac{1}{2}\\right)"),
+                       .row([.delimited("(", ")", .row([.fraction(.row([.text("1")]),
+                                                                    .row([.text("2")]))]))]))
+        XCTAssertEqual(NativeMathParser.parse("\\left\\langle x \\right\\rangle"),
+                       .row([.delimited("⟨", "⟩", .row([.text(" "), .text("x"), .text(" ")]))]))
+        XCTAssertTrue(NativeMathColor.isValid("#00aaff"))
+        XCTAssertFalse(NativeMathColor.isValid("red"))
+    }
+
+    func testCoreTextMetricsAndMathSpacing() {
+        XCTAssertGreaterThan(NativeMathMetrics.ascent(size: 20), 0)
+        XCTAssertGreaterThan(NativeMathMetrics.lineHeight(size: 20), NativeMathMetrics.ascent(size: 20))
+        XCTAssertGreaterThan(NativeMathMetrics.operatorGap(size: 20), 0)
+        XCTAssertTrue(NativeMathSpacing.needsGap(before: .text("+"), after: .text("x")))
+        XCTAssertFalse(NativeMathSpacing.needsGap(before: .text("y"), after: .text("x")))
+        XCTAssertFalse(NativeMathSpacing.needsGap(before: .text("+"), after: .text(" ")))
+    }
+}
+
+#if os(macOS)
+extension NativeMathParserTests {
+    @MainActor
+    func testActualMathViewRendersToBitmap() throws {
+        let content = VStack(alignment: .leading, spacing: 18) {
+            NativeMathView(latex: "\\left(\\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}\\right)", size: 20, display: true)
+            NativeMathView(latex: "\\sum_{i=1}^{n}i + \\mathbb{R}", size: 20, display: true)
+            NativeMathView(latex: "\\begin{cases}x&x>0\\\\-x&x\\leq0\\end{cases}", size: 20, display: true)
+            NativeMathView(latex: "\\textcolor{#cc0000}{a}+\\textcolor{#0000cc}{b}", size: 20, display: true)
+            NativeMathView(latex: "\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix} + \\mathcal{F}", size: 20, display: true)
+            NativeMathView(latex: "\\underline{x} + \\colorbox{#aaffaa}{y} + \\sqrt[3]{z}", size: 20, display: true)
+        }.padding(20).background(Color.white).environment(\.colorScheme, .light)
+        let host = NSHostingView(rootView: content)
+        let fitting = host.fittingSize
+        XCTAssertGreaterThan(fitting.width, 100)
+        XCTAssertGreaterThan(fitting.height, 100)
+        host.frame = NSRect(origin: .zero, size: fitting)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        XCTAssertGreaterThan(png.count, 1000)
+        if let path = ProcessInfo.processInfo.environment["NATIVE_MATH_SNAPSHOT_PATH"] {
+            try png.write(to: URL(fileURLWithPath: path))
+        }
+    }
+}
+#endif
+
+#if os(macOS)
+extension NativeMathParserTests {
+    @MainActor
+    func testConstrainedMathRowWrapsAtOperators() {
+        let formula = "a+b+c+d+e+f+g+h"
+        let natural = NSHostingView(rootView: NativeMathView(latex: formula, size: 20, display: true).fixedSize())
+            .fittingSize
+        let constrained = NSHostingView(rootView: NativeMathView(latex: formula, size: 20, display: true)
+            .frame(width: 90)).fittingSize
+        XCTAssertGreaterThan(constrained.height, natural.height)
+        XCTAssertLessThanOrEqual(constrained.width, 90)
+    }
+}
+#endif
+
+#if os(macOS)
+extension NativeMathParserTests {
+    @MainActor
+    func testInlineFlowConstrainsFormulaInsteadOfClippingIt() {
+        let formula = "a+b+c+d+e+f+g+h"
+        let view = InlineFlowLayout {
+            Text("Before ").fixedSize()
+            NativeMathView(latex: formula, size: 16, display: false)
+                .layoutValue(key: InlineMathKey.self, value: true)
+        }.frame(width: 100)
+        let constrained = NSHostingView(rootView: view).fittingSize
+        let natural = NSHostingView(rootView: NativeMathView(latex: formula, size: 16, display: false).fixedSize())
+            .fittingSize
+        XCTAssertGreaterThan(constrained.height, natural.height)
+        XCTAssertEqual(constrained.width, 100)
+    }
+}
+#endif
+
+extension NativeMathParserTests {
+    func testUpstreamSymbolInventoryRendersEveryAlphabeticCommand() {
+        XCTAssertGreaterThanOrEqual(NativeMathSymbols.glyphs.count, 230)
+        for (name, glyph) in NativeMathSymbols.glyphs where name.allSatisfy(\.isLetter) {
+            guard case let .row(nodes) = NativeMathParser.parse("\\" + name), let first = nodes.first else {
+                return XCTFail("Missing symbol: \\(name)")
+            }
+            if let limits = NativeMathSymbols.operatorLimits[name] {
+                XCTAssertEqual(first, .largeOperator(glyph, limits: limits), name)
+            } else {
+                XCTAssertEqual(first, .text(glyph), name)
+            }
+        }
+    }
+
+    func testInfixFractionsAndAccentsDoNotSharePrefixes() {
+        XCTAssertEqual(NativeMathParser.parse("{a\\over b}"),
+                       .row([.row([.fraction(.row([.text("a")]), .row([.text(" "), .text("b")]))])]))
+        XCTAssertEqual(NativeMathParser.parse("\\overline{x}"),
+                       .row([.accent("¯", .row([.text("x")]))]))
+        XCTAssertEqual(NativeMathParser.parse("\\leftarrow"), .row([.text("←")]))
+    }
+
+    func testAdditionalEnvironmentAndDecorations() {
+        guard case let .row(nodes) = NativeMathParser.parse("\\begin{Bmatrix}a&b\\\\c&d\\end{Bmatrix}"),
+              case let .matrix(rows, left, right) = nodes.first else { return XCTFail("Bmatrix missing") }
+        XCTAssertEqual(rows.count, 2)
+        XCTAssertEqual(left + right, "{}")
+        XCTAssertEqual(NativeMathParser.parse("\\underline{x}"), .row([.underline(.row([.text("x")]))]))
+        XCTAssertEqual(NativeMathParser.parse("\\colorbox{#00ff00}{x}"),
+                       .row([.colorBox("#00ff00", .row([.text("x")]))]))
+        XCTAssertEqual(NativeMathParser.parse("\\not\\subseteq"), .row([.text("⊈")]))
+        XCTAssertEqual(NativeMathParser.parse("\\quad"), .row([.space(18)]))
+        XCTAssertEqual(NativeMathParser.parse("\\sqrt[3]{x}"),
+                       .row([.indexedRoot(.row([.text("3")]), .row([.text("x")]))]))
+    }
+}
+
+extension NativeMathParserTests {
+    func testUpstreamFontAndAccentCommandInventory() {
+        let fonts = ["mathnormal", "mathrm", "textrm", "rm", "mathbf", "bf", "textbf",
+                     "mathcal", "cal", "mathtt", "texttt", "mathit", "textit", "mit",
+                     "mathsf", "textsf", "mathfrak", "frak", "mathbb", "mathbfit", "bm", "text"]
+        XCTAssertEqual(fonts.count, 22)
+        for name in fonts {
+            guard case let .row(nodes) = NativeMathParser.parse("\\" + name + "{x}"),
+                  case .alphabet = nodes.first else { return XCTFail("Font command missing: \(name)") }
+        }
+        let accents = ["grave", "acute", "hat", "tilde", "bar", "breve", "dot", "ddot",
+                       "check", "vec", "widehat", "widetilde"]
+        XCTAssertEqual(accents.count, 12)
+        for name in accents {
+            guard case let .row(nodes) = NativeMathParser.parse("\\" + name + "{x}"),
+                  case .accent = nodes.first else { return XCTFail("Accent missing: \(name)") }
+        }
+    }
+
+    func testUpstreamEnvironmentInventory() {
+        let matrices = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix",
+                        "matrix*", "pmatrix*", "bmatrix*", "Bmatrix*", "vmatrix*", "Vmatrix*"]
+        XCTAssertEqual(matrices.count, 13)
+        for name in matrices {
+            let optionalAlignment = name.hasSuffix("*") ? "[r]" : ""
+            let source = "\\begin{" + name + "}" + optionalAlignment + "a&b\\\\c&d\\end{" + name + "}"
+            guard case let .row(nodes) = NativeMathParser.parse(source), let first = nodes.first else {
+                return XCTFail("Matrix missing: \(name)")
+            }
+            switch first {
+            case .matrix, .alignedMatrix, .style: break
+            default: XCTFail("Matrix not rendered structurally: \(name)")
+            }
+        }
+        let others: [(String, String)] = [
+            ("eqalign", "a&=b\\\\c&=d"), ("split", "a&=b\\\\c&=d"),
+            ("aligned", "a&=b\\\\c&=d"), ("displaylines", "a\\\\b"),
+            ("gather", "a\\\\b"), ("eqnarray", "a&=&b\\\\c&=&d"),
+            ("cases", "a&x>0\\\\b&x<0")
+        ]
+        XCTAssertEqual(others.count, 7)
+        for (name, body) in others {
+            let source = "\\begin{" + name + "}" + body + "\\end{" + name + "}"
+            guard case let .row(nodes) = NativeMathParser.parse(source),
+                  case let .environment(parsedName, _, rows) = nodes.first else {
+                return XCTFail("Environment missing: \(name)")
+            }
+            XCTAssertEqual(parsedName, name)
+            XCTAssertEqual(rows.count, 2)
+        }
+    }
+}

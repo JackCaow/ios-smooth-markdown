@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 
 /// A small, self-contained TeX math subset used by the built-in Markdown renderer.
 /// Unknown commands remain visible so a formula never silently loses content.
@@ -6,13 +7,22 @@ indirect enum NativeMathNode: Equatable {
     case text(String)
     case row([NativeMathNode])
     case fraction(NativeMathNode, NativeMathNode)
+    case fractionNoRule(NativeMathNode, NativeMathNode)
     case root(NativeMathNode)
+    case indexedRoot(NativeMathNode, NativeMathNode)
+    case space(Int)
     case accent(String, NativeMathNode)
     case alphabet(String, NativeMathNode)
     case largeOperator(String, limits: Bool)
+    case color(String, NativeMathNode)
+    case colorBox(String, NativeMathNode)
+    case underline(NativeMathNode)
+    case style(String, NativeMathNode)
+    case delimited(String, String, NativeMathNode)
     case environment(String, columns: String, rows: [[NativeMathNode]])
     case script(NativeMathNode, sub: NativeMathNode?, sup: NativeMathNode?)
     case matrix([[NativeMathNode]], left: String, right: String)
+    case alignedMatrix([[NativeMathNode]], left: String, right: String, columns: String)
 }
 
 enum NativeMathParser {
@@ -38,6 +48,14 @@ enum NativeMathParser {
             index += characters.count
             return true
         }
+        mutating func consumeControlWord(_ string: String) -> Bool {
+            let characters = Array(string)
+            guard chars[index...].starts(with: characters) else { return false }
+            let next = index + characters.count
+            guard next == chars.count || !chars[next].isLetter else { return false }
+            index = next
+            return true
+        }
         mutating func group() -> NativeMathNode {
             if consume("{") {
                 let nodes = row(until: "}")
@@ -50,10 +68,20 @@ enum NativeMathParser {
             var nodes: [NativeMathNode] = []
             while let c = current, c != terminator {
                 if c == "}" { break }
+                for (command, left, right, ruled) in [
+                    ("\\over", "", "", true), ("\\atop", "", "", false),
+                    ("\\choose", "(", ")", false), ("\\brack", "[", "]", false),
+                    ("\\brace", "{", "}", false)
+                ] where consumeControlWord(command) {
+                    let top = NativeMathNode.row(nodes)
+                    let bottom = NativeMathNode.row(row(until: terminator))
+                    let fraction: NativeMathNode = ruled ? .fraction(top, bottom) : .fractionNoRule(top, bottom)
+                    return [left.isEmpty ? fraction : .delimited(left, right, fraction)]
+                }
                 guard var node = atom() else { break }
                 if case let .largeOperator(symbol, _) = node {
-                    if consume("\\limits") { node = .largeOperator(symbol, limits: true) }
-                    else if consume("\\nolimits") { node = .largeOperator(symbol, limits: false) }
+                    if consumeControlWord("\\limits") { node = .largeOperator(symbol, limits: true) }
+                    else if consumeControlWord("\\nolimits") { node = .largeOperator(symbol, limits: false) }
                 }
                 var sub: NativeMathNode?
                 var sup: NativeMathNode?
@@ -78,55 +106,128 @@ enum NativeMathParser {
             guard let next = current else { return .text("\\") }
             if !next.isLetter {
                 _ = take()
-                return .text(next == "\\" ? " " : String(next))
+                let command = String(next)
+                if let mu = NativeMathSymbols.spacingMu[command] { return .space(mu) }
+                return .text(NativeMathSymbols.glyphs[command] ?? command)
             }
             var name = ""
             while let c = current, c.isLetter { name.append(take()!) }
             switch name {
-            case "frac", "dfrac", "tfrac", "binom":
+            case "frac", "dfrac", "tfrac", "cfrac", "binom":
+                if name == "cfrac", consume("["), current != nil { _ = take(); _ = consume("]") }
                 let numerator = group(), denominator = group()
-                if name == "binom" { return .row([.text("("), .fraction(numerator, denominator), .text(")")]) }
+                if name == "binom" { return .delimited("(", ")", .fractionNoRule(numerator, denominator)) }
+                if name == "tfrac" { return .style("text", .fraction(numerator, denominator)) }
+                if name == "dfrac" || name == "cfrac" { return .style("display", .fraction(numerator, denominator)) }
                 return .fraction(numerator, denominator)
             case "sqrt":
                 if consume("[") { // Keep an optional root index visible.
                     var degree = ""
                     while let c = current, c != "]" { degree.append(take()!) }
                     _ = consume("]")
-                    return .row([.text(degree), .root(group())])
+                    return .indexedRoot(NativeMathParser.parse(degree), group())
                 }
                 return .root(group())
             case "begin":
                 let environment = rawGroup()
-                if ["matrix", "pmatrix", "bmatrix", "vmatrix", "cases", "array", "aligned", "align", "split", "eqalign", "gather", "displaylines"].contains(environment) {
+                let matrices = ["matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix", "smallmatrix",
+                                "matrix*", "pmatrix*", "bmatrix*", "Bmatrix*", "vmatrix*", "Vmatrix*"]
+                if matrices.contains(environment) || ["cases", "array", "aligned", "align", "split", "eqalign", "eqnarray", "gather", "displaylines"].contains(environment) {
                     let columns = environment == "array" ? rawGroup() :
                         (["aligned", "align", "split", "eqalign"].contains(environment) ? "rl" :
-                         environment == "cases" ? "ll" : "c")
+                         environment == "eqnarray" ? "rcl" : environment == "cases" ? "ll" : "c")
+                    let starredAlignment = environment.hasSuffix("*") && consume("[") ? String(take() ?? "c") : ""
+                    if !starredAlignment.isEmpty { _ = consume("]") }
                     let closing = "\\end{" + environment + "}"
                     var body = ""
                     while !end && !chars[index...].starts(with: Array(closing)) { body.append(take()!) }
                     _ = consume(closing)
-                    let rows = body.components(separatedBy: "\\\\").map { line in
+                    let rows = body.replacingOccurrences(of: "\\cr", with: "\\\\").components(separatedBy: "\\\\").map { line in
                         line.components(separatedBy: "&").map { NativeMathParser.parse($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
                     }
-                    let brackets: (String, String) = environment == "pmatrix" ? ("(", ")") : environment == "bmatrix" ? ("[", "]") : environment == "vmatrix" ? ("|", "|") : ("", "")
-                    if ["matrix", "pmatrix", "bmatrix", "vmatrix"].contains(environment) {
-                        return .matrix(rows, left: brackets.0, right: brackets.1)
+                    let base = environment.replacingOccurrences(of: "*", with: "")
+                    let brackets: (String, String) = base == "pmatrix" ? ("(", ")") :
+                        base == "bmatrix" ? ("[", "]") : base == "Bmatrix" ? ("{", "}") :
+                        base == "vmatrix" ? ("|", "|") : base == "Vmatrix" ? ("‖", "‖") : ("", "")
+                    if matrices.contains(environment) {
+                        if !starredAlignment.isEmpty {
+                            return .alignedMatrix(rows, left: brackets.0, right: brackets.1,
+                                                  columns: String(repeating: starredAlignment,
+                                                                  count: rows.map(\.count).max() ?? 1))
+                        }
+                        let matrix: NativeMathNode = .matrix(rows, left: brackets.0, right: brackets.1)
+                        return environment == "smallmatrix" ? .style("scriptstyle", matrix) : matrix
                     }
-                    return .environment(environment, columns: columns, rows: rows)
+                    return .environment(environment, columns: starredAlignment.isEmpty ? columns :
+                                        String(repeating: starredAlignment, count: rows.map(\.count).max() ?? 1), rows: rows)
                 }
                 return .text("\\begin{" + environment + "}")
-            case "left", "right": return atom()
-            case "hat", "widehat", "bar", "overline", "vec", "dot", "ddot", "tilde":
-                let marks = ["hat":"ˆ", "widehat":"ˆ", "bar":"¯", "overline":"¯", "vec":"→", "dot":"˙", "ddot":"¨", "tilde":"˜"]
+            case "left":
+                let left = delimiter()
+                let start = index
+                var depth = 1
+                while !end {
+                    if consumeControlWord("\\left") { depth += 1; continue }
+                    if consumeControlWord("\\right") {
+                        depth -= 1
+                        if depth == 0 {
+                            let body = String(chars[start..<(index - "\\right".count)])
+                            return .delimited(left, delimiter(), NativeMathParser.parse(body))
+                        }
+                        continue
+                    }
+                    _ = take()
+                }
+                return .text("\\left" + left + String(chars[start...]))
+            case "right": return .text("\\right")
+            case "color", "textcolor", "colorbox":
+                let hex = rawGroup()
+                guard NativeMathColor.isValid(hex) else { return .text("\\" + name + "{" + hex + "}") }
+                return name == "colorbox" ? .colorBox(hex, group()) : .color(hex, group())
+            case "underline": return .underline(group())
+            case "substack":
+                let source = rawGroup()
+                let rows = source.components(separatedBy: "\\\\").map { [NativeMathParser.parse($0)] }
+                return .environment("substack", columns: "c", rows: rows)
+            case "pmod": return .delimited("(", ")", .row([.text("mod"), .space(6), group()]))
+            case "not":
+                if consume("\\") {
+                    var command = ""
+                    while let c = current, c.isLetter { command.append(take()!) }
+                    return .text(NativeMathSymbols.negated[command] ?? "\\not\\" + command)
+                }
+                if consume("=") { return .text("≠") }
+                return .text("\\not")
+            case "grave", "acute", "hat", "widehat", "tilde", "widetilde", "bar", "breve", "dot", "ddot", "check", "vec", "overline":
+                let marks = ["grave":"`", "acute":"´", "hat":"ˆ", "widehat":"ˆ", "tilde":"˜",
+                             "widetilde":"˜", "bar":"¯", "breve":"˘", "dot":"˙", "ddot":"¨",
+                             "check":"ˇ", "vec":"→", "overline":"¯"]
                 return .accent(marks[name]!, group())
-            case "mathbf", "mathrm", "mathit", "mathbb", "mathfrak", "mathcal", "mathsf", "mathtt", "bm", "text", "operatorname":
-                return .alphabet(name, group())
-            case "sum", "prod", "lim", "int", "oint":
-                let glyph = NativeMathParser.symbols[name] ?? name
-                return .largeOperator(glyph, limits: name != "int" && name != "oint")
-            case ",", ";", "quad", "qquad": return .text(" ")
-            default: return .text(symbols[name] ?? "\\" + name)
+            case "mathnormal", "mathrm", "textrm", "rm", "mathbf", "bf", "textbf", "mathcal", "cal",
+                 "mathtt", "texttt", "mathit", "textit", "mit", "mathsf", "textsf", "mathfrak", "frak",
+                 "mathbb", "mathbfit", "bm", "text", "operatorname":
+                let aliases = ["textrm":"mathrm", "rm":"mathrm", "bf":"mathbf", "textbf":"mathbf",
+                               "cal":"mathcal", "texttt":"mathtt", "textit":"mathit", "mit":"mathit",
+                               "textsf":"mathsf", "frak":"mathfrak", "mathbfit":"bm", "text":"mathrm"]
+                return .alphabet(aliases[name] ?? name, group())
+            case "displaystyle", "textstyle", "scriptstyle", "scriptscriptstyle":
+                return .style(name, group())
+            default:
+                let resolved = NativeMathSymbols.aliases[name] ?? name
+                if let mu = NativeMathSymbols.spacingMu[resolved] { return .space(mu) }
+                if let limits = NativeMathSymbols.operatorLimits[resolved] {
+                    return .largeOperator(NativeMathSymbols.glyphs[resolved] ?? resolved, limits: limits)
+                }
+                return .text(NativeMathSymbols.glyphs[resolved] ?? "\\" + name)
             }
+        }
+        mutating func delimiter() -> String {
+            guard let next = current else { return "" }
+            if next != "\\" { _ = take(); return next == "." ? "" : String(next) }
+            _ = take()
+            var command = ""
+            while let c = current, c.isLetter { command.append(take()!) }
+            return ["langle":"⟨", "rangle":"⟩", "lbrace":"{", "rbrace":"}", "lvert":"|", "rvert":"|", "lfloor":"⌊", "rfloor":"⌋", "lceil":"⌈", "rceil":"⌉"][command] ?? "\\" + command
         }
         mutating func rawGroup() -> String {
             guard consume("{") else { return "" }
@@ -137,22 +238,7 @@ enum NativeMathParser {
         }
     }
 
-    private static let symbols: [String: String] = [
-        "alpha":"α", "beta":"β", "gamma":"γ", "delta":"δ", "epsilon":"ϵ", "varepsilon":"ε",
-        "zeta":"ζ", "eta":"η", "theta":"θ", "vartheta":"ϑ", "iota":"ι", "kappa":"κ",
-        "lambda":"λ", "mu":"μ", "nu":"ν", "xi":"ξ", "pi":"π", "rho":"ρ", "sigma":"σ",
-        "tau":"τ", "upsilon":"υ", "phi":"ϕ", "varphi":"φ", "chi":"χ", "psi":"ψ", "omega":"ω",
-        "Gamma":"Γ", "Delta":"Δ", "Theta":"Θ", "Lambda":"Λ", "Xi":"Ξ", "Pi":"Π",
-        "Sigma":"Σ", "Phi":"Φ", "Psi":"Ψ", "Omega":"Ω",
-        "sum":"∑", "prod":"∏", "int":"∫", "oint":"∮", "infty":"∞", "partial":"∂",
-        "nabla":"∇", "cdot":"·", "times":"×", "pm":"±", "mp":"∓", "div":"÷",
-        "leq":"≤", "le":"≤", "geq":"≥", "ge":"≥", "neq":"≠", "approx":"≈",
-        "equiv":"≡", "to":"→", "rightarrow":"→", "leftarrow":"←", "Rightarrow":"⇒",
-        "in":"∈", "notin":"∉", "subset":"⊂", "subseteq":"⊆", "cup":"∪", "cap":"∩",
-        "forall":"∀", "exists":"∃", "hbar":"ℏ", "ell":"ℓ", "ldots":"…", "cdots":"⋯",
-        "sin":"sin", "cos":"cos", "tan":"tan", "log":"log", "ln":"ln", "lim":"lim",
-        "hat":"^", "bar":"¯", "vec":"→"
-    ]
+
 }
 
 struct NativeMathView: View {
@@ -176,21 +262,42 @@ private struct MathNodeView: View {
     @ViewBuilder private var content: some View {
         switch node {
         case let .text(value):
-            Text(NativeMathGlyphs.styled(value, alphabet: alphabet))
-                .font(.system(size: size, weight: alphabet == "mathbf" || alphabet == "bm" ? .bold : .regular,
-                              design: alphabet == "mathsf" ? .default : alphabet == "mathtt" ? .monospaced : .serif))
+            let rendered = NativeMathGlyphs.styled(value, alphabet: alphabet)
+            Text(rendered)
+                .font(textFont(for: value))
+                .frame(minHeight: NativeMathMetrics.lineHeight(size: size))
         case let .row(nodes):
-            HStack(alignment: .center, spacing: 0) {
-                ForEach(Array(nodes.enumerated()), id: \.offset) { _, child in
+            NativeMathRowLayout(lineSpacing: size * 0.3) {
+                ForEach(Array(nodes.enumerated()), id: \.offset) { index, child in
                     MathNodeView(node: child, size: size, display: display, alphabet: alphabet)
+                        .layoutValue(key: NativeMathGapKey.self,
+                                     value: child.spaceMu.map { CGFloat($0) * size / 18 } ??
+                                        (index > 0 && NativeMathSpacing.needsGap(before: child, after: nodes[index - 1])
+                                         ? NativeMathMetrics.operatorGap(size: size) : 0))
+                        .layoutValue(key: NativeMathBreakKey.self,
+                                     value: index > 0 && NativeMathSpacing.canBreak(after: nodes[index - 1]))
                 }
             }
+        case let .space(_):
+            Color.clear.frame(width: 0, height: 0)
         case let .fraction(top, bottom):
             VStack(spacing: 1) {
                 MathNodeView(node: top, size: size * (display ? 0.8 : 0.7), display: display, alphabet: alphabet)
                 Rectangle().frame(height: max(1, size / 18))
                 MathNodeView(node: bottom, size: size * (display ? 0.8 : 0.7), display: display, alphabet: alphabet)
             }.fixedSize()
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
+        case let .fractionNoRule(top, bottom):
+            VStack(spacing: 2) {
+                MathNodeView(node: top, size: size * 0.8, display: display, alphabet: alphabet)
+                MathNodeView(node: bottom, size: size * 0.8, display: display, alphabet: alphabet)
+            }.fixedSize()
+                .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] }
+        case let .indexedRoot(degree, value):
+            HStack(alignment: .top, spacing: -2) {
+                MathNodeView(node: degree, size: size * 0.55, display: false, alphabet: alphabet)
+                MathNodeView(node: .root(value), size: size, display: display, alphabet: alphabet)
+            }
         case let .root(value):
             HStack(alignment: .top, spacing: 0) {
                 Text("√").font(.system(size: size * 1.3, design: .serif))
@@ -200,14 +307,36 @@ private struct MathNodeView: View {
             }
         case let .accent(mark, value):
             MathNodeView(node: value, size: size, display: display, alphabet: alphabet)
+                .padding(.top, NativeMathMetrics.ascent(size: size) * 0.3)
                 .overlay(alignment: .top) {
-                    Text(mark).font(.system(size: size * 0.8, design: .serif))
-                        .offset(y: -size * 0.55)
+                    Text(mark).font(.custom("TimesNewRomanPSMT", fixedSize: size * 0.8))
                 }
         case let .alphabet(name, value):
             MathNodeView(node: value, size: size, display: display, alphabet: name)
+        case let .color(hex, value):
+            MathNodeView(node: value, size: size, display: display, alphabet: alphabet)
+                .foregroundStyle(NativeMathColor.color(hex))
+        case let .colorBox(hex, value):
+            MathNodeView(node: value, size: size, display: display, alphabet: alphabet)
+                .padding(2).background(NativeMathColor.color(hex))
+        case let .underline(value):
+            MathNodeView(node: value, size: size, display: display, alphabet: alphabet)
+                .padding(.bottom, 2)
+                .overlay(alignment: .bottom) { Rectangle().frame(height: 1) }
+        case let .style(name, value):
+            MathNodeView(node: value, size: size * (name == "scriptstyle" ? 0.7 :
+                                          name == "scriptscriptstyle" ? 0.5 : 1),
+                             display: name == "displaystyle" ? true : name == "textstyle" ? false : display,
+                             alphabet: alphabet)
+        case let .delimited(left, right, value):
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text(left).font(.custom("TimesNewRomanPSMT", fixedSize: size * value.verticalScale))
+                MathNodeView(node: value, size: size, display: display, alphabet: alphabet)
+                Text(right).font(.custom("TimesNewRomanPSMT", fixedSize: size * value.verticalScale))
+            }
         case let .largeOperator(value, _):
-            Text(value).font(.system(size: display ? size * 1.35 : size, design: .serif))
+            Text(value).font(.custom("TimesNewRomanPSMT", fixedSize:
+                                     display && value.count == 1 ? size * 1.35 : size))
         case let .script(base, sub, sup):
             if case let .largeOperator(_, limits) = base, limits && display {
                 VStack(spacing: 0) {
@@ -226,8 +355,22 @@ private struct MathNodeView: View {
             }
         case let .matrix(rows, left, right):
             table(rows, left: left, right: right, columns: "")
+        case let .alignedMatrix(rows, left, right, columns):
+            table(rows, left: left, right: right, columns: columns)
         case let .environment(name, columns, rows):
             table(rows, left: name == "cases" ? "{" : "", right: "", columns: columns)
+        }
+    }
+
+    private func textFont(for value: String) -> Font {
+        switch alphabet {
+        case "mathsf": return .system(size: size, design: .default)
+        case "mathtt": return .system(size: size, design: .monospaced)
+        case "mathbf": return .custom("TimesNewRomanPS-BoldMT", fixedSize: size)
+        case "bm": return .custom("TimesNewRomanPS-BoldItalicMT", fixedSize: size)
+        case "mathit", "mathnormal" where value.allSatisfy(\.isLetter):
+            return .custom("TimesNewRomanPS-ItalicMT", fixedSize: size)
+        default: return .custom("TimesNewRomanPSMT", fixedSize: size)
         }
     }
 
@@ -282,9 +425,136 @@ enum NativeMathGlyphs {
         switch alphabet {
         case "mathbb": letters = "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫"
         case "mathfrak": letters = "𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷"
+        case "mathcal": letters = "𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵𝒶𝒷𝒸𝒹ℯ𝒻ℊ𝒽𝒾𝒿𝓀𝓁𝓂𝓃ℴ𝓅𝓆𝓇𝓈𝓉𝓊𝓋𝓌𝓍𝓎𝓏"
         default: return value
         }
         let mapped = Dictionary(uniqueKeysWithValues: zip(source, Array(letters)))
         return String(value.map { mapped[$0] ?? $0 })
+    }
+}
+
+private extension NativeMathNode {
+    var spaceMu: Int? {
+        if case let .space(mu) = self { return mu }
+        return nil
+    }
+    var verticalScale: CGFloat {
+        switch self {
+        case let .row(children): return children.map(\.verticalScale).max() ?? 1
+        case .fraction, .fractionNoRule: return 1.9
+        case let .matrix(rows, _, _), let .alignedMatrix(rows, _, _, _), let .environment(_, _, rows):
+            return CGFloat(max(rows.count, 1)) * 1.25
+        case let .root(child), let .accent(_, child), let .alphabet(_, child), let .color(_, child),
+             let .colorBox(_, child), let .underline(child), let .style(_, child), let .delimited(_, _, child):
+            return child.verticalScale
+        case let .indexedRoot(_, child): return child.verticalScale
+        case let .script(base, _, _): return max(1.3, base.verticalScale)
+        case .text, .largeOperator, .space: return 1
+        }
+    }
+}
+
+enum NativeMathSpacing {
+    static func canBreak(after node: NativeMathNode) -> Bool {
+        guard case let .text(value) = node else { return false }
+        return value == " " || ["+", "-", "−", "=", "<", ">", "±", "×", "÷", ","].contains(value)
+    }
+    static func needsGap(before node: NativeMathNode, after previous: NativeMathNode) -> Bool {
+        guard case let .text(current) = node, case let .text(prior) = previous else { return false }
+        if current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+           prior.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return false }
+        let operators = "+−-=<>±×÷"
+        return current.count == 1 && operators.contains(current) || prior.count == 1 && operators.contains(prior)
+    }
+}
+
+enum NativeMathMetrics {
+    static func font(size: CGFloat) -> CTFont { CTFontCreateWithName("TimesNewRomanPSMT" as CFString, size, nil) }
+    static func ascent(size: CGFloat) -> CGFloat { CTFontGetAscent(font(size: size)) }
+    static func lineHeight(size: CGFloat) -> CGFloat {
+        let value = font(size: size)
+        return CTFontGetAscent(value) + CTFontGetDescent(value) + CTFontGetLeading(value)
+    }
+    static func operatorGap(size: CGFloat) -> CGFloat {
+        let value = font(size: size)
+        var character: UniChar = 120 // x
+        var glyph: CGGlyph = 0
+        guard CTFontGetGlyphsForCharacters(value, &character, &glyph, 1) else { return size * 0.2 }
+        var advance = CGSize.zero
+        CTFontGetAdvancesForGlyphs(value, .horizontal, &glyph, &advance, 1)
+        return max(1, advance.width * 0.35)
+    }
+}
+
+enum NativeMathColor {
+    static func isValid(_ hex: String) -> Bool {
+        let digits = hex.dropFirst()
+        return hex.first == "#" && digits.count == 6 && digits.allSatisfy { $0.isHexDigit }
+    }
+    static func color(_ hex: String) -> Color {
+        guard isValid(hex), let number = UInt32(hex.dropFirst(), radix: 16) else { return .primary }
+        return Color(red: Double((number >> 16) & 0xff) / 255,
+                     green: Double((number >> 8) & 0xff) / 255,
+                     blue: Double(number & 0xff) / 255)
+    }
+}
+
+private struct NativeMathGapKey: LayoutValueKey { static let defaultValue: CGFloat = 0 }
+private struct NativeMathBreakKey: LayoutValueKey { static let defaultValue = false }
+
+private struct NativeMathRowLayout: Layout {
+    let lineSpacing: CGFloat
+    struct Placement { let x: CGFloat; let y: CGFloat }
+    struct Arrangement { let positions: [Placement]; let size: CGSize }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(width: proposal.width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let arrangement = arrange(width: bounds.width, subviews: subviews)
+        for (index, subview) in subviews.enumerated() {
+            let point = arrangement.positions[index]
+            subview.place(at: CGPoint(x: bounds.minX + point.x, y: bounds.minY + point.y), proposal: .unspecified)
+        }
+    }
+
+    private func arrange(width: CGFloat?, subviews: Subviews) -> Arrangement {
+        let limit = width ?? .infinity
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let baselines = subviews.enumerated().map { index, subview -> CGFloat in
+            let value = subview.dimensions(in: .unspecified)[.firstTextBaseline]
+            return value.isFinite ? value : sizes[index].height / 2
+        }
+        var result = Array(repeating: Placement(x: 0, y: 0), count: subviews.count)
+        var lineStart = 0
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var maxWidth: CGFloat = 0
+        func finishLine(_ end: Int) -> CGFloat {
+            guard end > lineStart else { return 0 }
+            let ascent = (lineStart..<end).map { baselines[$0] }.max() ?? 0
+            let descent = (lineStart..<end).map { sizes[$0].height - baselines[$0] }.max() ?? 0
+            for i in lineStart..<end {
+                result[i] = Placement(x: result[i].x, y: y + ascent - baselines[i])
+            }
+            return ascent + descent
+        }
+        for index in subviews.indices {
+            let gap = x == 0 ? 0 : subviews[index][NativeMathGapKey.self]
+            if x > 0, x + gap + sizes[index].width > limit, subviews[index][NativeMathBreakKey.self] {
+                let height = finishLine(index)
+                maxWidth = max(maxWidth, x)
+                y += height + lineSpacing
+                lineStart = index
+                x = 0
+            }
+            let actualGap = x == 0 ? 0 : gap
+            result[index] = Placement(x: x + actualGap, y: 0)
+            x += actualGap + sizes[index].width
+        }
+        let finalHeight = finishLine(subviews.count)
+        maxWidth = max(maxWidth, x)
+        return Arrangement(positions: result, size: CGSize(width: maxWidth, height: y + finalHeight))
     }
 }

@@ -1255,6 +1255,7 @@ public struct SmoothMarkdownView: View {
                         .layoutValue(key: InlineImageKey.self, value: true)
                 case let .math(latex):
                     inlineMath(latex)
+                        .layoutValue(key: InlineMathKey.self, value: true)
                 case let .plugin(plugin, match):
                     pluginView(plugin, match).fixedSize()
                 case .lineBreak:
@@ -1281,7 +1282,6 @@ public struct SmoothMarkdownView: View {
             builder.build(node, context: renderContext()).fixedSize()
         } else {
             NativeMathView(latex: latex, size: 16, display: false)
-                .fixedSize()
                 .accessibilityLabel(latex)
         }
     }
