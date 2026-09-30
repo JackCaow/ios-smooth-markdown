@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Visible text and block anchors for the continuous TextKit reader host.
 /// A projection alone does not make legacy SwiftUI sections globally selectable.

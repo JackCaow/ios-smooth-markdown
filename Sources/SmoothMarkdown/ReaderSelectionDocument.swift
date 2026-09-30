@@ -1,5 +1,4 @@
 import Foundation
-import Markdown
 
 /// Markdown blocks that can share one native selection surface.
 struct ReaderSelectionDocument {

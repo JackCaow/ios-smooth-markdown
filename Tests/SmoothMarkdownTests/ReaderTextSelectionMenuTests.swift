@@ -1,7 +1,6 @@
 #if os(iOS)
 import XCTest
 import UIKit
-import Markdown
 @testable import SmoothMarkdown
 
 final class ReaderTextSelectionMenuTests: XCTestCase {

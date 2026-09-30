@@ -1,4 +1,3 @@
-import Markdown
 import SwiftUI
 import XCTest
 @testable import SmoothMarkdown
