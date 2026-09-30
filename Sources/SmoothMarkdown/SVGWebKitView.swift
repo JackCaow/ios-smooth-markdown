@@ -13,23 +13,32 @@ struct SVGWebKitView: UIViewRepresentable {
         webView.isOpaque = false
         webView.scrollView.isScrollEnabled = false
         webView.navigationDelegate = context.coordinator
-        load(into: webView)
+        configureViewportUpdates(for: webView)
+        if webView.bounds.width > 0 { load(into: webView, width: webView.bounds.width) }
         context.coordinator.loadedData = svg.sourceData
         context.coordinator.loadedBaseURL = svg.baseURL
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
+        configureViewportUpdates(for: webView)
         guard context.coordinator.loadedData != svg.sourceData || context.coordinator.loadedBaseURL != svg.baseURL else { return }
-        load(into: webView)
+        if webView.bounds.width > 0 { load(into: webView, width: webView.bounds.width) }
         context.coordinator.loadedData = svg.sourceData
         context.coordinator.loadedBaseURL = svg.baseURL
     }
 
     func makeCoordinator() -> SVGWebKitNavigationGuard { SVGWebKitNavigationGuard() }
 
-    private func load(into webView: WKWebView) {
-        if let html = SVGWebKitConfiguration.html(for: svg) {
+    private func configureViewportUpdates(for webView: WKWebView) {
+        (webView as? SVGWebKitSizingView)?.onWidthChange = { [weak webView] width in
+            guard let webView else { return }
+            load(into: webView, width: width)
+        }
+    }
+
+    private func load(into webView: WKWebView, width: CGFloat) {
+        if let html = SVGWebKitConfiguration.html(for: svg, viewportWidth: width) {
             webView.loadHTMLString(html, baseURL: svg.baseURL ?? URL(string: "https://svg.invalid/")!)
         }
     }
@@ -65,7 +74,7 @@ struct SVGWebKitView: NSViewRepresentable {
 #endif
 
 enum SVGWebKitConfiguration {
-    static func html(for svg: SVG) -> String? {
+    static func html(for svg: SVG, viewportWidth: CGFloat? = nil) -> String? {
         let bytes = svg.sourceData
         let looksUTF16 = bytes.starts(with: [0xFF, 0xFE]) || bytes.starts(with: [0xFE, 0xFF])
             || bytes.prefix(32).contains(0)
@@ -89,18 +98,40 @@ enum SVGWebKitConfiguration {
             let width = svg.size.width, height = svg.size.height
             markup.insert(contentsOf: " viewBox=\"0 0 \(width) \(height)\"", at: rootEnd)
         }
-        return "<html><head><meta name='viewport' content='width=device-width,initial-scale=1'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(markup)</body></html>"
+        // `device-width` is the full iPhone width even inside a small WKWebView.
+        // Match the actual view width so both badges and resized SVGs use one CSS pixel per point.
+        let width = max(1, Int((viewportWidth ?? svg.size.width).rounded()))
+        return "<html><head><meta name='viewport' content='width=\(width),initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no'><style>html,body{margin:0;width:100%;height:100%;background:transparent;overflow:hidden}body>svg{width:100%;height:100%}</style></head><body>\(markup)</body></html>"
     }
 
     static func makeView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = false
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+        #if os(iOS)
+        let webView = SVGWebKitSizingView(frame: .zero, configuration: configuration)
+        #else
         let webView = WKWebView(frame: .zero, configuration: configuration)
+        #endif
         webView.underPageBackgroundColor = .clear
         return webView
     }
 }
+
+#if os(iOS)
+private final class SVGWebKitSizingView: WKWebView {
+    var onWidthChange: ((CGFloat) -> Void)?
+    private var lastWidth: CGFloat = 0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width
+        guard width > 0, abs(width - lastWidth) > 0.5 else { return }
+        lastWidth = width
+        onWidthChange?(width)
+    }
+}
+#endif
 
 final class SVGWebKitNavigationGuard: NSObject, WKNavigationDelegate {
     var loadedData: Data?

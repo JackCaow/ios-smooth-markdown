@@ -73,6 +73,48 @@ private final class SVGImageMockProtocol: URLProtocol {
 
 @MainActor
 final class NativeSVGPixelTests: XCTestCase {
+    func testWebKitBadgeKeepsIntrinsicSizeInSmallFrame() async throws {
+        try await assertWebKitSVGFill(naturalWidth: 77, naturalHeight: 20,
+                                      frameWidth: 77, frameHeight: 20)
+    }
+
+    func testWebKitLargeSVGScalesIntoSmallerFrame() async throws {
+        try await assertWebKitSVGFill(naturalWidth: 600, naturalHeight: 200,
+                                      frameWidth: 300, frameHeight: 100)
+    }
+
+    private func assertWebKitSVGFill(naturalWidth: Int, naturalHeight: Int,
+                                     frameWidth: Int, frameHeight: Int) async throws {
+        let source = "<svg xmlns='http://www.w3.org/2000/svg' width='\(naturalWidth)' height='\(naturalHeight)'><style>rect { fill: red }</style><rect width='\(naturalWidth)' height='\(naturalHeight)'/></svg>"
+        let svg = try XCTUnwrap(SVG(data: Data(source.utf8)))
+        let html = try XCTUnwrap(SVGWebKitConfiguration.html(for: svg, viewportWidth: CGFloat(frameWidth)))
+        XCTAssertTrue(html.contains("width=\(frameWidth),initial-scale=1"))
+        let webView = SVGWebKitConfiguration.makeView()
+        webView.frame = CGRect(x: 0, y: 0, width: frameWidth, height: frameHeight)
+        let delegate = SVGWebKitNavigationGuard()
+        let loaded = expectation(description: "Small SVG loaded")
+        delegate.onFinished = { loaded.fulfill() }
+        webView.navigationDelegate = delegate
+        webView.loadHTMLString(html, baseURL: URL(string: "https://svg.invalid/")!)
+        await fulfillment(of: [loaded], timeout: 10)
+        let image: NSImage? = await withCheckedContinuation { continuation in
+            webView.takeSnapshot(with: nil) { image, _ in continuation.resume(returning: image) }
+        }
+        let bitmap = try XCTUnwrap(image?.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)))
+        let scale = bitmap.pixelsWide / frameWidth
+        XCTAssertGreaterThanOrEqual(scale, 1)
+        XCTAssertEqual(bitmap.pixelsWide, frameWidth * scale)
+        XCTAssertEqual(bitmap.pixelsHigh, frameHeight * scale)
+        for point in [CGPoint(x: 2, y: 2), CGPoint(x: CGFloat(frameWidth - 3), y: 2),
+                      CGPoint(x: 2, y: CGFloat(frameHeight - 3)),
+                      CGPoint(x: CGFloat(frameWidth - 3), y: CGFloat(frameHeight - 3))] {
+            let color = try XCTUnwrap(bitmap.colorAt(x: Int(point.x) * scale,
+                                                    y: Int(point.y) * scale)?.usingColorSpace(.deviceRGB))
+            XCTAssertGreaterThan(color.redComponent, 0.8)
+            XCTAssertLessThan(color.greenComponent, 0.2)
+        }
+    }
+
     func testWebKitHTMLSupportsPrefixedAndLatin1SVG() throws {
         let source = "<?xml version='1.0' encoding='ISO-8859-1'?><s:svg xmlns:s='http://www.w3.org/2000/svg' width='20' height='10'><s:text x='0' y='8'>café</s:text></s:svg>"
         let data = try XCTUnwrap(source.data(using: .isoLatin1))
