@@ -464,44 +464,6 @@ struct NativeMarkdownASTParser {
             }
             return nil
         }
-        func isPunctuation(_ character: Character?) -> Bool {
-            guard let character else { return false }
-            return character.unicodeScalars.allSatisfy {
-                CharacterSet.punctuationCharacters.contains($0) || CharacterSet.symbols.contains($0)
-            }
-        }
-        func delimiterFlags(at position: Int, run: Int, marker: Character)
-            -> (opens: Bool, closes: Bool) {
-            let previous = position > 0 ? characters[position - 1] : nil
-            let next = position + run < characters.count ? characters[position + run] : nil
-            let previousSpace = previous?.isWhitespace ?? true
-            let nextSpace = next?.isWhitespace ?? true
-            let previousPunctuation = isPunctuation(previous)
-            let nextPunctuation = isPunctuation(next)
-            let left = !nextSpace && (!nextPunctuation || previousSpace || previousPunctuation)
-            let right = !previousSpace && (!previousPunctuation || nextSpace || nextPunctuation)
-            if marker == "_" {
-                return (left && (!right || previousPunctuation),
-                        right && (!left || nextPunctuation))
-            }
-            return (left, right)
-        }
-        func closingEmphasis(_ marker: Character, count: Int, after start: Int) -> Int? {
-            var cursor = start
-            while cursor < characters.count {
-                if characters[cursor] == "\\" {
-                    cursor += min(2, characters.count - cursor)
-                    continue
-                }
-                guard characters[cursor] == marker else { cursor += 1; continue }
-                let run = characters[cursor...].prefix(while: { $0 == marker }).count
-                if run >= count, delimiterFlags(at: cursor, run: run, marker: marker).closes {
-                    return cursor
-                }
-                cursor += run
-            }
-            return nil
-        }
         func linkTail(after opening: Int) -> (destination: String, title: String?, end: Int)? {
             guard characters.indices.contains(opening), characters[opening] == "(" else { return nil }
             var cursor = opening + 1
