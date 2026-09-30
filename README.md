@@ -35,6 +35,10 @@ The native SVG path uses SwiftUI Canvas/CoreGraphics for common shapes and paint
 
 Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layout. A SwiftUI renderer remains visible while a formula is prepared or if WebKit cannot render it. Neither path adds a package dependency.
 
+## Syntax coverage
+
+The native parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
+
 ## Quick start
 
 ### Render a document
