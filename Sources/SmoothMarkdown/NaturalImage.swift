@@ -84,7 +84,9 @@ struct RemoteBitmapView: View {
             failed = false
             #if os(iOS)
             let key = ReaderRemoteImageKey(url: url, svg: url.pathExtension.lowercased() == "svg")
-            switch await ReaderRemoteImageLoader.fetch(key) {
+            let fetched = await ReaderRemoteImageLoader.fetch(key)
+            guard !Task.isCancelled else { return }
+            switch fetched {
             case let .data(data):
                 switch ReaderRemoteImageResolution.decode(data, key: key) {
                 case let .svg(image): svg = image

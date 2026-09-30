@@ -5,7 +5,7 @@
 ## 语义与包内测试
 
 - Native AST 与正式 HTML 导出对照 CommonMark 0.31.2 官方 652 例和 GFM 扩展 24 例，完整 HTML 均通过。
-- 联合版本的 Swift 包测试共 528 项，0 失败、1 项跳过（联合验收）。这两项是语义和包内测试结果，不代表全部 UI 页面已验收。
+- 联合版本的 Swift 包测试共 532 项，0 失败、1 项跳过（联合验收）。这些结果验证解析语义与包内行为。
 
 ## 独立 CocoaPods consumer
 
@@ -44,4 +44,12 @@ pod lib lint SmoothMarkdown.podspec --allow-warnings \
 
 首次有效 lint 使用默认 validation 目录时，Xcode 在 DerivedData 的 `build.db` 报 `disk I/O error`，随后提示无法打开 `SmoothMarkdown_const_extract_protocols.json`，没有报告源码编译错误；日志为 `/tmp/smoothmarkdown-pod-lint.log`。当时数据卷仍有约 27 GiB 可用。改用上面的独立 validation 目录重跑后通过。CocoaPods 1.16.2 不接受 `pod lib lint --local`，因此复现命令不包含该参数。
 
-本验证未发布 CocoaPods Trunk，也不表示全部 UI 测试或视觉页面已完成验收。
+## 模拟器 UI 复核
+
+完整 Demo 截图套件 9 项通过，共导出 220 张 PNG，覆盖基础 Markdown、功能页、编辑器、主题、聊天、12 个会话详情、40 个 Mermaid 图及动态状态。截图与复核记录位于桌面 `ios-smooth-markdown-zero-dependency-review` 文件夹。
+
+截图发现并修复了嵌套折叠块、无扩展名 SVG 识别与缩放、发出消息表格表头对比度；折叠块和表头均有定向通过截图。公式复核覆盖括号、负间距、暗色透明背景及 cases 花括号。
+
+原始图片 fixture 中的 Flutter Logo 地址返回 404，另一处地址是预设失败样例。部分宽幅 Mermaid 图初始视窗显示不全，需双轴平移或缩放；这仍是现有布局限制。
+
+验证使用模拟器；CocoaPods Trunk 尚未发布，需要完成账号验证。
