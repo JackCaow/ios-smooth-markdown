@@ -6,13 +6,13 @@ This is an independent iOS Swift package and SwiftUI demo. The package has no th
 
 ## Use in an iOS app
 
-Requires iOS 17 or newer. The existing `0.1.0` tag contains the earlier dependency-based release; the zero-dependency `0.2.0` release has not been published. For this code, choose **File > Add Package Dependencies** in Xcode, enter `https://github.com/JackCaow/ios-smooth-markdown`, select the `codex/ios-zero-dependencies-integration` branch, and add the **SmoothMarkdown** product to your app target. Pin a tested commit for shipped apps until `0.2.0` is released.
+Requires iOS 17 or newer. Choose **File > Add Package Dependencies** in Xcode, enter `https://github.com/JackCaow/ios-smooth-markdown`, select **0.2.0** or later, and add the **SmoothMarkdown** product to your app target. Version 0.2.0 is the first dependency-free release; the earlier 0.1.0 tag contains external package dependencies.
 
 For a package manifest, add the same repository and product:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", branch: "codex/ios-zero-dependencies-integration")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.2.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -21,7 +21,7 @@ targets: [
 ]
 ```
 
-For CocoaPods, add `pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :branch => 'codex/ios-zero-dependencies-integration'` to your `Podfile` and run `pod install`. This is a direct Git install; the pod is not published to CocoaPods Trunk yet.
+For CocoaPods, add `pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.2.0'` to your `Podfile` and run `pod install`. This is a direct Git install; the pod is not published to CocoaPods Trunk yet.
 
 Render Markdown in any SwiftUI screen:
 

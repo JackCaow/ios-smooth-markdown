@@ -8,11 +8,11 @@ The library is under active development. It supports common Markdown and GFM con
 
 Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. Markdown is parsed into a native Swift AST; SVG and math rendering use Apple frameworks.
 
-The zero-dependency code is currently on the `codex/ios-zero-dependencies-integration` branch. The existing `0.1.0` tag is an older release, and `0.2.0` has not been released yet. Until `0.2.0` is published, select that branch in Xcode's **File → Add Package Dependencies** for this version. If you maintain a `Package.swift`, add:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.2.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", branch: "codex/ios-zero-dependencies-integration")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.2.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -24,7 +24,7 @@ targets: [
 CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
 
 ```ruby
-pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :branch => 'codex/ios-zero-dependencies-integration'
+pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.2.0'
 ```
 
 `SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
