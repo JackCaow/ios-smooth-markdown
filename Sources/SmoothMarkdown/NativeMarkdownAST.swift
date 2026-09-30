@@ -28,6 +28,7 @@ struct NativeMarkdownNode: Equatable {
         case .inlineCode: literalText ?? NativeMarkdownTextDecoder.codeSpan(source)
         case .fencedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: true)
         case .indentedCode: literalText ?? NativeMarkdownCodeSemantics.text(source: source, fenced: false)
+        case .inlineHTML, .htmlBlock: literalText
         default: nil
         }
     }
@@ -75,7 +76,17 @@ struct NativeMarkdownASTParser {
         let references = referenceDefinitions(in: scan(lines, source: source, references: [:]))
         return .init(kind: .document, source: source,
                      sourceRange: NSRange(location: 0, length: (source as NSString).length),
-                     children: scan(lines, source: source, references: references))
+                     children: scan(lines, source: source, references: references).map(filterHTML))
+    }
+
+    private func filterHTML(_ node: NativeMarkdownNode) -> NativeMarkdownNode {
+        guard enableGFM else { return node }
+        let filtered = node.kind == .inlineHTML || node.kind == .htmlBlock
+            ? NativeMarkdownHTMLTagFilter.filter(node.source) : node.literalText
+        return .init(kind: node.kind, source: node.source, sourceRange: node.sourceRange,
+                     children: node.children.map(filterHTML), title: node.title,
+                     isTight: node.isTight, listStart: node.listStart,
+                     literalText: filtered, tableAlignments: node.tableAlignments)
     }
 
     private func sourceLines(_ source: String) -> [Line] {

@@ -45,14 +45,14 @@ enum NativeMarkdownHTMLTestRenderer {
         case .emphasis: return "<em>" + content + "</em>"
         case .softBreak: return "\n"
         case .hardBreak: return "<br />\n"
-        case .inlineHTML: return node.source
+        case .inlineHTML: return node.semanticText ?? node.source
         case let .link(url): return "<a href=\"" + destination(url) + "\"" + title + ">" + content + "</a>"
         case let .image(url):
             return "<img src=\"" + destination(url) + "\" alt=\"" + escape(plainText(node)) + "\"" + title + " />"
         case .document: return content
         case .referenceDefinition: return ""
         case .htmlBlock:
-            let html = node.literalText ?? node.source
+            let html = node.semanticText ?? node.source
             return html.hasSuffix("\n") ? html : html + "\n"
         case .blockQuote: return "<blockquote>\n" + content + "</blockquote>\n"
         case let .list(ordered):
