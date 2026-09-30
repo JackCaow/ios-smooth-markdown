@@ -243,4 +243,16 @@ final class NativeMarkdownOfficialSpecTests: XCTestCase {
             XCTAssertEqual(render(NativeMarkdownASTParser().parse(source)), expected, "Example \(number)")
         }
     }
+
+    func testOfficialLinkAndImageSemantics() throws {
+        let selected = try examples().filter { ["Links", "Images"].contains($0["section"] as? String ?? "") }
+        XCTAssertEqual(selected.count, 112)
+        for example in selected {
+            let number = try XCTUnwrap(example["example"] as? Int)
+            let source = try XCTUnwrap(example["markdown"] as? String)
+            let expected = try XCTUnwrap(example["html"] as? String)
+            XCTAssertEqual(NativeMarkdownHTMLTestRenderer.render(NativeMarkdownASTParser().parse(source)),
+                           expected, "Example \(number)")
+        }
+    }
 }

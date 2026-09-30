@@ -89,9 +89,10 @@ struct NativeMarkdownASTParser {
             if lines[index].isBlank { index += 1; continue }
             let start = index
             let text = lines[index].text
-            if let definition = referenceDefinition(text), !definition.label.hasPrefix("^") {
-                result.append(node(.referenceDefinition(definition.label, definition.destination), start, start + 1))
-                index += 1; continue
+            if let parsed = referenceDefinition(at: index, in: lines), !parsed.definition.label.hasPrefix("^") {
+                let definition = parsed.definition
+                result.append(node(.referenceDefinition(definition.label, definition.destination), start, parsed.next))
+                index = parsed.next; continue
             }
             if let label = footnoteLabel(text) {
                 index += 1
@@ -431,6 +432,17 @@ struct NativeMarkdownASTParser {
                         continue
                     }
                 }
+                if characters[cursor] == "<" {
+                    if let length = NativeMarkdownInlineHTML.length(in: characters, at: cursor) {
+                        cursor += length
+                        continue
+                    }
+                    if let end = closing([">"], after: cursor + 1),
+                       autolinkDestination(String(characters[(cursor + 1)..<end])) != nil {
+                        cursor = end + 1
+                        continue
+                    }
+                }
                 if characters[cursor] == "[" { depth += 1 }
                 if characters[cursor] == "]" {
                     if depth == 0 { return cursor }
@@ -502,7 +514,7 @@ struct NativeMarkdownASTParser {
                     if character == "\\", cursor + 1 < characters.count {
                         cursor += 2; continue
                     }
-                    if character.isWhitespace || character == "<" || character == ">" ||
+                    if character == " " || character == "\t" || isLineEnding(character) || character == "<" || character == ">" ||
                         character.unicodeScalars.contains(where: { $0.value < 0x20 || $0.value == 0x7F }) {
                         break
                     }
@@ -563,10 +575,15 @@ struct NativeMarkdownASTParser {
             }
             if isLineEnding(characters[index]) {
                 let hard = index >= 2 && characters[index - 1] == " " && characters[index - 2] == " "
-                let start = hard ? max(plainStart, index - 2) : index
+                var start = index
+                while start > plainStart, characters[start - 1] == " " || characters[start - 1] == "\t" {
+                    start -= 1
+                }
+                var end = index + 1
+                while end < characters.count, characters[end] == " " || characters[end] == "\t" { end += 1 }
                 flushPlain(until: start)
-                append(hard ? .hardBreak : .softBreak, start: start, end: index + 1)
-                index += 1; plainStart = index; continue
+                append(hard ? .hardBreak : .softBreak, start: start, end: end)
+                index = end; plainStart = index; continue
             }
             if characters[index] == "<", let end = closing([">"], after: index + 1) {
                 let content = String(characters[(index + 1)..<end])
@@ -576,11 +593,10 @@ struct NativeMarkdownASTParser {
                            contentStart: index + 1, contentEnd: end, parseContent: false)
                     index = end + 1; plainStart = index; continue
                 }
-                if content.range(of: #"^/?[A-Za-z][A-Za-z0-9-]*(?:\s+[^<>]*)?/?$|^!--.*--$"#,
-                                 options: .regularExpression) != nil {
+                if let length = NativeMarkdownInlineHTML.length(in: characters, at: index) {
                     flushPlain(until: index)
-                    append(.inlineHTML, start: index, end: end + 1)
-                    index = end + 1; plainStart = index; continue
+                    append(.inlineHTML, start: index, end: index + length)
+                    index += length; plainStart = index; continue
                 }
             }
             if index == 0 || characters[index - 1].isWhitespace ||
@@ -733,7 +749,10 @@ struct NativeMarkdownASTParser {
     private func referenceDefinitions(in lines: [Line]) -> [String: Reference] {
         var result: [String: Reference] = [:]
         var fence: (marker: Character, count: Int)?
-        for line in lines {
+        var index = 0
+        while index < lines.count {
+            let line = lines[index]
+            defer { index += 1 }
             if let active = fence {
                 if fenceClose(line.text, marker: active.marker, count: active.count) { fence = nil }
                 continue
@@ -742,7 +761,10 @@ struct NativeMarkdownASTParser {
                 fence = (open.marker, open.count)
                 continue
             }
-            guard let definition = referenceDefinition(line.text), !definition.label.hasPrefix("^") else { continue }
+            guard let parsed = referenceDefinition(at: index, in: lines),
+                  !parsed.definition.label.hasPrefix("^") else { continue }
+            let definition = parsed.definition
+            index = parsed.next - 1
             let key = normalizeReference(definition.label)
             if result[key] == nil {
                 result[key] = Reference(destination: definition.destination, title: definition.title)
@@ -751,13 +773,29 @@ struct NativeMarkdownASTParser {
         return result
     }
 
+    private func referenceDefinition(at start: Int, in lines: [Line])
+        -> (definition: (label: String, destination: String, title: String?), next: Int)? {
+        guard lines.indices.contains(start),
+              lines[start].text.range(of: #"^ {0,3}\["#, options: .regularExpression) != nil else { return nil }
+        var spelling = lines[start].text
+        var next = start + 1
+        while spelling.count <= 1024 {
+            if let definition = referenceDefinition(spelling) { return (definition, next) }
+            guard next < lines.count, !lines[next].isBlank, !spelling.contains("]:") else { return nil }
+            spelling += "\n" + lines[next].text
+            next += 1
+        }
+        return nil
+    }
+
     private func referenceDefinition(_ line: String) -> (label: String, destination: String, title: String?)? {
-        let pattern = #"^ {0,3}\[((?:\\.|[^\\\]])+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
+        let pattern = #"^ {0,3}\[((?:\\.|[^\\\[\]])+)\]:[ \t]*<?([^\s>]+)>?(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$"#
         guard let expression = try? NSRegularExpression(pattern: pattern),
               let match = expression.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)),
               match.range(at: 1).location != NSNotFound,
               match.range(at: 2).location != NSNotFound else { return nil }
         let text = line as NSString
+        guard !normalizeReference(text.substring(with: match.range(at: 1))).isEmpty else { return nil }
         let title = (3...5).first(where: { match.range(at: $0).location != NSNotFound })
             .map { NativeMarkdownTextDecoder.decode(text.substring(with: match.range(at: $0))) }
         return (text.substring(with: match.range(at: 1)),
