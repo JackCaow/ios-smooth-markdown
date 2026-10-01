@@ -73,6 +73,7 @@ public struct NativeMarkdownASTParser {
     public init(enableGFM: Bool = true) { self.enableGFM = enableGFM }
 
     public func parse(_ source: String) -> NativeMarkdownNode {
+        if let native = RustMarkdownBridge.parse(source, enableGFM: enableGFM) { return filterHTML(native) }
         let lines = sourceLines(source)
         let references = referenceDefinitions(in: scan(lines, source: source, references: [:]))
         return .init(kind: .document, source: source,

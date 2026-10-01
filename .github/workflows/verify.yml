@@ -26,6 +26,12 @@ jobs:
       - name: Check Flutter Demo fixtures
         working-directory: ios-smooth-markdown
         run: python3 tools/check_flutter_example_parity.py
+      - name: Verify owned Rust parser fixtures and source checksum
+        working-directory: ios-smooth-markdown/rust-core
+        run: |
+          shasum -a 256 --check SOURCE.sha256
+          cargo test --locked
+          python3 ../tools/build-rust-parser.py --verify
       - name: Download pinned CommonMark 0.31.2 examples
         run: |
           curl --fail --location --silent --show-error --retry 3 \
@@ -37,6 +43,7 @@ jobs:
         working-directory: ios-smooth-markdown
         env:
           COMMONMARK_SPEC_JSON: ${{ runner.temp }}/commonmark-spec.json
+          SMOOTH_MARKDOWN_RUST_REQUIRED: '1'
         run: swift test --parallel
       - name: Verify independent public consumers and API declarations
         working-directory: ios-smooth-markdown

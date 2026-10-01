@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// Flutter's dollar-delimited math extension, kept separate from CommonMark parsing.
 enum MathSyntax {
@@ -13,6 +16,23 @@ enum MathSyntax {
     }
 
     static func sections(_ source: String) -> [Section] {
+        if let root = NativeMarkdownExtensionProjection.parse(source) {
+            let nodes = root.children.filter { $0.kind == .blockMath }
+            let original = source as NSString
+            var sections: [Section] = []; var cursor = 0
+            for node in nodes {
+                if node.sourceRange.location > cursor {
+                    sections.append(.markdown(boundaryText(original.substring(with: NSRange(location: cursor, length: node.sourceRange.location - cursor)))))
+                }
+                var content = node.source.trimmingCharacters(in: .whitespacesAndNewlines)
+                if content.hasPrefix("$$") { content = String(content.dropFirst(2)) }
+                if content.hasSuffix("$$") { content = String(content.dropLast(2)) }
+                sections.append(.block(content.trimmingCharacters(in: .whitespacesAndNewlines)))
+                cursor = NSMaxRange(node.sourceRange)
+            }
+            if cursor < original.length { sections.append(.markdown(original.substring(from: cursor))) }
+            return sections
+        }
         let lines = source.components(separatedBy: "\n")
         var result: [Section] = []
         var ordinary: [String] = []
@@ -72,6 +92,20 @@ enum MathSyntax {
     }
 
     static func inlineParts(in source: String) -> [InlinePart] {
+        if let root = NativeMarkdownExtensionProjection.parse(source) {
+            func mathNodes(_ node: NativeMarkdownNode) -> [NativeMarkdownNode] {
+                node.kind == .inlineMath ? [node] : node.children.flatMap(mathNodes)
+            }
+            let original = source as NSString
+            var result: [InlinePart] = []; var cursor = 0
+            for node in mathNodes(root) {
+                if node.sourceRange.location > cursor { result.append(.text(original.substring(with: NSRange(location: cursor, length: node.sourceRange.location - cursor)))) }
+                result.append(.math(node.literalText ?? String(node.source.dropFirst().dropLast())))
+                cursor = NSMaxRange(node.sourceRange)
+            }
+            if cursor < original.length { result.append(.text(original.substring(from: cursor))) }
+            return result
+        }
         var result: [InlinePart] = []
         var ordinary = ""
         var cursor = source.startIndex
@@ -94,6 +128,12 @@ enum MathSyntax {
         }
         if !ordinary.isEmpty { result.append(.text(ordinary)) }
         return result
+    }
+
+    private static func boundaryText(_ text: String) -> String {
+        if text.hasSuffix("\r\n") { return String(text.dropLast(2)) }
+        if text.hasSuffix("\n") { return String(text.dropLast()) }
+        return text
     }
 
     private static func fenceRun(_ line: String) -> (Character, Int)? {
