@@ -87,12 +87,14 @@ struct ReaderVisibleDocumentProjection {
     /// must rebuild after a details/thinking/tool card changes state.
     init(markdown: String, enableHTML: Bool = false, plugins: ParserPluginRegistry? = nil,
          builderRegistry: BuilderRegistry? = nil, expansion: [String: Bool] = [:],
-         hostBuiltInPlugins: Bool = false, hostBuiltInArtifacts: Bool = false) {
+         hostBuiltInPlugins: Bool = false, hostBuiltInArtifacts: Bool = false,
+         preparsedDocument: Document? = nil) {
         var builder = Builder(enableHTML: enableHTML, plugins: plugins,
                               builderRegistry: builderRegistry, expansion: expansion,
                               hostBuiltInPlugins: hostBuiltInPlugins,
                               hostBuiltInArtifacts: hostBuiltInArtifacts)
-        builder.appendDetailsSections(markdown)
+        if let preparsedDocument { builder.appendPluginSections(document: preparsedDocument) }
+        else { builder.appendDetailsSections(markdown) }
         segments = builder.segments
         text = segments.map(\.text).joined(separator: "\n")
     }
@@ -178,8 +180,16 @@ struct ReaderVisibleDocumentProjection {
             }
         }
 
+        mutating func appendPluginSections(document: Document) {
+            appendPluginSections(PluginBlockSyntax.sections(document: document))
+        }
+
         private mutating func appendPluginSections(_ source: String) {
-            for section in PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML) {
+            appendPluginSections(PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML))
+        }
+
+        private mutating func appendPluginSections(_ sections: [PluginBlockSyntax.Section]) {
+            for section in sections {
                 switch section {
                 case let .markdown(markdown): appendFootnoteSections(markdown)
                 case let .parsed(document):

@@ -4,6 +4,7 @@ pub mod ffi;
 pub mod hooks;
 pub mod html;
 pub mod inline;
+pub mod stream;
 
 pub fn parse(source: &str, options: ast::Options) -> ast::Node {
     block::parse(source, options)

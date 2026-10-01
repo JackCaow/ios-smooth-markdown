@@ -33,3 +33,11 @@ Inline matches consume UTF16 units; block matches consume lines. Hooks run after
 The local canonical crate is mirrored into each native repository's `rust-core` directory for self-contained builds. `tools/sync-native-sources.py` copies the owned files and creates the same SHA-256 manifest. Normal library consumers require no Rust toolchain. Changes must be synchronized and both bindings verified before release.
 
 The Rust benchmark includes C input copying, parsing, serialization and freeing; it excludes JNI/Swift transitions, host AST decoding and rendering. It is not evidence of faster mobile rendering.
+
+## Stream sessions
+
+`smr_stream_new`, `smr_stream_update_utf16` and `smr_stream_free` provide a single-owner session without host hooks. Update receives the exact complete UTF-16 prefix and returns ordinary SMR1 tail nodes plus the number of old top-level children to retain. The root span covers the complete current source. Keep the final two top-level blocks mutable: an unfinished interrupt marker can become ordinary paragraph text. Containers are reparsed as complete blocks.
+
+Any `]:` sequence conservatively invalidates the full tree because reference definitions can change earlier inline nodes. Non-append edits reset the retained prefix. Failed updates also invalidate session state. Node and cumulative wire limits match the batch parser, even when each individual delta is small. Platform adapters preserve their existing whole-document hook paths for unsupported incremental features.
+
+Run `cargo test --locked` for every-character prefix equality against all CommonMark/GFM fixtures. Run `cargo test --locked --release --test stream_benchmark -- --ignored --nocapture` for observational same-input FFI comparisons. In the 2026-10-01 arm64 macOS host run, 58,500 UTF-16 units across 115 publications took 251.137 ms batch versus 4.955 ms incremental, with aggregate wire bytes reduced from 34,508,720 to 653,666. A single 60,000-unit paragraph and an early global definition showed no improvement. These timings exclude host AST adaptation and UI layout/drawing; full-prefix identity checks still have linear cost.

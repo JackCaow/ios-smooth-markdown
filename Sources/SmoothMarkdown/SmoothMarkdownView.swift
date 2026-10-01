@@ -31,6 +31,7 @@ public struct SmoothMarkdownView: View {
     @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
     @ObservedObject private var observedPlugins: ParserPluginRegistry
     @ObservedObject private var observedBuilders: BuilderRegistry
+    @Environment(\.markdownStreamSnapshot) private var streamSnapshot
     @Environment(\.markdownResources) private var inheritedResources
     @Environment(\.markdownStrings) private var inheritedStrings
     private let configuredResources: MarkdownResourceOptions?
@@ -202,7 +203,8 @@ public struct SmoothMarkdownView: View {
         let projection = ReaderTextKitProjection(document: ReaderVisibleDocumentProjection(
             markdown: markdown, enableHTML: enableHTML, plugins: plugins,
             builderRegistry: builderRegistry, expansion: expansion,
-            hostBuiltInPlugins: true, hostBuiltInArtifacts: useEnhancedComponents))
+            hostBuiltInPlugins: true, hostBuiltInArtifacts: useEnhancedComponents,
+            preparsedDocument: streamDocument))
         let details = DetailsSyntax.sections(markdown)
         let summaryIDs = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
         var summaryIndex = 0
@@ -231,7 +233,7 @@ public struct SmoothMarkdownView: View {
             return true
         }
         func appendPlugins(_ source: String) -> Bool {
-            for section in PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML, useCache: usesParseCache) {
+            for section in pluginSections(source) {
                 switch section {
                 case let .markdown(markdown):
                     if !appendFootnotes(markdown) { return false }
@@ -377,6 +379,21 @@ public struct SmoothMarkdownView: View {
 
     var usesParseCache: Bool { enableCache && plugins == nil }
 
+    private var streamDocument: Document? {
+        guard let streamSnapshot, streamSnapshot.matches(markdown, plugins: plugins, enableHTML: enableHTML) else { return nil }
+        return streamSnapshot.document
+    }
+
+    private func pluginSections(_ source: String) -> [PluginBlockSyntax.Section] {
+        if source.utf16.elementsEqual(markdown.utf16), let document = streamDocument { return PluginBlockSyntax.sections(document: document) }
+        return PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML, useCache: usesParseCache)
+    }
+
+    private func streamBlockID(_ node: Markup?, fallback: Int) -> AnyHashable {
+        if streamDocument != nil, let node { return AnyHashable(ObjectIdentifier(node)) }
+        return AnyHashable(fallback)
+    }
+
     private func parse(_ source: String) -> Document {
         // Plugin registries may change behavior without changing the source key.
         MarkdownSyntax.parse(source, useCache: usesParseCache, enableHTML: enableHTML)
@@ -491,7 +508,7 @@ public struct SmoothMarkdownView: View {
     private func detailsSection(_ section: DetailsSyntax.Section) -> some View {
         switch section {
         case let .markdown(source):
-            ForEach(Array(PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML, useCache: usesParseCache).enumerated()), id: \.offset) { _, item in
+            ForEach(Array(pluginSections(source).enumerated()), id: \.offset) { _, item in
                 pluginSection(item)
             }
         case let .details(details):
@@ -518,9 +535,13 @@ public struct SmoothMarkdownView: View {
                 enableHTML: enableHTML, plugins: plugins,
                 enabled: enableCrossBlockSelection && !voiceOverEnabled && (selectable || onTextLongPress != nil),
                 allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton,
-                hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { _, group in readerGroup(group) }
+                hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { index, group in
+                readerGroup(group).id(streamGroupID(group, fallback: index))
+            }
             #else
-            ForEach(Array(document.children.enumerated()), id: \.offset) { _, node in block(node) }
+            ForEach(Array(document.children.enumerated()), id: \.offset) { index, node in
+                block(node).id(streamBlockID(node, fallback: index))
+            }
             #endif
         case let .plugin(plugin, match): pluginView(plugin, match)
         }
@@ -555,6 +576,13 @@ public struct SmoothMarkdownView: View {
     }
 
     #if os(iOS)
+    private func streamGroupID(_ group: ReaderSelectionGroup, fallback: Int) -> AnyHashable {
+        switch group {
+        case let .selectable(nodes), let .blockBridge(nodes): return streamBlockID(nodes.first, fallback: fallback)
+        case let .individual(node): return streamBlockID(node, fallback: fallback)
+        }
+    }
+
     @ViewBuilder
     private func readerMathSection(_ source: String) -> some View {
         let items: [ReaderBlockRangeDocument.Item] = MathSyntax.sections(source).flatMap { section in

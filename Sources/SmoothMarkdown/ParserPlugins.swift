@@ -207,18 +207,7 @@ enum PluginBlockSyntax {
     static func sections(_ source: String, registry: ParserPluginRegistry?, enableHTML: Bool = false, useCache: Bool = true) -> [Section] {
         let document = useCache ? MarkdownParseCache.shared.parseShared(source, plugins: registry, enableHTML: enableHTML)
             : PluginSharedSyntax.document(source, registry: registry, enableHTML: enableHTML)
-        if let document {
-            var sections: [Section] = []; var ordinary: [Markup] = []
-            func flush() {
-                if !ordinary.isEmpty { sections.append(.parsed(Document(ordinary))); ordinary = [] }
-            }
-            for node in document.children {
-                if let custom = node as? SharedBlockPluginMarkup {
-                    flush(); sections.append(.plugin(custom.plugin, custom.match))
-                } else { ordinary.append(node) }
-            }
-            flush(); return sections
-        }
+        if let document { return sections(document: document) }
         guard !NativeMarkdownExtensionProjection.isAvailable else {
             // A rejected or over-limit FFI request must remain visible. Preserve
             // raw spelling rather than silently dropping the document.
@@ -265,6 +254,19 @@ enum PluginBlockSyntax {
         }
         if !ordinary.isEmpty { result.append(.markdown(ordinary.joined(separator: "\n"))) }
         return result
+    }
+
+    static func sections(document: Document) -> [Section] {
+        var sections: [Section] = []; var ordinary: [Markup] = []
+        func flush() {
+            if !ordinary.isEmpty { sections.append(.parsed(Document(ordinary))); ordinary = [] }
+        }
+        for node in document.children {
+            if let custom = node as? SharedBlockPluginMarkup {
+                flush(); sections.append(.plugin(custom.plugin, custom.match))
+            } else { ordinary.append(node) }
+        }
+        flush(); return sections
     }
 
     private static func fenceRun(_ line: String) -> (Character, Int)? {

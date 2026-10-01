@@ -172,3 +172,9 @@ Run `swift test` for package tests. The demo project is generated from `Demo/pro
 - [Owned parser and binary distribution](docs/rust-parser.md)
 
 Licensed under [MIT](LICENSE).
+
+### Streaming performance
+
+Eligible `StreamMarkdownView` streams reuse committed native AST and Markup blocks, share each published parse with the visible/selection projection, and retain stable block view identity. Plugins, formulas/footnotes, enabled HTML and details keep their full-document compatibility path; references invalidate earlier blocks. Large single containers may see no improvement. Parsing is currently synchronous; background scheduling is not implemented.
+
+See [same-input parser measurements](benchmarks/README.md) and [raw evidence](benchmarks/evidence/ios-stream-parser-performance.json). Host parse timings exclude SwiftUI layout/drawing and do not establish device frame-rate improvement.

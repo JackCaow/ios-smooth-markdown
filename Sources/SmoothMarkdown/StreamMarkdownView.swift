@@ -131,11 +131,13 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                                    scrollable: scrollable, resourceOptions: resourceOptions, strings: strings)
             }
         }
+        .environment(\.markdownStreamSnapshot, accumulator.renderSnapshot)
         .environment(\.markdownResources, resourceOptions)
         .environment(\.markdownStrings, strings)
         .task(id: taskIdentity) {
             guard !Task.isCancelled else { return }
             accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
+            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML)
             let generation = accumulator.generation
             streamError = nil
             activeIdentity = taskIdentity
@@ -157,6 +159,9 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                     onError?(error)
                 }
             }
+        }
+        .onChange(of: plugins.map(ObjectIdentifier.init)) { _, _ in
+            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML)
         }
         .onChange(of: enableHTML) { _, enabled in accumulator.setHTML(enabled) }
         .onDisappear { accumulator.cancel() }

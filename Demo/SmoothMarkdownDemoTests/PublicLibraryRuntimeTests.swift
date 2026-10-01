@@ -8,6 +8,26 @@ import Combine
 /// Consumer-facing behavior tested in a hosted SwiftUI tree, including native document selection.
 @MainActor
 final class PublicLibraryRuntimeTests: XCTestCase {
+    func testPackagedIncrementalStreamRendersStableBlocksAndLatestTail() throws {
+        for selectable in [false, true] {
+            let session = StreamMarkdownRenderSession()
+            let source = "# STREAM HEADER\n\nFIRST PARAGRAPH\n\nSECOND PARAGRAPH\n\nTAIL"
+            let first = try XCTUnwrap(session.update(source))
+            let next = source + " GROWS\n\nLATEST BLOCK"
+            let snapshot = try XCTUnwrap(session.update(next))
+            XCTAssertGreaterThan(session.reusedBlocks, 0, "Packaged stream ABI must be used")
+            XCTAssertTrue(first.document.children.first === snapshot.document.children.first)
+            let reader = SmoothMarkdownView(markdown: next,
+                renderOptions: .init(scrollable: false),
+                selectionOptions: .init(mode: selectable ? .document : .disabled))
+                .environment(\.markdownStreamSnapshot, snapshot)
+            let host = RuntimeHost(reader); defer { host.close() }
+            let text = try host.recognizedText()
+            XCTAssertTrue(text.contains("STREAM HEADER"))
+            XCTAssertTrue(text.contains("TAIL GROWS"))
+            XCTAssertTrue(text.contains("LATEST BLOCK"))
+        }
+    }
     func testParserRegistryMutationRefreshesOrdinaryReader() throws { try parserRefresh(selectable: false) }
     func testParserRegistryMutationRefreshesDocumentReader() throws { try parserRefresh(selectable: true) }
     func testBuilderReplacementRefreshesOrdinaryReader() { builderRefresh(selectable: false) }
