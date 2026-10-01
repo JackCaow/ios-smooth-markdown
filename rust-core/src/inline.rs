@@ -345,6 +345,21 @@ impl<'a> Parser<'a> {
             };
         }
         while i < b.len() {
+            // Recognize math before CommonMark consumes its opening escape.
+            if self.options.extensions && self.s[i..].starts_with(r"\(") {
+                if let Some(relative) = math_closing(&self.s[i + 2..], r"\)") {
+                    let end = i + 2 + relative;
+                    if end > i + 2 {
+                        flush!(i);
+                        let mut n = self.node(Kind::InlineMath, i, end + 2);
+                        n.literal = Some(self.s[i + 2..end].to_owned());
+                        nodes.push(n);
+                        i = end + 2;
+                        plain = i;
+                        continue;
+                    }
+                }
+            }
             if b[i] == b'\\' && i + 1 < b.len() {
                 if matches!(b[i + 1], b'\r' | b'\n') {
                     flush!(i);
@@ -1026,4 +1041,14 @@ fn resolve_emphasis(nodes: Vec<Node>, source: &str, offset: u32, gfm: bool) -> V
         cursor = tokens[index].next;
     }
     result
+}
+
+// An odd number of preceding backslashes escapes a delimiter.
+pub(crate) fn math_closing(source: &str, delimiter: &str) -> Option<usize> {
+    // Preserve the established dollar block closing behavior.
+    if delimiter == "$$" { return source.find(delimiter); }
+    source.match_indices(delimiter).find_map(|(at, _)| {
+        let escapes = source.as_bytes()[..at].iter().rev().take_while(|&&c| c == b'\\').count();
+        (escapes % 2 == 0).then_some(at)
+    })
 }

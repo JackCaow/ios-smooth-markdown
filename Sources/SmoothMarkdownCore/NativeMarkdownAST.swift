@@ -70,10 +70,14 @@ public struct NativeMarkdownASTParser {
 
     private let enableGFM: Bool
 
-    public init(enableGFM: Bool = true) { self.enableGFM = enableGFM }
+    private let enableNativeExtensions: Bool
+    public init(enableGFM: Bool = true) { self.enableGFM = enableGFM; self.enableNativeExtensions = true }
+    public init(enableGFM: Bool = true, enableNativeExtensions: Bool) {
+        self.enableGFM = enableGFM; self.enableNativeExtensions = enableNativeExtensions
+    }
 
     public func parse(_ source: String) -> NativeMarkdownNode {
-        if let native = RustMarkdownBridge.parse(source, enableGFM: enableGFM) { return filterHTML(native) }
+        if let native = RustMarkdownBridge.parse(source, enableGFM: enableGFM, enableExtensions: enableNativeExtensions) { return filterHTML(native) }
         let lines = sourceLines(source)
         let references = referenceDefinitions(in: scan(lines, source: source, references: [:]))
         return .init(kind: .document, source: source,
@@ -127,7 +131,7 @@ public struct NativeMarkdownASTParser {
                                    title: definition.title))
                 index = parsed.next; continue
             }
-            if let label = footnoteLabel(text) {
+            if enableNativeExtensions, let label = footnoteLabel(text) {
                 index += 1
                 while index < lines.count, !lines[index].isBlank,
                       (lines[index].text.hasPrefix("    ") || lines[index].text.hasPrefix("\t")) { index += 1 }
@@ -143,11 +147,16 @@ public struct NativeMarkdownASTParser {
                                    literalText: projectedCodeText(lines[start..<index], fenced: true)))
                 continue
             }
-            if text.trimmingCharacters(in: .whitespaces).hasPrefix("$$") {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if enableNativeExtensions, trimmed.hasPrefix("$$") || trimmed.hasPrefix("\\[") {
+                let closing = trimmed.hasPrefix("$$") ? "$$" : "\\]"
+                var body = String(trimmed.dropFirst(2))
                 index += 1
-                while index < lines.count, !lines[index].text.contains("$$") { index += 1 }
-                if index < lines.count { index += 1 }
-                result.append(node(.blockMath, start, index)); continue
+                while body.range(of: closing) == nil, index < lines.count {
+                    body += "\n" + lines[index].text; index += 1
+                }
+                if let end = body.range(of: closing) { body = String(body[..<end.lowerBound]) }
+                result.append(node(.blockMath, start, index, literalText: body.trimmingCharacters(in: .whitespacesAndNewlines))); continue
             }
             if let heading = heading(text) {
                 let body = heading.body
@@ -852,6 +861,19 @@ public struct NativeMarkdownASTParser {
         }
 
         while index < characters.count {
+            if enableNativeExtensions, characters[index] == "\\", index + 1 < characters.count,
+               characters[index + 1] == "(" {
+                var end = index + 2
+                while end + 1 < characters.count {
+                    if characters[end] == "\\", characters[end + 1] == ")" { break }
+                    end += characters[end] == "\\" ? 2 : 1
+                }
+                if end > index + 2, end + 1 < characters.count {
+                    flushPlain(until: index)
+                    append(.inlineMath, start: index, end: end + 2)
+                    index = end + 2; plainStart = index; continue
+                }
+            }
             if characters[index] == "\\", index + 1 < characters.count {
                 if isLineEnding(characters[index + 1]) {
                     flushPlain(until: index)
@@ -905,14 +927,14 @@ public struct NativeMarkdownASTParser {
                 }
                 index += run; continue
             }
-            if characters[index] == "$", index + 1 < characters.count,
+            if enableNativeExtensions, characters[index] == "$", index + 1 < characters.count,
                characters[index + 1] != "$", let end = closing(["$"], after: index + 1),
                end > index + 1, characters[end - 1] != " " {
                 flushPlain(until: index)
                 append(.inlineMath, start: index, end: end + 1)
                 index = end + 1; plainStart = index; continue
             }
-            if characters[index] == "[", index + 3 < characters.count,
+            if enableNativeExtensions, characters[index] == "[", index + 3 < characters.count,
                characters[index + 1] == "^", let close = closing(["]"], after: index + 2),
                close > index + 2 {
                 let label = String(characters[(index + 2)..<close])

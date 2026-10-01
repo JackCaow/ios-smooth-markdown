@@ -284,8 +284,8 @@ struct NativeMarkdownMarkupAdapter {
         case .tableCell: return Markdown.Table.Cell(converted, range: position, source: node.source)
         case .blockMath where resolveCustom != nil:
             var latex = node.source.trimmingCharacters(in: .whitespacesAndNewlines)
-            if latex.hasPrefix("$$") { latex = String(latex.dropFirst(2)) }
-            if latex.hasSuffix("$$") { latex = String(latex.dropLast(2)) }
+            if latex.hasPrefix("$$") || latex.hasPrefix("\\[") { latex = String(latex.dropFirst(2)) }
+            if latex.hasSuffix("$$") || latex.hasSuffix("\\]") { latex = String(latex.dropLast(2)) }
             return SharedBlockMathMarkup(latex: node.literalText ?? latex.trimmingCharacters(in: .whitespacesAndNewlines), source: node.source)
         case let .footnoteDefinition(label) where resolveCustom != nil:
             let parts = node.source.components(separatedBy: "\n")
@@ -304,7 +304,7 @@ struct NativeMarkdownMarkupAdapter {
             let text = Markdown.Text(node.source, range: position, source: node.source)
             return Paragraph([text], range: position, source: node.source)
         case .inlineMath:
-            let latex = node.literalText ?? String(node.source.dropFirst().dropLast())
+            let latex = node.literalText ?? String(node.source.dropFirst(node.source.hasPrefix("\\(") ? 2 : 1).dropLast(node.source.hasPrefix("\\(") ? 2 : 1))
             let typed = SharedInlineMathMarkup(latex: latex, range: position, source: node.source)
             if resolveCustom != nil { return typed }
             let text = Markdown.Text(node.source, range: position, source: node.source)

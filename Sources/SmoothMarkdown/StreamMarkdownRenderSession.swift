@@ -50,7 +50,7 @@ final class StreamMarkdownRenderSession {
         let document: Document
         // Math and footnote semantics follow the existing reader callback projection.
         // Keep that batch path for these extensions throughout streaming.
-        if plugins != nil || source.contains("[^") || source.contains("$") {
+        if plugins != nil || source.contains("[^") || source.contains("$") || source.contains("\\(") || source.contains("\\[") {
             native.reset(); markup.removeAll(); reusedBlocks = 0
             guard let full = PluginSharedSyntax.document(source, registry: plugins, enableHTML: false) else { latest = nil; return nil }
             document = full
@@ -66,7 +66,7 @@ final class StreamMarkdownRenderSession {
     }
 
     func isBackgroundEligible(_ source: String) -> Bool {
-        plugins == nil && !enableHTML && !source.contains("$") && !source.contains("[^") &&
+        plugins == nil && !enableHTML && !source.contains("$") && !source.contains("[^") && !source.contains("\\(") && !source.contains("\\[") &&
             !source.localizedCaseInsensitiveContains("<details")
     }
 

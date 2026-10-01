@@ -783,20 +783,20 @@ impl Scanner<'_> {
                     continue;
                 }
             }
-            if self.options.extensions && text.trim_start().starts_with("$$") {
+            if self.options.extensions
+                && (text.trim_start().starts_with("$$") || text.trim_start().starts_with(r"\["))
+            {
+                let closing = if text.trim_start().starts_with("$$") { "$$" } else { r"\]" };
                 index += 1;
-                if !text.trim_start()[2..].contains("$$") {
-                    while index < lines.len() && !lines[index].text.contains("$$") {
-                        index += 1
-                    }
-                    if index < lines.len() {
-                        index += 1
-                    }
+                let mut body = lines[first].text.trim_start()[2..].to_owned();
+                // Keep an unclosed streaming block in the mutable tail.
+                while inline::math_closing(&body, closing).is_none() && index < lines.len() {
+                    body.push('\n');
+                    body.push_str(&lines[index].text);
+                    index += 1;
                 }
                 let mut node = self.node(Kind::BlockMath, lines, first, index);
-                let mut body = lines[first].text.trim_start()[2..].to_owned();
-                for line in &lines[first+1..index] { body.push('\n'); body.push_str(&line.text); }
-                if let Some(closing) = body.find("$$") { body.truncate(closing); }
+                if let Some(end) = inline::math_closing(&body, closing) { body.truncate(end); }
                 node.literal = Some(body.trim().to_owned());
                 result.push(node);
                 continue;
@@ -936,7 +936,7 @@ impl Scanner<'_> {
             while index < lines.len()
                 && !lines[index].blank()
                 && !(self.options.extensions &&
-                    (lines[index].text.trim_start().starts_with("$$") || footnote(&lines[index].text).is_some()))
+                    (lines[index].text.trim_start().starts_with("$$") || lines[index].text.trim_start().starts_with(r"\[") || footnote(&lines[index].text).is_some()))
                 && (lines[index].lazy
                     || (setext(&lines[index].text).is_none() && !self.interrupt(lines, index)))
             {

@@ -1511,6 +1511,7 @@ s:18SmoothMarkdownCore06NativeB4NodeV8childrenSayACGvp | let children: [NativeMa
 s:18SmoothMarkdownCore06NativeB4NodeV9listStartSiSgvp | let listStart: Int?
 s:18SmoothMarkdownCore06NativeB9ASTParserV | struct NativeMarkdownASTParser
 s:18SmoothMarkdownCore06NativeB9ASTParserV5parseyAA0dB4NodeVSSF | func parse(_ source: String) -> NativeMarkdownNode
+s:18SmoothMarkdownCore06NativeB9ASTParserV9enableGFM0fD10ExtensionsACSb_Sbtcfc | init(enableGFM: Bool = true, enableNativeExtensions: Bool)
 s:18SmoothMarkdownCore06NativeB9ASTParserV9enableGFMACSb_tcfc | init(enableGFM: Bool = true)
 s:18SmoothMarkdownCore06NativeB9HTMLBlockO | enum NativeMarkdownHTMLBlock
 s:18SmoothMarkdownCore06NativeB9HTMLBlockO3EndO | enum End
@@ -1519,7 +1520,9 @@ s:18SmoothMarkdownCore06NativeB9HTMLBlockO3EndO6markeryAESS_SbtcAEmF | case mark
 s:18SmoothMarkdownCore06NativeB9HTMLBlockO3end3for21interruptingParagraphAC3EndOSgSS_SbtFZ | static func end(for line: String, interruptingParagraph: Bool = false) -> NativeMarkdownHTMLBlock.End?
 s:18SmoothMarkdownCore0bC6ParserV | struct MarkdownCoreParser
 s:18SmoothMarkdownCore0bC6ParserV10renderHTMLyS2SF | func renderHTML(_ source: String) -> String
+s:18SmoothMarkdownCore0bC6ParserV16enableExtensionsSbvp | var enableExtensions: Bool
 s:18SmoothMarkdownCore0bC6ParserV5parseyAA06NativeB4NodeVSSF | func parse(_ source: String) -> NativeMarkdownNode
+s:18SmoothMarkdownCore0bC6ParserV9enableGFM0E10ExtensionsACSb_Sbtcfc | init(enableGFM: Bool = true, enableExtensions: Bool)
 s:18SmoothMarkdownCore0bC6ParserV9enableGFMACSb_tcfc | init(enableGFM: Bool = true)
 s:18SmoothMarkdownCore0bC6ParserV9enableGFMSbvp | var enableGFM: Bool
 s:18SmoothMarkdownCore21NativeHTMLEntityTableO | enum NativeHTMLEntityTable
