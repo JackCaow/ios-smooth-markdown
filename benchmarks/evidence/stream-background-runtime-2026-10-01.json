@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-01",
+  "stage": "background stream scheduling",
+  "runtime": "iOS 26 iPhone Simulator",
+  "suites": [
+    "PublicLibraryRuntimeTests",
+    "DemoStreamingUITests"
+  ],
+  "tests": 18,
+  "failed": 0,
+  "swift_tests": 602,
+  "final_focused_tests": 27,
+  "new_background_tests": 7,
+  "public_api": "reviewed baseline unchanged",
+  "independent_consumers": [
+    "CoreConsumer passed",
+    "ReaderConsumer passed"
+  ],
+  "coverage": [
+    "owned native AST parse/decode off main thread",
+    "latest full prefix coalescing without fragment loss",
+    "full AST recovery when UI skips parser results",
+    "source/configuration/reset/cancellation invalidate late results",
+    "final source OCR and completion once on main thread",
+    "finish releases native worker storage",
+    "owned parser fallback on native rejection"
+  ],
+  "boundaries": [
+    "host parser benchmarks predate background scheduling",
+    "no physical device timing or frame-time claim",
+    "plugin/math/footnote/HTML/details compatibility parsing remains on main thread"
+  ]
+}

@@ -62,6 +62,16 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     private var enableHTML: Bool
     private var renderSession: StreamMarkdownRenderSession?
     var renderSnapshot: StreamMarkdownRenderSession.Snapshot?
+    private var worker: StreamMarkdownParserWorker?
+    private var backgroundRendering = false
+    private var rendererIdentity: ObjectIdentifier?
+    private var rendererHTML = false
+    private var requestVersion: UInt64 = 0
+    private var configurationEpoch: UInt64 = 0
+    private var pendingFinish: CheckedContinuation<Bool, Never>?
+    private var pendingFinishGeneration: UInt64?
+    private var completedGeneration: UInt64?
+    var isWaitingForFinalPublication: Bool { pendingFinish != nil }
     /// Invalidates callbacks from a previous stream when a view starts another one.
     var generation: UInt64 = 0
 
@@ -78,21 +88,85 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         if let throttleMillis { self.throttleMillis = max(0, throttleMillis) }
         if let enableHTML { self.enableHTML = enableHTML }
         buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis(), enableHTML: self.enableHTML)
-        renderSession?.reset()
+        invalidateRenderer(cancelFinish: true)
+        completedGeneration = nil
         renderSnapshot = nil
         visibleText = ""
     }
 
-    func prepareRenderer(plugins: ParserPluginRegistry?, enableHTML: Bool) {
+    func prepareRenderer(plugins: ParserPluginRegistry?, enableHTML: Bool,
+                         background: Bool = false, worker injectedWorker: StreamMarkdownParserWorker? = nil) {
+        let identity = plugins.map(ObjectIdentifier.init)
+        if identity != rendererIdentity || rendererHTML != enableHTML || background != backgroundRendering {
+            invalidateRenderer(cancelFinish: false)
+        }
+        rendererIdentity = identity
+        rendererHTML = enableHTML
+        backgroundRendering = background
+        if background, worker == nil { worker = injectedWorker ?? StreamMarkdownParserWorker() }
         if renderSession == nil { renderSession = StreamMarkdownRenderSession() }
         renderSession?.configure(plugins: plugins, enableHTML: enableHTML)
         if buffer.visibleText.isEmpty { renderSnapshot = nil }
         else { publish() }
     }
 
+    private func invalidateRenderer(cancelFinish: Bool) {
+        configurationEpoch &+= 1
+        worker?.invalidate()
+        // In-flight work retains its own owner until queue-confined reset/free.
+        // Drop idle native source/cache storage on cancel or configuration reset.
+        worker = nil
+        renderSession?.reset()
+        if cancelFinish { resolveFinish(false) }
+    }
+
     private func publish() {
-        renderSnapshot = renderSession?.update(buffer.visibleText)
-        visibleText = buffer.visibleText
+        let source = buffer.visibleText
+        requestVersion &+= 1
+        if backgroundRendering, renderSession?.isBackgroundEligible(source) == true {
+            if worker == nil { worker = StreamMarkdownParserWorker() }
+            guard let worker else { return }
+            let version = requestVersion
+            let epoch = configurationEpoch
+            worker.submit(source: source, generation: generation, version: version, configuration: epoch) { [weak self] result in
+                Task { @MainActor in self?.accept(result) }
+            }
+        } else {
+            // An extension/configuration switch invalidates any in-flight pure AST.
+            configurationEpoch &+= 1
+            worker?.invalidate()
+            worker = nil
+            renderSnapshot = renderSession?.update(source)
+            visibleText = source
+            completeFinalPublication()
+        }
+    }
+
+    private func accept(_ result: StreamMarkdownWorkerResult) {
+        guard result.generation == generation, result.version == requestVersion,
+              result.epoch.configuration == configurationEpoch,
+              result.source.utf16.elementsEqual(buffer.visibleText.utf16),
+              renderSession?.isBackgroundEligible(result.source) == true else { return }
+        renderSnapshot = renderSession?.accept(result)
+        visibleText = result.source
+        completeFinalPublication()
+    }
+
+    private func completeFinalPublication() {
+        if pendingFinishGeneration == generation,
+           visibleText.utf16.elementsEqual(buffer.fullText.utf16) {
+            completedGeneration = generation
+            // Completed readers retain Markup, not a duplicate native session/source cache.
+            worker = nil
+            resolveFinish(true)
+        }
+    }
+
+    private func resolveFinish(_ completed: Bool) {
+        let continuation = pendingFinish
+        pendingFinish = nil
+        pendingFinishGeneration = nil
+        continuation?.resume(returning: completed)
     }
 
     public func append(_ chunk: String) {
@@ -132,9 +206,28 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         finish()
     }
 
+    func finishAndWait(for expectedGeneration: UInt64) async -> Bool {
+        guard generation == expectedGeneration, completedGeneration != expectedGeneration,
+              pendingFinish == nil, !Task.isCancelled else { return false }
+        pending?.cancel()
+        pending = nil
+        buffer.finish(nowMillis: Self.nowMillis())
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                pendingFinish = continuation
+                pendingFinishGeneration = expectedGeneration
+                publish()
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancel(for: expectedGeneration) }
+        }
+    }
+
     public func setHTML(_ enabled: Bool) {
         enableHTML = enabled
         buffer.setHTML(enabled)
+        rendererHTML = enabled
+        invalidateRenderer(cancelFinish: false)
         renderSession?.setHTML(enabled)
         publish()
     }
@@ -142,6 +235,7 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     public func cancel() {
         pending?.cancel()
         pending = nil
+        invalidateRenderer(cancelFinish: true)
     }
 
     func cancel(for generation: UInt64) {

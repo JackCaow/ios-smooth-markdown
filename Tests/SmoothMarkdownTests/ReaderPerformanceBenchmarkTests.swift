@@ -4,6 +4,7 @@ import XCTest
 import Darwin
 
 /// Opt-in observational benchmark: SMOOTH_MARKDOWN_BENCH=1 swift test --filter ReaderPerformanceBenchmarkTests
+@MainActor
 final class ReaderPerformanceBenchmarkTests: XCTestCase {
     func testREADMEParseAndRapidStream() throws {
         guard ProcessInfo.processInfo.environment["SMOOTH_MARKDOWN_BENCH"] == "1" else {
