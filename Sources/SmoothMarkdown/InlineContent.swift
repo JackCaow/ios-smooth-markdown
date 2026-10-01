@@ -54,6 +54,13 @@ enum InlineContent {
                 }
                 continue
             }
+            if let projection = child.sourceBuiltinProjection {
+                let projected = Markup(projection)
+                projected.sourceBuiltinsResolved = true
+                append(projected, style: style, tags: &tags, enableHTML: enableHTML, plugins: plugins,
+                       hasCustomBuilder: hasCustomBuilder, to: &result)
+                continue
+            }
             if let math = child as? SharedInlineMathMarkup { result.append(.math(math.latex)); continue }
             if let footnote = child as? SharedFootnoteReferenceMarkup { result.append(.footnote(footnote.label)); continue }
             if let plugin = child as? SharedInlinePluginMarkup {

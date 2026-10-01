@@ -20,6 +20,8 @@ public class Markup {
     private var originalSource: String?
     var sourcePluginsResolved = false
     var sourceBuiltinsResolved = false
+    // Public AST keeps extension spelling as Text; the reader consumes shared typed payloads.
+    var sourceBuiltinProjection: [Markup]?
 
     public init(_ children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil) {
         self.children = children
@@ -34,6 +36,7 @@ public class Markup {
         let result = copyingChildren(children)
         result.sourcePluginsResolved = sourcePluginsResolved
         result.sourceBuiltinsResolved = sourceBuiltinsResolved
+        result.sourceBuiltinProjection = sourceBuiltinProjection
         return result
     }
     private func copyingChildren(_ children: [Markup]) -> Markup {
@@ -301,9 +304,17 @@ struct NativeMarkdownMarkupAdapter {
             return Paragraph([text], range: position, source: node.source)
         case .inlineMath:
             let latex = node.literalText ?? String(node.source.dropFirst().dropLast())
-            return SharedInlineMathMarkup(latex: latex, range: position, source: node.source)
+            let typed = SharedInlineMathMarkup(latex: latex, range: position, source: node.source)
+            if resolveCustom != nil { return typed }
+            let text = Markdown.Text(node.source, range: position, source: node.source)
+            text.sourceBuiltinProjection = [typed]
+            return text
         case let .footnoteReference(label):
-            return SharedFootnoteReferenceMarkup(label: label, range: position, source: node.source)
+            let typed = SharedFootnoteReferenceMarkup(label: label, range: position, source: node.source)
+            if resolveCustom != nil { return typed }
+            let text = Markdown.Text(node.source, range: position, source: node.source)
+            text.sourceBuiltinProjection = [typed]
+            return text
         case .text, .raw:
             return Markdown.Text(node.semanticText ?? node.source, range: position, source: node.source)
         case .referenceDefinition: return Markup(range: position, source: node.source)
@@ -353,6 +364,10 @@ struct NativeMarkdownMarkupAdapter {
                 let merged = Markdown.Text(joined, range: mergedRange, source: previous.format() + text.format())
                 merged.sourceBuiltinsResolved = previous.sourceBuiltinsResolved && text.sourceBuiltinsResolved
                 merged.sourcePluginsResolved = previous.sourcePluginsResolved && text.sourcePluginsResolved
+                if previous.sourceBuiltinProjection != nil || text.sourceBuiltinProjection != nil {
+                    merged.sourceBuiltinProjection = (previous.sourceBuiltinProjection ?? [previous]) +
+                        (text.sourceBuiltinProjection ?? [text])
+                }
                 result.append(merged)
             } else { result.append(child) }
         }
