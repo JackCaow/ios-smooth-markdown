@@ -1,6 +1,6 @@
 # Migrating public configuration
 
-Existing flat entry points remain available. The grouped entry point is selected by supplying `renderOptions`; ordinary calls without this argument keep their old meaning.
+Version 0.3.0 adds the grouped configuration APIs. Existing flat entry points remain available. The grouped entry point is selected by supplying `renderOptions`; ordinary calls without this argument keep their old meaning.
 
 ## Reader
 

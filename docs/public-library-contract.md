@@ -1,6 +1,6 @@
 # Public library contract
 
-The planned release containing these APIs is 0.3.0; it has not been published yet. The structured APIs in this source revision are additive. Published 0.2.0 packages do not contain them. Existing flat reader and streaming entry points remain supported for source consumers.
+Version 0.3.0 includes these additive structured APIs, design tokens and the shared owned parser. Version 0.2.0 does not contain the grouped configuration APIs. Existing flat reader and streaming entry points remain supported. Installation uses the 0.3.0 Git tag through SwiftPM or CocoaPods; CocoaPods Trunk availability is stated separately in the [installation guide](../README.md#install).
 
 ## Configuration ownership
 
@@ -11,6 +11,8 @@ The planned release containing these APIs is 0.3.0; it has not been published ye
 - `MarkdownStreamOptions` owns stream scheduling and loading/error presentation. Streams accumulate fragments and bypass the parse cache; completion runs after a finite source ends. Cancellation must not be reported as successful completion.
 - `MarkdownResourceOptions` owns encoded image transport, headers, cache policy and loading/error presentation.
 - `MarkdownStrings` owns control and accessibility labels. Author-provided document text remains unchanged.
+
+Resource and string parameters default to inheriting the enclosing SwiftUI environment; an explicit per-view value overrides it. Reader, stream and editor previews follow the same rule.
 
 ## Appearance precedence
 
@@ -44,7 +46,7 @@ The source-built package does not promise binary ABI compatibility between compi
 
 ## iOS modules and selection
 
-`SmoothMarkdownCore` contains Foundation-only AST/parser/HTML-export code. The `SmoothMarkdown` SwiftPM product re-exports it and includes readers, streaming, plugins and editor. CocoaPods has Core and UI subspecs; the default includes UI. There are no external package dependencies.
+`SmoothMarkdownCore` exposes Foundation-only AST/parser/HTML-export APIs and links the included owned static Rust engine. The `SmoothMarkdown` SwiftPM product re-exports it and includes readers, streaming, plugins and editor. CocoaPods has Core and UI subspecs; the default includes UI. There are no external package dependencies.
 
 Document selection uses the native complete-document host on iOS. Block selection is an iOS-specific mode. On macOS, declarative text selection follows the platform capabilities; the iOS editor is unavailable. Shared explicit typography, heading padding, quote icon typography and quote shadows are applied to both iOS reader paths. Legacy opaque SwiftUI `Font` cannot provide UIKit metrics.
 

@@ -6,13 +6,13 @@ The library is under active development. It supports common Markdown and GFM con
 
 ## Install
 
-Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. Markdown is parsed into a native Swift AST; SVG and math rendering use Apple frameworks.
+Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. The library-owned Rust parser produces a Swift AST through a C bridge; SVG and math rendering use Apple frameworks. The static parser binary is included, so app developers do not need Rust or Cargo.
 
-In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.2.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.2.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -24,12 +24,12 @@ targets: [
 CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
 
 ```ruby
-pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.2.0'
+pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.0'
 ```
 
 `SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
 
-For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product. CocoaPods source consumers can choose `SmoothMarkdown/Core`; the default subspec includes UI and depends on Core. Both contain library-owned source and have no third-party dependencies.
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use the same Git tag with `pod 'SmoothMarkdown/Core', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.0'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
 
 ### SVG and math
 
@@ -39,9 +39,9 @@ Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layo
 
 ## Syntax coverage
 
-The native parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
+The shared owned parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
 
-The current source adds grouped options, resource loading, localized labels, and an independent parsing core. These additions are not included in the published `0.2.0` release. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
+Version `0.3.0` adds grouped options, resource loading, localized labels, design tokens and an independent parsing core. Reader, streaming, editor syntax recognition, plugins and HTML export use the shared owned parser. Existing flat entry points remain supported. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
 
 ## Quick start
 
@@ -110,6 +110,8 @@ The editor supports Source, Preview, Split, and Blocks modes. Its controller sta
 | --- | --- |
 | Style colors, fonts, and spacing | `MarkdownStyleSheet`, passed as `styleSheet:` |
 | Customize enhanced components and plugins | `styleSheet.designTokens` |
+| Group rendering, selection and callbacks | `MarkdownRenderOptions`, `MarkdownSelectionOptions`, `MarkdownEvents` |
+| Configure image transport and control labels | `MarkdownResourceOptions`, `MarkdownStrings` |
 | Handle link and image taps | `onTapLink`, `onTapImage` on reader or stream |
 | Enable native text selection | `selectable: true`; optional `SmoothSelectionController` |
 | Render supported HTML | `enableHTML: true` (off by default) |
@@ -166,5 +168,7 @@ Run `swift test` for package tests. The demo project is generated from `Demo/pro
 - [Detailed API, implementation, and demo reference](docs/reference.md)
 - [Custom block builders](docs/custom-blocks.md)
 - [Typography](docs/typography.md)
+- [Public configuration contract](docs/public-library-contract.md)
+- [Owned parser and binary distribution](docs/rust-parser.md)
 
 Licensed under [MIT](LICENSE).

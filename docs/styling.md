@@ -2,7 +2,7 @@
 
 Start with a `MarkdownStyleSheet` preset, then change only the values your app needs. Pass that value to each reader or streaming view. Configuration is scoped to the view; no global singleton or dependency is required.
 
-These APIs are available in this source branch and are not included in the published 0.2.0 release.
+The grouped design token APIs below are included in version 0.3.0. Install the 0.3.0 tag using the [installation guide](../README.md#install); existing legacy stylesheet fields remain supported.
 
 ## Document styles and component tokens
 
