@@ -1298,7 +1298,7 @@ public struct SmoothMarkdownView: View {
 
     private func inlineView(_ node: Markup) -> AnyView {
         let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
-                                      hasCustomBuilder: builderRegistry == nil ? nil : hasCustomBuilder)
+                                      hasCustomBuilder: builderRegistry == nil ? nil : { child in hasCustomBuilder(child) })
         let hasCustom = runs.contains { if case .custom = $0 { return true }; return false }
         #if os(iOS)
         if !hasCustom, runs.contains(where: { run in

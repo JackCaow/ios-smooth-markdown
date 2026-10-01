@@ -4,6 +4,7 @@
 #endif
 import XCTest
 
+@MainActor
 final class StreamMarkdownRenderSessionTests: XCTestCase {
     private func requireRust() throws {
         guard NativeMarkdownExtensionProjection.isAvailable else { throw XCTSkip("Packaged Rust backend required") }

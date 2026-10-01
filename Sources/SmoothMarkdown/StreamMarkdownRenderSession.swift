@@ -4,6 +4,7 @@ import SwiftUI
 #endif
 
 /// View-owned parser state, separate from the global static-document cache.
+@MainActor
 final class StreamMarkdownRenderSession {
     struct Snapshot {
         let source: String
@@ -24,6 +25,8 @@ final class StreamMarkdownRenderSession {
     private var latest: Snapshot?
     private var plugins: ParserPluginRegistry?
     private var enableHTML = false
+    private var appliedVersion: UInt64 = 0
+    private var appliedEpoch: StreamMarkdownWorkerResult.Epoch?
     private(set) var reusedBlocks = 0
 
     func configure(plugins: ParserPluginRegistry?, enableHTML: Bool) {
@@ -36,6 +39,7 @@ final class StreamMarkdownRenderSession {
 
     func reset() {
         native.reset(); markup.removeAll(); sourceMap = StreamMarkdownSourceMap(); latest = nil; reusedBlocks = 0
+        appliedVersion = 0; appliedEpoch = nil
     }
 
     func update(_ source: String) -> Snapshot? {
@@ -52,17 +56,7 @@ final class StreamMarkdownRenderSession {
             document = full
         } else {
             guard let update = native.update(source), update.retainedBlocks <= markup.count else { reset(); return nil }
-            // A non-nil resolver selects the reader's typed extension projection.
-            let adapter = NativeMarkdownMarkupAdapter(source: source, sourceLocations: sourceMap.update(source),
-                                                      resolveCustom: { _ in nil })
-            let appended = update.tree.children.dropFirst(update.retainedBlocks).map { node -> Markup? in
-                if case .referenceDefinition = node.kind { return nil }
-                return adapter.convert(node)
-            }
-            markup = Array(markup.prefix(update.retainedBlocks)) + appended
-            reusedBlocks = update.retainedBlocks
-            document = Document(markup.compactMap { $0 }, source: source)
-            document.sourcePluginsResolved = true
+            return adapt(source: source, tree: update.tree, retainedBlocks: update.retainedBlocks)
         }
         let snapshot = Snapshot(source: source, document: document,
                                 pluginIdentity: plugins.map(ObjectIdentifier.init),
@@ -70,10 +64,52 @@ final class StreamMarkdownRenderSession {
         latest = snapshot
         return snapshot
     }
+
+    func isBackgroundEligible(_ source: String) -> Bool {
+        plugins == nil && !enableHTML && !source.contains("$") && !source.contains("[^") &&
+            !source.localizedCaseInsensitiveContains("<details")
+    }
+
+    func accept(_ result: StreamMarkdownWorkerResult) -> Snapshot {
+        guard let tree = result.tree else {
+            reset()
+            // Preserve the existing owned-parser fallback on backend rejection.
+            // This exceptional path and all mutable Markup remain on MainActor.
+            let document = MarkdownSyntax.parse(result.source, useCache: false)
+            return Snapshot(source: result.source, document: document,
+                            pluginIdentity: nil, pluginRevision: 0, enableHTML: false)
+        }
+        let continuous = appliedEpoch == result.epoch && appliedVersion == result.baseVersion
+        let retained = continuous ? result.retainedBlocks : 0
+        if !continuous { markup.removeAll(); sourceMap = StreamMarkdownSourceMap() }
+        let snapshot = adapt(source: result.source, tree: tree, retainedBlocks: retained)
+        appliedEpoch = result.epoch
+        appliedVersion = result.version
+        return snapshot
+    }
+
+    private func adapt(source: String, tree: NativeMarkdownNode, retainedBlocks: Int) -> Snapshot {
+        let retained = retainedBlocks <= markup.count ? retainedBlocks : 0
+        let adapter = NativeMarkdownMarkupAdapter(source: source, sourceLocations: sourceMap.update(source),
+                                                  resolveCustom: { _ in nil })
+        let appended = tree.children.dropFirst(retained).map { node -> Markup? in
+            if case .referenceDefinition = node.kind { return nil }
+            return adapter.convert(node)
+        }
+        markup = Array(markup.prefix(retained)) + appended
+        reusedBlocks = retained
+        let document = Document(markup.compactMap { $0 }, source: source)
+        document.sourcePluginsResolved = true
+        let snapshot = Snapshot(source: source, document: document, pluginIdentity: nil,
+                                pluginRevision: 0, enableHTML: false)
+        latest = snapshot
+        return snapshot
+    }
+
 }
 
 private struct StreamMarkdownSnapshotKey: EnvironmentKey {
-    static let defaultValue: StreamMarkdownRenderSession.Snapshot? = nil
+    static var defaultValue: StreamMarkdownRenderSession.Snapshot? { nil }
 }
 extension EnvironmentValues {
     var markdownStreamSnapshot: StreamMarkdownRenderSession.Snapshot? {

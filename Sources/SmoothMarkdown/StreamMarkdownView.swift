@@ -137,7 +137,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
         .task(id: taskIdentity) {
             guard !Task.isCancelled else { return }
             accumulator.reset(throttleMillis: throttleMillis, enableHTML: enableHTML)
-            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML)
+            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML, background: true)
             let generation = accumulator.generation
             streamError = nil
             activeIdentity = taskIdentity
@@ -147,8 +147,10 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
                     accumulator.append(chunk, for: generation)
                 }
                 if !Task.isCancelled && accumulator.isCurrent(generation) {
-                    accumulator.finish(for: generation)
-                    onComplete?(accumulator.visibleText)
+                    let published = await accumulator.finishAndWait(for: generation)
+                    if published && !Task.isCancelled && accumulator.isCurrent(generation) {
+                        onComplete?(accumulator.visibleText)
+                    }
                 }
             } catch is CancellationError {
                 accumulator.cancel(for: generation)
@@ -161,7 +163,7 @@ public struct StreamMarkdownView<Chunks: AsyncSequence>: View where Chunks.Eleme
             }
         }
         .onChange(of: plugins.map(ObjectIdentifier.init)) { _, _ in
-            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML)
+            accumulator.prepareRenderer(plugins: plugins, enableHTML: enableHTML, background: true)
         }
         .onChange(of: enableHTML) { _, enabled in accumulator.setHTML(enabled) }
         .onDisappear { accumulator.cancel() }

@@ -8,6 +8,30 @@ import Combine
 /// Consumer-facing behavior tested in a hosted SwiftUI tree, including native document selection.
 @MainActor
 final class PublicLibraryRuntimeTests: XCTestCase {
+    func testBackgroundStreamPublishesFinalSourceAndCompletesOnceOnMainThread() async throws {
+        let source = "# WORKER HEADER\n\nFirst\n\nSecond\n\n**LATEST COMPLETE**"
+        let chunks = AsyncStream<String> { continuation in
+            for character in source { continuation.yield(String(character)) }
+            continuation.finish()
+        }
+        let completed = expectation(description: "Final source published")
+        completed.assertForOverFulfill = true
+        var completions: [String] = []
+        let stream = StreamMarkdownView(chunks: chunks, throttleMillis: 0,
+            onComplete: { source in
+                XCTAssertTrue(Thread.isMainThread)
+                completions.append(source)
+                completed.fulfill()
+            }, scrollable: false)
+        let host = RuntimeHost(stream); defer { host.close() }
+        await fulfillment(of: [completed], timeout: 10)
+        host.settle()
+        XCTAssertEqual(completions, [source])
+        let text = try host.recognizedText()
+        XCTAssertTrue(text.contains("WORKER HEADER"))
+        XCTAssertTrue(text.contains("LATEST COMPLETE"))
+    }
+
     func testPackagedIncrementalStreamRendersStableBlocksAndLatestTail() throws {
         for selectable in [false, true] {
             let session = StreamMarkdownRenderSession()

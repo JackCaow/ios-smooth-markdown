@@ -175,6 +175,6 @@ Licensed under [MIT](LICENSE).
 
 ### Streaming performance
 
-Eligible `StreamMarkdownView` streams reuse committed native AST and Markup blocks, share each published parse with the visible/selection projection, and retain stable block view identity. Plugins, formulas/footnotes, enabled HTML and details keep their full-document compatibility path; references invalidate earlier blocks. Large single containers may see no improvement. Parsing is currently synchronous; background scheduling is not implemented.
+Eligible `StreamMarkdownView` streams reuse committed native AST and Markup blocks, share each published parse with the visible/selection projection, and retain stable block view identity. Plugins, formulas/footnotes, enabled HTML and details keep their full-document compatibility path; references invalidate earlier blocks. Large single containers may see no improvement. Eligible streams parse and decode on a serial background worker. Pending updates coalesce complete source prefixes; the final prefix is published before `onComplete`. Native AST state advances even when an intermediate UI update is skipped. Markup adaptation and UI publication remain on the main thread. Compatibility paths still run on the UI thread to preserve plugin behavior.
 
 See [same-input parser measurements](benchmarks/README.md) and [raw evidence](benchmarks/evidence/ios-stream-parser-performance.json). Host parse timings exclude SwiftUI layout/drawing and do not establish device frame-rate improvement.
