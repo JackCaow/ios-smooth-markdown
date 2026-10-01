@@ -440,6 +440,10 @@ public struct SmoothMarkdownView: View {
     func containsCustomBlockBuilder(_ node: Markup) -> Bool {
         guard builderRegistry != nil else { return false }
         if hasCustomBuilder(node) { return true }
+        if let math = node as? SharedBlockMathMarkup { return extensionBuilder(.blockMath(math.latex)) != nil }
+        if let footnote = node as? SharedFootnoteMarkup {
+            return extensionBuilder(.footnoteDefinition(label: footnote.definition.label, content: footnote.definition.content)) != nil
+        }
         if node is Paragraph || node is Heading || node is Markdown.Table.Cell {
             // Match the same post-plugin text pieces that inlineView will dispatch.
             // The raw native Markdown.Text node may contain a plugin token that
@@ -1491,6 +1495,9 @@ public struct SmoothMarkdownView: View {
         if let text = node as? Markdown.Text { return text.string }
         if let code = node as? InlineCode { return code.code }
         if let code = node as? CodeBlock { return code.code }
+        if let math = node as? SharedInlineMathMarkup { return math.format() }
+        if let footnote = node as? SharedFootnoteReferenceMarkup { return footnote.format() }
+        if let plugin = node as? SharedInlinePluginMarkup { return plugin.match.text }
         if node is SoftBreak || node is LineBreak { return "\n" }
         return node.children.map(plainText).joined()
     }

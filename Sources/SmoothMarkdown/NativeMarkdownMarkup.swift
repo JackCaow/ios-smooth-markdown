@@ -19,6 +19,7 @@ public class Markup {
     public let range: Range<SourceLocation>?
     private var originalSource: String?
     var sourcePluginsResolved = false
+    var sourceBuiltinsResolved = false
 
     public init(_ children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil) {
         self.children = children
@@ -32,12 +33,15 @@ public class Markup {
     public func withUncheckedChildren(_ children: [Markup]) -> Markup {
         let result = copyingChildren(children)
         result.sourcePluginsResolved = sourcePluginsResolved
+        result.sourceBuiltinsResolved = sourceBuiltinsResolved
         return result
     }
     private func copyingChildren(_ children: [Markup]) -> Markup {
         switch self {
         case let node as SharedInlinePluginMarkup: return SharedInlinePluginMarkup(plugin: node.plugin, match: node.match, source: node.format())
         case let node as SharedBlockPluginMarkup: return SharedBlockPluginMarkup(plugin: node.plugin, match: node.match, source: node.format())
+        case let node as SharedInlineMathMarkup: return SharedInlineMathMarkup(latex: node.latex, range: node.range, source: node.format())
+        case let node as SharedFootnoteReferenceMarkup: return SharedFootnoteReferenceMarkup(label: node.label, range: node.range, source: node.format())
         case let node as SharedBlockMathMarkup: return SharedBlockMathMarkup(latex: node.latex, source: node.format())
         case let node as SharedFootnoteMarkup: return SharedFootnoteMarkup(definition: node.definition, children: children, source: node.format())
         case is Document: return Document(children, range: range, source: originalSource)
@@ -167,6 +171,8 @@ public enum Markdown {
             func plain(_ node: Markup) -> String {
                 if let text = node as? Text { return text.string }
                 if let code = node as? InlineCode { return code.code }
+                if node is SharedInlineMathMarkup || node is SharedFootnoteReferenceMarkup { return node.format() }
+                if let plugin = node as? SharedInlinePluginMarkup { return plugin.match.text }
                 return node.children.map(plain).joined()
             }
             return children.map(plain).joined()
@@ -230,6 +236,7 @@ struct NativeMarkdownMarkupAdapter {
 
     func convert(_ node: NativeMarkdownNode) -> Markup {
         let result = convertNode(node)
+        result.sourceBuiltinsResolved = true
         if resolveCustom != nil { result.sourcePluginsResolved = true }
         return result
     }
@@ -275,7 +282,7 @@ struct NativeMarkdownMarkupAdapter {
             var latex = node.source.trimmingCharacters(in: .whitespacesAndNewlines)
             if latex.hasPrefix("$$") { latex = String(latex.dropFirst(2)) }
             if latex.hasSuffix("$$") { latex = String(latex.dropLast(2)) }
-            return SharedBlockMathMarkup(latex: latex.trimmingCharacters(in: .whitespacesAndNewlines), source: node.source)
+            return SharedBlockMathMarkup(latex: node.literalText ?? latex.trimmingCharacters(in: .whitespacesAndNewlines), source: node.source)
         case let .footnoteDefinition(label) where resolveCustom != nil:
             let parts = node.source.components(separatedBy: "\n")
             var content = ""
@@ -284,14 +291,20 @@ struct NativeMarkdownMarkupAdapter {
             }
             content += parts.dropFirst().filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .map { "\n" + $0.trimmingCharacters(in: .whitespaces) }.joined()
+            content = node.literalText ?? content
             let fallback = Paragraph([Markdown.Text(content)], source: content)
             fallback.sourcePluginsResolved = true
             return SharedFootnoteMarkup(definition: .init(label: label, content: content,
-                parsedContent: projectFootnote?(content) ?? converted.first ?? fallback), children: converted, source: node.source)
+                parsedContent: converted.first ?? projectFootnote?(content) ?? fallback), children: converted, source: node.source)
         case .footnoteDefinition, .blockMath:
             let text = Markdown.Text(node.source, range: position, source: node.source)
             return Paragraph([text], range: position, source: node.source)
-        case .text, .inlineMath, .footnoteReference, .raw:
+        case .inlineMath:
+            let latex = node.literalText ?? String(node.source.dropFirst().dropLast())
+            return SharedInlineMathMarkup(latex: latex, range: position, source: node.source)
+        case let .footnoteReference(label):
+            return SharedFootnoteReferenceMarkup(label: label, range: position, source: node.source)
+        case .text, .raw:
             return Markdown.Text(node.semanticText ?? node.source, range: position, source: node.source)
         case .referenceDefinition: return Markup(range: position, source: node.source)
         }
@@ -318,7 +331,8 @@ struct NativeMarkdownMarkupAdapter {
         for child in children {
             if child is BlockQuote || child is OrderedList || child is UnorderedList ||
                 child is CodeBlock || child is HTMLBlock || child is ThematicBreak ||
-                child is Markdown.Table || child is Paragraph {
+                child is Markdown.Table || child is Paragraph || child is SharedBlockMathMarkup ||
+                child is SharedFootnoteMarkup || child is SharedBlockPluginMarkup {
                 flush()
                 blocks.append(child)
             } else { inlines.append(child) }
@@ -336,7 +350,10 @@ struct NativeMarkdownMarkupAdapter {
                 result.removeLast()
                 let joined = previous.string + text.string
                 let mergedRange = previous.range.flatMap { first in text.range.map { first.lowerBound..<$0.upperBound } }
-                result.append(Markdown.Text(joined, range: mergedRange, source: previous.format() + text.format()))
+                let merged = Markdown.Text(joined, range: mergedRange, source: previous.format() + text.format())
+                merged.sourceBuiltinsResolved = previous.sourceBuiltinsResolved && text.sourceBuiltinsResolved
+                merged.sourcePluginsResolved = previous.sourcePluginsResolved && text.sourcePluginsResolved
+                result.append(merged)
             } else { result.append(child) }
         }
         return result

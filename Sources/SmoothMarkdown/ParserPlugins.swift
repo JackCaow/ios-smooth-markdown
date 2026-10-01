@@ -397,3 +397,16 @@ final class SharedFootnoteMarkup: Markup {
         self.definition = definition; super.init(children, source: source)
     }
 }
+
+final class SharedInlineMathMarkup: Markup {
+    let latex: String
+    init(latex: String, range: Range<SourceLocation>? = nil, source: String) {
+        self.latex = latex; super.init(range: range, source: source)
+    }
+}
+final class SharedFootnoteReferenceMarkup: Markup {
+    let label: String
+    init(label: String, range: Range<SourceLocation>? = nil, source: String) {
+        self.label = label; super.init(range: range, source: source)
+    }
+}

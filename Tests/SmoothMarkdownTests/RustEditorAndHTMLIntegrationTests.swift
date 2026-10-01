@@ -227,6 +227,82 @@ final class RustEditorAndHTMLIntegrationTests: XCTestCase {
         XCTAssertEqual(RustMarkdownBridge.successfulHTMLExportCount - before, 6)
     }
 
+    func testResolvedTextIsNeverRescannedAsMathOrFootnotes() throws {
+        try requireRust()
+        let source = #"\$x$ and \[^a]"#
+        let hooked = try XCTUnwrap(PluginSharedSyntax.document(source, registry: nil, enableHTML: false))
+        for document in [hooked, Document(parsing: source)] {
+            let paragraph = try XCTUnwrap(document.children.first as? Paragraph)
+            let runs = InlineContent.runs(in: paragraph, enableHTML: false)
+            XCTAssertFalse(runs.contains { if case .math = $0 { return true }; if case .footnote = $0 { return true }; return false })
+            XCTAssertEqual(runs.compactMap { if case let .text(text, _, _, _) = $0 { return text }; return nil }.joined(), "$x$ and [^a]")
+            XCTAssertEqual(ReaderSelectionDocument.compose([paragraph], enableHTML: false, plugins: nil)?.copiedText, "$x$ and [^a]")
+        }
+        let projection = ReaderVisibleDocumentProjection(markdown: source)
+        XCTAssertEqual(projection.text, "$x$ and [^a]")
+        XCTAssertTrue(projection.segments.flatMap(\.atoms).allSatisfy { $0.kind == .text })
+    }
+
+    func testTypedInlineExtensionsRetainTheirSharedPayloads() throws {
+        try requireRust()
+        let document = try XCTUnwrap(PluginSharedSyntax.document("**$x+y$ [^a:b]**", registry: nil, enableHTML: false))
+        let paragraph = try XCTUnwrap(document.children.first as? Paragraph)
+        let runs = InlineContent.runs(in: paragraph, enableHTML: false)
+        XCTAssertTrue(runs.contains { if case let .math(latex) = $0 { return latex == "x+y" }; return false })
+        XCTAssertTrue(runs.contains { if case let .footnote(label) = $0 { return label == "a:b" }; return false })
+        let projection = ReaderVisibleDocumentProjection(markdown: "**$x+y$ [^a:b]**")
+        XCTAssertTrue(projection.segments.flatMap(\.atoms).contains { if case let .formula(latex) = $0.kind { return latex == "x+y" }; return false })
+    }
+
+    func testNestedExtensionPayloadsExcludeContainerMarkersAndPreserveColonLabels() throws {
+        try requireRust()
+        let source = "> $$\r\n> x\r\n> $$\r\n>\r\n> [^a:b]: first\r\n>     second\r\n"
+        let document = try XCTUnwrap(PluginSharedSyntax.document(source, registry: nil, enableHTML: false))
+        let quote = try XCTUnwrap(document.children.first as? BlockQuote)
+        let math = try XCTUnwrap(quote.children.first as? SharedBlockMathMarkup)
+        let footnote = try XCTUnwrap(quote.children.last as? SharedFootnoteMarkup)
+        XCTAssertEqual(math.latex, "x")
+        XCTAssertEqual(footnote.definition.label, "a:b")
+        XCTAssertEqual(footnote.definition.content, "first\nsecond")
+        XCTAssertTrue(math.format().contains("> x"), "Original source remains lossless")
+        XCTAssertEqual(MarkdownDocumentCodec().parse(source).toMarkdown(), source)
+        let projection = ReaderVisibleDocumentProjection(markdown: source)
+        XCTAssertTrue(projection.segments.flatMap(\.atoms).contains { if case let .formula(latex) = $0.kind { return latex == "x" }; return false })
+        XCTAssertTrue(projection.text.contains("[a:b]: first\nsecond"))
+        let plain = try XCTUnwrap(PluginSharedSyntax.document("[^a:b]: first", registry: nil, enableHTML: false)?.children.first as? SharedFootnoteMarkup)
+        XCTAssertEqual(plain.definition.content, "first")
+        let listSource = "- $$\n  x\n  $$\n"
+        let listDocument = try XCTUnwrap(PluginSharedSyntax.document(listSource, registry: nil, enableHTML: false))
+        let list = try XCTUnwrap(listDocument.children.first as? UnorderedList)
+        let item = try XCTUnwrap(list.children.first as? ListItem)
+        XCTAssertEqual((item.children.first as? SharedBlockMathMarkup)?.latex, "x",
+                       "Block extensions remain blocks in tight lists")
+        XCTAssertTrue(ReaderVisibleDocumentProjection(markdown: listSource).segments.flatMap(\.atoms).contains {
+            if case let .formula(latex) = $0.kind { return latex == "x" }; return false
+        })
+    }
+
+    func testFootnoteBodyUsesSharedBlockTreeForLocalReferences() throws {
+        try requireRust()
+        let body = "[ref]: https://example.com/local\n[x][ref]\n"
+        let legacyBody = Document(parsing: body)
+        XCTAssertTrue(InlineContent.runs(in: legacyBody.children[0], enableHTML: false).contains {
+            if case let .text(text, style, _, _) = $0 { return text == "x" && style.link?.absoluteString == "https://example.com/local" }; return false
+        }, "Valid local definition precedes paragraph, as required by CommonMark")
+        let source = "[^n]: [ref]: https://example.com/local\n    [x][ref]\n"
+        let before = RustMarkdownBridge.successfulParseCount
+        let document = try XCTUnwrap(PluginSharedSyntax.document(source, registry: nil, enableHTML: false))
+        let footnote = try XCTUnwrap(document.children.first as? SharedFootnoteMarkup)
+        let paragraph = try XCTUnwrap(footnote.definition.parsedContent as? Paragraph)
+        let runs = InlineContent.runs(in: paragraph, enableHTML: false)
+        XCTAssertTrue(runs.contains { if case let .text(text, style, _, _) = $0 { return text == "x" && style.link?.absoluteString == "https://example.com/local" }; return false })
+        XCTAssertEqual(footnote.children.count, 1)
+        XCTAssertEqual(RustMarkdownBridge.successfulParseCount - before, 1,
+                       "Footnote blocks must come from the complete shared AST, not a second body parser")
+        XCTAssertEqual(ReaderSelectionDocument.composeItems([.footnoteDefinition(footnote.definition)],
+            enableHTML: false, plugins: nil, visualBlockAnchors: true)?.copiedText, "[n]: x")
+    }
+
     private struct EmojiSpanPlugin: InlineParserPlugin {
         let id = "emoji-span"; let name = "Emoji span"; let triggerCharacter: Character = "@"
         func canParse(_ text: String, at index: String.Index) -> Bool { text[index...].hasPrefix("@😀") }

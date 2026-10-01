@@ -753,6 +753,32 @@ impl Scanner<'_> {
                     }
                     let mut node = self.node(Kind::FootnoteDefinition, lines, first, index);
                     node.label = label.into();
+                    let opening = lines[first].text.trim_start();
+                    let body_start = opening.find("]:").unwrap() + 2;
+                    let mut body = opening[body_start..].trim_start_matches([' ', '\t']).to_owned();
+                    for line in &lines[first+1..index] {
+                        body.push('\n');
+                        body.push_str(&remove_code_indent(&line.text,4));
+                    }
+                    node.literal = Some(body.trim().to_owned());
+                    // Project only the definition prefix/continuation indentation. Children
+                    // keep positions in the original document and share its reference pass.
+                    let first_line = &lines[first];
+                    let content = opening[body_start..].trim_start_matches([' ', '\t']);
+                    let prefix_bytes = first_line.text.len() - content.len();
+                    let body_line = Line {
+                        text: content.to_owned(),
+                        raw: format!("{}{}", content, if first_line.raw.ends_with(['\r','\n']) { "\n" } else { "" }),
+                        start: (first_line.start + utf16_len(&first_line.text[..prefix_bytes]))
+                            .saturating_sub(first_line.virtual_indent),
+                        end: first_line.end,
+                        projected: true,
+                        lazy: false,
+                        virtual_indent: 0,
+                    };
+                    let mut contents = vec![body_line];
+                    contents.extend(lines[first+1..index].iter().map(|line| project(line,4)));
+                    node.children = self.scan(&contents, references, depth+1);
                     result.push(node);
                     continue;
                 }
@@ -767,7 +793,12 @@ impl Scanner<'_> {
                         index += 1
                     }
                 }
-                result.push(self.node(Kind::BlockMath, lines, first, index));
+                let mut node = self.node(Kind::BlockMath, lines, first, index);
+                let mut body = lines[first].text.trim_start()[2..].to_owned();
+                for line in &lines[first+1..index] { body.push('\n'); body.push_str(&line.text); }
+                if let Some(closing) = body.find("$$") { body.truncate(closing); }
+                node.literal = Some(body.trim().to_owned());
+                result.push(node);
                 continue;
             }
             if let (Some((level, prefix, body)), _) = (heading(text), ()) {

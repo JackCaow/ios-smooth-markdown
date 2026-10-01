@@ -29,6 +29,23 @@ final class PublicLibraryRuntimeTests: XCTestCase {
                       "An inline custom range equal to the paragraph/document range must not replace its ancestors")
     }
 
+    func testSharedBuiltinPayloadsRenderCorrectlyInOrdinaryReader() throws { try sharedBuiltins(selectable: false) }
+    func testSharedBuiltinPayloadsRenderCorrectlyInDocumentReader() throws { try sharedBuiltins(selectable: true) }
+
+    private func sharedBuiltins(selectable: Bool) throws {
+        let capture = RuntimeExtensionCapture()
+        let builders = BuilderRegistry(); builders.register("runtime-extensions", builder: RuntimeExtensionBuilder(capture: capture))
+        let source = #"\$x$ \[^a]"# + "\n\n> $$\n> x\n> $$\n>\n> [^a:b]: first\n>     second\n"
+        let reader = SmoothMarkdownView(markdown: source, renderOptions: .init(scrollable: false),
+            selectionOptions: .init(mode: selectable ? .document : .disabled), builders: .init(nodes: builders))
+        let host = RuntimeHost(reader); defer { host.close() }
+        XCTAssertGreaterThan(host.greenPixels(), 1000, "Typed nested extensions did not reach their builder")
+        XCTAssertFalse(capture.nodes.contains { $0.type == "inline_math" || $0.type == "footnote_reference" },
+                       "Decoded escaped text was scanned again as Markdown syntax")
+        XCTAssertTrue(capture.nodes.contains { $0.type == "block_math" && $0.content == "x" })
+        XCTAssertTrue(capture.nodes.contains { $0.type == "footnote_definition" && $0.content == "first\nsecond" && $0.attributes["label"] == "a:b" })
+    }
+
     private func sharedCallbacks(selectable: Bool) throws {
         let plugins = ParserPluginRegistry()
         try plugins.register(AdmonitionPlugin()); try plugins.register(RuntimeSharedInlinePlugin())
@@ -267,5 +284,19 @@ private struct RuntimeResolvedLinkBuilder: MarkdownWidgetBuilder {
     func canBuild(_ node: Markup) -> Bool { (node as? Markdown.Link)?.destination == "https://runtime.invalid/resolved" }
     func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView {
         AnyView(Text("RESOLVED LINK").padding(12).background(Color(red: 0, green: 1, blue: 0)))
+    }
+}
+
+private final class RuntimeExtensionCapture { var nodes: [MarkdownExtensionNode] = [] }
+private struct RuntimeExtensionBuilder: MarkdownWidgetBuilder {
+    let capture: RuntimeExtensionCapture
+    func canBuild(_ node: Markup) -> Bool { false }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView { AnyView(EmptyView()) }
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool {
+        ["inline_math", "block_math", "footnote_reference", "footnote_definition"].contains(node.type)
+    }
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView {
+        capture.nodes.append(node)
+        return AnyView(Text(node.content).padding(16).frame(width: 180).background(Color(red: 0, green: 1, blue: 0)))
     }
 }

@@ -37,3 +37,27 @@ impl Hooks for FencePlugin {fn block(&self,lines:&[Vec<u16>],index:usize,_:u32)-
     let host=smooth_markdown_rust::block::parse_with_hook_policy(s,Options::default(),Some(&h),true);assert_eq!(host.children[0].kind,Kind::Custom);assert_eq!(host.children[1].kind,Kind::FencedCode);
 }
 #[test]fn bounded_html_rejects_escape_expansion_before_transport_allocation(){let mut n=smooth_markdown_rust::ast::Node::new(Kind::Text,"",0,0);n.literal=Some("&".repeat(100));assert_eq!(smooth_markdown_rust::html::render_bounded(&n,0,499),Err(2));assert_eq!(smooth_markdown_rust::html::render_bounded(&n,0,500).unwrap(),"&amp;".repeat(100));}
+#[test]fn extended_block_literals_use_projected_body_and_exact_definition_prefix(){
+    let source="> $$\n> x +\n> y\n> $$\n>\n> [^a:b]: first\n>     second\n";
+    let tree=smooth_markdown_rust::parse(source,Options::default());let nodes=&tree.children[0].children;
+    assert_eq!(nodes[0].kind,Kind::BlockMath);assert_eq!(nodes[0].literal.as_deref(),Some("x +\ny"));
+    assert_eq!(nodes[1].kind,Kind::FootnoteDefinition);assert_eq!(nodes[1].label,"a:b");assert_eq!(nodes[1].literal.as_deref(),Some("first\nsecond"));
+    assert!(nodes[0].source.contains("> x"));assert!(nodes[1].source.contains(">     second"));
+    let list=smooth_markdown_rust::parse("- $$\n  x\n  $$",Options::default());assert_eq!(list.children[0].children[0].children[0].literal.as_deref(),Some("x"));
+}
+
+#[test]fn footnote_children_share_local_and_outer_references_and_original_ranges(){
+    let source="> [^😀:n]: [local]: /local\r\n>     [x][local] [y][outer]\r\n\r\n[outer]: /outer\r\n";
+    let tree=smooth_markdown_rust::parse(source,Options::default());
+    let footnote=&tree.children[0].children[0];assert_eq!(footnote.children.len(),2);
+    let paragraph=&footnote.children[1];assert_eq!(paragraph.kind,Kind::Paragraph);
+    let links:Vec<_>=paragraph.children.iter().filter(|n|n.kind==Kind::Link).collect();
+    assert_eq!(links.len(),2);assert_eq!(links[0].destination,"/local");assert_eq!(links[1].destination,"/outer");
+    assert_eq!(links[0].span.start,source[..source.find("[x]").unwrap()].encode_utf16().count() as u32);
+    let definition=&footnote.children[0];assert_eq!(definition.kind,Kind::ReferenceDefinition);assert_eq!(definition.source,"[local]: /local\r\n");
+    let plain=smooth_markdown_rust::parse("[x][local]\n[local]: /local",Options::default());
+    assert_eq!(plain.children.len(),1);assert!(!plain.children[0].children.iter().any(|n|n.kind==Kind::Link));
+    let code=smooth_markdown_rust::parse("[^n]: ```\n    [local]: /code\n    ```\n    [x][local]",Options::default());
+    assert_eq!(code.children[0].children[0].kind,Kind::FencedCode);
+    assert!(!code.children[0].children[1].children.iter().any(|n|n.kind==Kind::Link));
+}

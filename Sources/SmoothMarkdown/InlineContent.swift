@@ -54,6 +54,8 @@ enum InlineContent {
                 }
                 continue
             }
+            if let math = child as? SharedInlineMathMarkup { result.append(.math(math.latex)); continue }
+            if let footnote = child as? SharedFootnoteReferenceMarkup { result.append(.footnote(footnote.label)); continue }
             if let plugin = child as? SharedInlinePluginMarkup {
                 result.append(.plugin(plugin.plugin, plugin.match)); continue
             }
@@ -91,6 +93,13 @@ enum InlineContent {
                     switch pluginPart {
                     case let .plugin(plugin, match): result.append(.plugin(plugin, match))
                     case let .text(source):
+                        if child.sourceBuiltinsResolved || node.sourceBuiltinsResolved {
+                            if let hasCustomBuilder {
+                                let textNode: Markup = source == text.string ? text : Markdown.Text(source)
+                                if hasCustomBuilder(textNode) { result.append(.custom(textNode, style)); continue }
+                            }
+                            result.append(.text(source, style, tags, code: false)); continue
+                        }
                         for part in FootnoteSyntax.parts(in: source) {
                             switch part {
                             case let .text(value):
@@ -141,6 +150,9 @@ enum InlineContent {
     private static func plainText(_ node: Markup) -> String {
         if let text = node as? Markdown.Text { return text.string }
         if let code = node as? InlineCode { return code.code }
+        if let math = node as? SharedInlineMathMarkup { return math.format() }
+        if let footnote = node as? SharedFootnoteReferenceMarkup { return footnote.format() }
+        if let plugin = node as? SharedInlinePluginMarkup { return plugin.match.text }
         return node.children.map(plainText).joined()
     }
 }

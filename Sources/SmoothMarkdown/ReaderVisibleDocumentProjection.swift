@@ -268,6 +268,11 @@ struct ReaderVisibleDocumentProjection {
         /// Handles the list/quote cases that the old native prose renderer
         /// rejects when an inline image, formula, or plugin is present.
         private func fallbackAtoms(_ node: Markup) -> [Atom]? {
+            if let math = node as? SharedBlockMathMarkup { return [.formula(math.latex)] }
+            if let footnote = node as? SharedFootnoteMarkup {
+                return [.text("[\(footnote.definition.label)]: ")] + (footnote.definition.parsedContent.map(inlineAtoms) ?? [])
+            }
+            if node is SharedBlockPluginMarkup { return [.attachment] }
             if node is Paragraph || node is Heading { return inlineAtoms(node) }
             if let code = node as? CodeBlock { return [.text(code.code)] }
             if node is ThematicBreak { return [.attachment] }
