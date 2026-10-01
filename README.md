@@ -8,11 +8,11 @@ The library is under active development. It supports common Markdown and GFM con
 
 Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. The library-owned Rust parser produces a Swift AST through a C bridge; SVG and math rendering use Apple frameworks. The static parser binary is included, so app developers do not need Rust or Cargo.
 
-In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.1** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.2** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.1")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.2")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -42,6 +42,8 @@ Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layo
 The shared owned parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
 
 Version `0.3.1` includes the grouped options, resource loading, localized labels, design tokens and independent parsing core introduced in `0.3.0`. It adds native incremental stream sessions, bounded tail transport and background parsing with latest-prefix coalescing. Final publication, cancellation and worker cleanup are verified. Reader, streaming, editor syntax recognition, plugins and HTML export use the shared owned parser. Existing flat entry points remain supported. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
+
+Version `0.3.2` adds backslash formula delimiters, broader native code highlighting, localized Mermaid fallback and corrected system typography tokens. The public API keeps existing entry points.
 
 ## Quick start
 
