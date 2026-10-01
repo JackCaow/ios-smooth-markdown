@@ -26,6 +26,7 @@ final class MarkdownTypographyTests: XCTestCase {
 
     func testPublicSwiftUIReaderSystemTokensRespectLocalDynamicTypeOverride() {
         var sheet = MarkdownStyleSheet.light()
+        sheet.contentPadding = 0
         sheet.designTokens.typography.paragraph = .init(size: 17)
         sheet.designTokens.typography.headings = (0..<6).map { _ in .init(size: 22, weight: .semibold) }
         for source in ["Body", "# Heading"] {

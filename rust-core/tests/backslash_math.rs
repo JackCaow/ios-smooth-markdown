@@ -72,6 +72,8 @@ fn every_prefix_keeps_bracket_prose_and_math_trailers_equivalent() {
         "a\n\nb\n\nc\n\n\\[x\\] trailing\n\nend",
         "a\n\nb\n\nc\n\n\\[\nx[0]\n\n\\] trailing\n\nend",
         "a\n\nb\n\nc\n\n\\[x[0]\\] trailing\n\nend",
+        "a\n\nb\n\nc\n\n\\[x[0]\n+1\n\\]",
+        "a\n\nb\n\nc\n\n\\[x[0]",
     ] {
         let mut session = Session::new(Options::default());
         let mut current = Node::new(Kind::Document, "", 0, 0);
@@ -83,5 +85,14 @@ fn every_prefix_keeps_bracket_prose_and_math_trailers_equivalent() {
             current.source = prefix.to_owned(); current.span.len = prefix.encode_utf16().count() as u32;
             assert_eq!(current, parse(prefix, Options::default()), "prefix {prefix:?}");
         }
+    }
+}
+
+#[test]
+fn nested_array_on_opening_line_remains_math_closed_or_streaming() {
+    for (source, literal) in [("\\[x[0]\n+1\n\\]", "x[0]\n+1"), (r"\[x[0]", "x[0]")] {
+        let root = parse(source, Options::default());
+        assert_eq!(root.children[0].kind, Kind::BlockMath);
+        assert_eq!(root.children[0].literal.as_deref(), Some(literal));
     }
 }

@@ -24,7 +24,20 @@ fn backslash_math_open(text: &str) -> bool {
     let body = text.trim_start();
     if !body.starts_with(r"\[") { return false; }
     let payload = &body[2..];
-    inline::math_closing(payload, r"\]").is_some() || inline::math_closing(payload, "]").is_none()
+    if inline::math_closing(payload, r"\]").is_some() { return true; }
+    let mut depth = 0usize;
+    let mut escaped = false;
+    for ch in payload.chars() {
+        if escaped { escaped = false; continue; }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' if depth == 0 => return false,
+            ']' => depth -= 1,
+            _ => {}
+        }
+    }
+    true
 }
 fn horizontal(c: u8) -> bool {
     c == b' ' || c == b'\t'

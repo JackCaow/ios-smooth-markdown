@@ -152,7 +152,19 @@ enum MathSyntax {
     private static func backslashMathOpen(_ text: String) -> Bool {
         guard text.hasPrefix(#"\["#) else { return false }
         let payload = String(text.dropFirst(2))
-        return mathClosing(payload, delimiter: #"\]"#) != nil || mathClosing(payload, delimiter: "]") == nil
+        if mathClosing(payload, delimiter: #"\]"#) != nil { return true }
+        var depth = 0
+        var escaped = false
+        for ch in payload {
+            if escaped { escaped = false; continue }
+            if ch == "\\" { escaped = true }
+            else if ch == "[" { depth += 1 }
+            else if ch == "]" {
+                if depth == 0 { return false }
+                depth -= 1
+            }
+        }
+        return true
     }
 
     private static func mathClosing(_ source: String, delimiter: String) -> Range<String.Index>? {

@@ -1,15 +1,15 @@
 {
   "artifact": {
-    "Info.plist": "2eaca24fc2822bfca7d16e852c69f08474cdf4b745c15aae2c8c47d8360bbc4e",
+    "Info.plist": "4a9313fe515d8e89322e2db780a7870a719bd37b388a64c96effec03b2232882",
     "ios-arm64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "ios-arm64/Headers/smooth_markdown_rust.h": "48a9e39d8c019b714553a4fd5d7363dddd8ddf33fdc5a28c1c7ab81ebf706565",
-    "ios-arm64/libsmooth_markdown_rust.a": "bd654dd4aacbac1d4599aa80499280f6c14bdbbc2d389179db40ffadf0d824c8",
+    "ios-arm64/libsmooth_markdown_rust.a": "8598fb40dcaaa848610a89999e279c34535f84595770aa49e4439b7e60d06eea",
     "ios-arm64_x86_64-simulator/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "ios-arm64_x86_64-simulator/Headers/smooth_markdown_rust.h": "48a9e39d8c019b714553a4fd5d7363dddd8ddf33fdc5a28c1c7ab81ebf706565",
-    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "b37923d2365b42ca8e5182fa7ca1a05c745f9fd7e8b524b4585effb55d20ceb7",
+    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "d865e42f2c242ab272793c2fa0f500c63088a8bb231c1c54ceffc319d68e22de",
     "macos-arm64_x86_64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "macos-arm64_x86_64/Headers/smooth_markdown_rust.h": "48a9e39d8c019b714553a4fd5d7363dddd8ddf33fdc5a28c1c7ab81ebf706565",
-    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "4bf4e760a4614ab10707b361b2ac26ae20dd2a07cdc86f931b703c245c5799a5"
+    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "cb2839fc1039fa415e49648d50470a80c5ab13c5314865ee3fd1d180a61ac88b"
   },
   "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
   "sources": {
@@ -17,7 +17,7 @@
     "Cargo.toml": "7230e943869d3ddf8f88f142a30bfc4eb8ccc9350efd12253161a6b6900b6dc5",
     "include/smooth_markdown_rust.h": "48a9e39d8c019b714553a4fd5d7363dddd8ddf33fdc5a28c1c7ab81ebf706565",
     "src/ast.rs": "41e80ed071e971a2b00e3a5686fc7ef8ce40a7334a6101c504dd530708fbdb3a",
-    "src/block.rs": "9ebe50d955f8d279f473b95b3782a6ae1e6911602038f346a977bafcd9aa91ce",
+    "src/block.rs": "94556e80a40ee33a51e7e11818dae2bba34e33588617fd200d74f5e89b76c9c4",
     "src/entities.rs": "5365ef243f0dcf51d4a05e0915d73547e247be51129f5edc77b19c1c9d94d36c",
     "src/ffi.rs": "0f5f92435df4763d251e2b003d3e2900a0c09cb95b38101b40a4018ccc8c5ccb",
     "src/hooks.rs": "a19341a9b600f80ee2fcb71441ebeb7ec31b03883e28dadd1a8af59b027ce193",

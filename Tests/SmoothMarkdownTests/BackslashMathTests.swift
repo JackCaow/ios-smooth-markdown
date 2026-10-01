@@ -62,6 +62,10 @@ final class BackslashMathTests: XCTestCase {
         XCTAssertEqual(MathSyntax.sections("\\[\nx[0]\n"), [.block("x[0]")])
         XCTAssertEqual(MathSyntax.sections(#"\[unfinished"#), [.block("unfinished")])
         XCTAssertEqual(MathSyntax.sections(#"\[x[0]\]"#), [.block("x[0]")])
+        for (source, literal) in [("\\[x[0]\n+1\n\\]", "x[0]\n+1"), (#"\[x[0]"#, "x[0]")] {
+            XCTAssertEqual(MarkdownCoreParser().parse(source).children[0].literalText, literal)
+            for native in [true, false] { XCTAssertEqual(MathSyntax.sections(source, useNativeProjection: native), [.block(literal)]) }
+        }
     }
 
 }
