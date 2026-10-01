@@ -51,7 +51,7 @@ jobs:
         run: xcodegen generate
       - name: Compile Swift package tests for iOS devices
         working-directory: ios-smooth-markdown
-        run: xcodebuild build-for-testing -scheme ios-smooth-markdown -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild build-for-testing -scheme ios-smooth-markdown-Package -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
       - name: Build Demo for iOS devices
         working-directory: ios-smooth-markdown
         run: xcodebuild build -project Demo/SmoothMarkdownDemo.xcodeproj -scheme SmoothMarkdownDemo -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO

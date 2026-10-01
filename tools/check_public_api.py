@@ -18,8 +18,14 @@ with tempfile.TemporaryDirectory() as temporary:
             '-target', platform.machine()+'-apple-macos14.0', '-output-dir', temporary], check=True)
     for path in Path(temporary).glob('*.symbols.json'):
         for symbol in json.loads(path.read_text()).get('symbols', []):
+            identifier = symbol['identifier']['precise']
+            # Imported protocol defaults (for example SwiftUI.View modifiers)
+            # belong to the SDK, not this package's compatibility contract.
+            origin = identifier.split('::SYNTHESIZED::', 1)[0]
+            if not origin.startswith(('s:14SmoothMarkdown', 's:18SmoothMarkdownCore')):
+                continue
             declaration = ''.join(fragment['spelling'] for fragment in symbol.get('declarationFragments', []))
-            rows.add(symbol['identifier']['precise']+' | '+declaration)
+            rows.add(identifier+' | '+declaration)
 current = '\n'.join(sorted(rows))+'\n'
 baseline = root/'api/public-swift.txt'
 if args.update:

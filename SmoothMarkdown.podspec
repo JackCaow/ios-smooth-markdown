@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name = 'SmoothMarkdown'
-  spec.version = '0.2.0'
+  spec.version = '0.3.0'
   spec.summary = 'Native SwiftUI Markdown reader, streaming reader, and editor.'
   spec.description = <<-DESC
     A native iOS Markdown library with source-preserving CommonMark and GFM

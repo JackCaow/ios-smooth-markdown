@@ -1,6 +1,6 @@
 # Public library contract
 
-The structured APIs in this source revision are additive. Published 0.2.0 packages do not contain them. Existing flat reader and streaming entry points remain supported for source consumers.
+The planned release containing these APIs is 0.3.0; it has not been published yet. The structured APIs in this source revision are additive. Published 0.2.0 packages do not contain them. Existing flat reader and streaming entry points remain supported for source consumers.
 
 ## Configuration ownership
 
