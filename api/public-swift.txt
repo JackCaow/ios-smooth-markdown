@@ -1524,3 +1524,8 @@ s:18SmoothMarkdownCore0bC6ParserV9enableGFMACSb_tcfc | init(enableGFM: Bool = tr
 s:18SmoothMarkdownCore0bC6ParserV9enableGFMSbvp | var enableGFM: Bool
 s:18SmoothMarkdownCore21NativeHTMLEntityTableO | enum NativeHTMLEntityTable
 s:18SmoothMarkdownCore21NativeHTMLEntityTableO6valuesSDyS2SGvpZ | static let values: [String : String]
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE15markdownStringsAD0fH0Vvp | var markdownStrings: MarkdownStrings { get set }
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE17markdownResourcesAD0F15ResourceOptionsVvp | var markdownResources: MarkdownResourceOptions { get set }
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE19markdownEditorThemeAD0fhI0Vvp | var markdownEditorTheme: MarkdownEditorTheme { get set }
+s:7SwiftUI4ViewP14SmoothMarkdownE19markdownEditorThemeyQrAD0egH0VF | @MainActor func markdownEditorTheme(_ theme: MarkdownEditorTheme) -> some View
+

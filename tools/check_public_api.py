@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as temporary:
             # Imported protocol defaults (for example SwiftUI.View modifiers)
             # belong to the SDK, not this package's compatibility contract.
             origin = identifier.split('::SYNTHESIZED::', 1)[0]
-            if not origin.startswith(('s:14SmoothMarkdown', 's:18SmoothMarkdownCore')):
+            if '::SYNTHESIZED::' in identifier and not origin.startswith(('s:14SmoothMarkdown', 's:18SmoothMarkdownCore')):
                 continue
             declaration = ''.join(fragment['spelling'] for fragment in symbol.get('declarationFragments', []))
             rows.add(identifier+' | '+declaration)
