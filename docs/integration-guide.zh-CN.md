@@ -8,9 +8,9 @@
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 已发布版本 | SwiftPM `0.3.1`，或 CocoaPods Git tag `0.3.1` |
+| 已发布版本 | SwiftPM `0.3.1`，或公共 CocoaPods `0.3.1` |
 | 最新增量和后台流式优化 | 固定 Git revision `043093bc1f38beac6832ec37b448f0f27eb3c7bf` |
-| CocoaPods Trunk | 尚未发布，使用 Git 安装方式 |
+| CocoaPods Trunk | `0.3.1` 已进入公共 Specs；支持直接按 Pod 名安装 |
 
 `0.3.1` 包含自有 Rust 解析器、独立 Core、分组配置和 Design Token，以及原生增量传输、后台调度和完成时序修复。新接入可直接使用 `0.3.1` tag；第 10 节保留同一实现的固定提交接入方式。
 
@@ -49,11 +49,13 @@ Swift package 的依赖声明：
 platform :ios, '17.0'
 
 target 'YourApp' do
-  pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'
+  pod 'SmoothMarkdown', '~> 0.3.1'
 end
 ```
 
-执行 `pod install`，之后打开应用的 `.xcworkspace`。默认安装 UI 和它的 Core 依赖，模块名同样是 `SmoothMarkdown`。不要在同一应用 target 内同时安装 SwiftPM 和 CocoaPods 的这份库，以免重复链接。
+执行 `pod install --repo-update`，之后打开应用的 `.xcworkspace`。默认安装 UI 和它的 Core 依赖，模块名同样是 `SmoothMarkdown`。不要在同一应用 target 内同时安装 SwiftPM 和 CocoaPods 的这份库，以免重复链接。
+
+本机发布验收时 CocoaPods CDN 返回 `403`，通过官方 Git Specs 源完成了安装与编译。遇到同类访问问题，可在 Podfile 顶部添加 `source 'https://github.com/CocoaPods/Specs.git'`；该源是 CocoaPods 官方公共索引，库依赖仍只写 Pod 名，不需要 `:git` 或 `:path`。
 
 ## 3 最小阅读页面
 
@@ -269,7 +271,7 @@ Core 使用 Foundation 和随包提供的静态 Rust 解析器，无 SwiftUI、U
 CocoaPods 只安装 Core：
 
 ```ruby
-pod 'SmoothMarkdown/Core', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'
+pod 'SmoothMarkdown/Core', '~> 0.3.1'
 ```
 
 CocoaPods Core 的模块名是 `SmoothMarkdown`，代码应 `import SmoothMarkdown`；它与 SwiftPM 的独立 Core 模块导入名不同。
@@ -300,7 +302,7 @@ pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.g
 | 现象 | 检查与处理 |
 | --- | --- |
 | `No such module SmoothMarkdown` | 检查 product 是否加到应用 target；Pods 工程打开 `.xcworkspace` |
-| `pod 'SmoothMarkdown'` 找不到 | 尚未发布 Trunk，使用第 2 节 Git 方式 |
+| `pod 'SmoothMarkdown'` 找不到 | 使用 `0.3.1` 并执行 `pod install --repo-update`；CDN 访问失败时按第 2 节切换官方 Git Specs 源 |
 | 找不到后台增量功能 | 升级到 `0.3.1`；也可按第 10 节固定 revision 接入 |
 | 字体或行距在选择模式下不同 | 用明确的 `MarkdownFontToken` 和行高 token，不只修改旧 SwiftUI Font |
 | 图片不显示 | 检查完整 HTTPS 地址、认证头、响应格式、ATS 策略和资源错误视图 |
@@ -319,4 +321,5 @@ pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.g
 - [API 和实现范围](reference.md)
 - [自定义节点渲染](custom-blocks.md)
 - [后台流式验收](../benchmarks/stream-background-2026-10-01.md)
+- [CocoaPods 发布验收](cocoapods-release-0.3.1.md)
 - [已发布版本](https://github.com/JackCaow/ios-smooth-markdown/releases)

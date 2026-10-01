@@ -21,9 +21,9 @@ targets: [
 ]
 ```
 
-For CocoaPods, add `pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'` to your `Podfile` and run `pod install`. This is a direct Git install; the pod is not published to CocoaPods Trunk yet.
+For CocoaPods, add `pod 'SmoothMarkdown', '~> 0.3.1'` to your `Podfile` and run `pod install --repo-update`. Version 0.3.1 is published to the public Specs registry. If the default CDN is unavailable on your network, use `source 'https://github.com/CocoaPods/Specs.git'`; see the [release verification](cocoapods-release-0.3.1.md).
 
-For parser and HTML export only, select the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. CocoaPods consumers can select `SmoothMarkdown/Core` with the same Git source/tag and `import SmoothMarkdown`; the default `SmoothMarkdown` pod includes the UI subspec. See [binary distribution](rust-parser.md) for supported architectures.
+For parser and HTML export only, select the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. CocoaPods consumers can install `pod 'SmoothMarkdown/Core', '~> 0.3.1'` and `import SmoothMarkdown`; the default `SmoothMarkdown` pod includes the UI subspec. See [binary distribution](rust-parser.md) for supported architectures.
 
 Render Markdown in any SwiftUI screen:
 

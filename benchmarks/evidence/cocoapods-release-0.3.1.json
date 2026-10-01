@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-01",
+  "version": "0.3.1",
+  "source_commit": "8f046cf0014341678a87304070c4c2017614c88a",
+  "trunk_registry_record": "confirmed",
+  "public_spec": "https://github.com/CocoaPods/Specs/blob/master/Specs/b/a/a/SmoothMarkdown/0.3.1/SmoothMarkdown.podspec.json",
+  "trunk_push_client_exit": 1,
+  "trunk_push_client_error": "GitHub commit API timed out after Core/UI validation; public Specs and Trunk latest confirmed afterward",
+  "consumer_spec_source": "https://github.com/CocoaPods/Specs.git",
+  "consumer_dependency": "pod 'SmoothMarkdown', '0.3.1'",
+  "consumer_install": "passed",
+  "consumer_build": "iOS Simulator build succeeded",
+  "pods": [
+    "SmoothMarkdown 0.3.1",
+    "SmoothMarkdown/Core 0.3.1",
+    "SmoothMarkdown/UI 0.3.1"
+  ],
+  "third_party_pods": [],
+  "cdn_http_status": 403,
+  "cdn_error_code": 1010,
+  "boundaries": [
+    "Default CDN installation did not pass on this network; official Git Specs installation did",
+    "Compile-only consumer verification; no additional device or frame-time claim"
+  ]
+}

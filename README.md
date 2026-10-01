@@ -21,15 +21,15 @@ targets: [
 ]
 ```
 
-CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
+CocoaPods `0.3.1` is published to the public Specs registry. Add this to your `Podfile`, then run `pod install --repo-update`:
 
 ```ruby
-pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'
+pod 'SmoothMarkdown', '~> 0.3.1'
 ```
 
-`SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
+The `Demo` app is for exploration and is not required by the package. If your network cannot access the default CocoaPods CDN, use the official Git Specs source: `source 'https://github.com/CocoaPods/Specs.git'`. See the [release verification](docs/cocoapods-release-0.3.1.md).
 
-For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use the same Git tag with `pod 'SmoothMarkdown/Core', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use `pod 'SmoothMarkdown/Core', '~> 0.3.1'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
 
 ### SVG and math
 
