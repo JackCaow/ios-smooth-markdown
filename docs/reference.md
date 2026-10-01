@@ -12,7 +12,7 @@ For a package manifest, add the same repository and product:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.1")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -21,7 +21,7 @@ targets: [
 ]
 ```
 
-For CocoaPods, add `pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.0'` to your `Podfile` and run `pod install`. This is a direct Git install; the pod is not published to CocoaPods Trunk yet.
+For CocoaPods, add `pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'` to your `Podfile` and run `pod install`. This is a direct Git install; the pod is not published to CocoaPods Trunk yet.
 
 For parser and HTML export only, select the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. CocoaPods consumers can select `SmoothMarkdown/Core` with the same Git source/tag and `import SmoothMarkdown`; the default `SmoothMarkdown` pod includes the UI subspec. See [binary distribution](rust-parser.md) for supported architectures.
 

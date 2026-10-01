@@ -8,11 +8,11 @@ The library is under active development. It supports common Markdown and GFM con
 
 Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. The library-owned Rust parser produces a Swift AST through a C bridge; SVG and math rendering use Apple frameworks. The static parser binary is included, so app developers do not need Rust or Cargo.
 
-In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.1** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.1")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -24,12 +24,12 @@ targets: [
 CocoaPods can install the same code directly from Git. Add this to your `Podfile`, then run `pod install`:
 
 ```ruby
-pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.0'
+pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'
 ```
 
 `SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
 
-For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use the same Git tag with `pod 'SmoothMarkdown/Core', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.0'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use the same Git tag with `pod 'SmoothMarkdown/Core', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :tag => '0.3.1'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
 
 ### SVG and math
 
@@ -41,9 +41,11 @@ Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layo
 
 The shared owned parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
 
-Version `0.3.0` adds grouped options, resource loading, localized labels, design tokens and an independent parsing core. Reader, streaming, editor syntax recognition, plugins and HTML export use the shared owned parser. Existing flat entry points remain supported. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
+Version `0.3.1` includes the grouped options, resource loading, localized labels, design tokens and independent parsing core introduced in `0.3.0`. It adds native incremental stream sessions, bounded tail transport and background parsing with latest-prefix coalescing. Final publication, cancellation and worker cleanup are verified. Reader, streaming, editor syntax recognition, plugins and HTML export use the shared owned parser. Existing flat entry points remain supported. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
 
 ## Quick start
+
+[中文接入手册](docs/integration-guide.zh-CN.md)：安装、样式、流式回复、图片、插件、编辑器及最新固定提交接入。
 
 ### Render a document
 
