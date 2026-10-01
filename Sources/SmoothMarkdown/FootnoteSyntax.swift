@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// Footnote definitions and references handled by the native extension pipeline.
 enum FootnoteSyntax {
@@ -20,6 +23,31 @@ enum FootnoteSyntax {
     private static let definitionPattern = try! NSRegularExpression(pattern: #"^\[\^([^\]]+)\]:\s+(.+)$"#)
 
     static func sections(_ markdown: String) -> [Section] {
+        if let root = NativeMarkdownExtensionProjection.parse(markdown) {
+            let original = markdown as NSString
+            var result: [Section] = []; var cursor = 0
+            for node in root.children {
+                guard case .footnoteDefinition(let label) = node.kind else { continue }
+                if node.sourceRange.location > cursor {
+                    var ordinary = original.substring(with: NSRange(location: cursor, length: node.sourceRange.location - cursor))
+                    if ordinary.hasSuffix("\r\n") { ordinary = String(ordinary.dropLast(2)) }
+                    else if ordinary.hasSuffix("\n") { ordinary = String(ordinary.dropLast()) }
+                    if !ordinary.isEmpty { result.append(.markdown(ordinary)) }
+                }
+                let lines = node.source.components(separatedBy: "\n")
+                var contents: [String] = []
+                if let first = lines.first, let colon = first.firstIndex(of: ":") {
+                    contents.append(first[first.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+                contents.append(contentsOf: lines.dropFirst().filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.map { $0.trimmingCharacters(in: .whitespaces) })
+                result.append(.definition(.init(label: label, content: contents.joined(separator: "\n"))))
+                cursor = NSMaxRange(node.sourceRange)
+                // Definition separators are not part of the surrounding Markdown.
+                while cursor < original.length, original.character(at: cursor) == 10 || original.character(at: cursor) == 13 { cursor += 1 }
+            }
+            if cursor < original.length { result.append(.markdown(original.substring(from: cursor))) }
+            return result
+        }
         let lines = markdown.components(separatedBy: "\n")
         var sections: [Section] = []
         var ordinary: [String] = []
@@ -74,6 +102,21 @@ enum FootnoteSyntax {
     }
 
     static func parts(in text: String) -> [Part] {
+        if let root = NativeMarkdownExtensionProjection.parse(text) {
+            func references(_ node: NativeMarkdownNode) -> [NativeMarkdownNode] {
+                if case .footnoteReference = node.kind { return [node] }
+                return node.children.flatMap(references)
+            }
+            let original = text as NSString
+            var parts: [Part] = []; var cursor = 0
+            for node in references(root) {
+                if node.sourceRange.location > cursor { parts.append(.text(original.substring(with: NSRange(location: cursor, length: node.sourceRange.location - cursor)))) }
+                if case .footnoteReference(let label) = node.kind { parts.append(.reference(label)) }
+                cursor = NSMaxRange(node.sourceRange)
+            }
+            if cursor < original.length { parts.append(.text(original.substring(from: cursor))) }
+            return parts
+        }
         var parts: [Part] = []
         var ordinary = ""
         var cursor = text.startIndex

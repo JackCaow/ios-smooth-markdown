@@ -17,6 +17,7 @@ Pod::Spec.new do |spec|
   spec.default_subspec = 'UI'
   spec.subspec 'Core' do |core|
     core.source_files = 'Sources/SmoothMarkdownCore/**/*.swift'
+    core.vendored_frameworks = 'Artifacts/CSmoothMarkdownRust.xcframework'
     core.frameworks = 'Foundation'
   end
   spec.subspec 'UI' do |ui|
@@ -25,4 +26,5 @@ Pod::Spec.new do |spec|
     ui.frameworks = 'SwiftUI', 'UIKit', 'WebKit', 'CoreText', 'CoreGraphics'
   end
   spec.static_framework = true
+  spec.preserve_paths = 'rust-core/**/*', 'tools/build-rust-parser.py'
 end

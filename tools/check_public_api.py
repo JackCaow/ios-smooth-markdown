@@ -15,6 +15,7 @@ with tempfile.TemporaryDirectory() as temporary:
     for module in ['SmoothMarkdownCore', 'SmoothMarkdown']:
         subprocess.run(['xcrun', 'swift', 'symbolgraph-extract', '-module-name', module,
             '-minimum-access-level', 'public', '-I', str(modules), '-sdk', sdk,
+            '-I', str(root/'Artifacts/CSmoothMarkdownRust.xcframework/macos-arm64_x86_64/Headers'),
             '-target', platform.machine()+'-apple-macos14.0', '-output-dir', temporary], check=True)
     for path in Path(temporary).glob('*.symbols.json'):
         for symbol in json.loads(path.read_text()).get('symbols', []):

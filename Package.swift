@@ -10,7 +10,8 @@ let package = Package(
     ],
     dependencies: [],
     targets: [
-        .target(name: "SmoothMarkdownCore"),
+        .binaryTarget(name: "CSmoothMarkdownRust", path: "Artifacts/CSmoothMarkdownRust.xcframework"),
+        .target(name: "SmoothMarkdownCore", dependencies: ["CSmoothMarkdownRust"]),
         .target(name: "SmoothMarkdown", dependencies: ["SmoothMarkdownCore"]),
         .testTarget(name: "SmoothMarkdownTests", dependencies: ["SmoothMarkdown"], resources: [.process("Fixtures")])
     ]

@@ -1,0 +1,4 @@
+module CSmoothMarkdownRust {
+  header "smooth_markdown_rust.h"
+  export *
+}
