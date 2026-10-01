@@ -39,4 +39,29 @@ final class BackslashMathTests: XCTestCase {
         XCTAssertEqual(MathSyntax.sections("```\n\\[x\\]\n```", useNativeProjection: false), [.markdown("```\n\\[x\\]\n```")])
     }
 
+    func testDisplayLiteralAndTrailingProseKeepSeparateSourceRanges() {
+        for source in [#"\[x\] trailing"#, "\\[\nx\n\\] trailing"] {
+            let nodes = MarkdownCoreParser().parse(source).children
+            XCTAssertEqual(nodes.count, 2)
+            XCTAssertEqual(nodes[0].kind, .blockMath)
+            XCTAssertEqual(nodes[0].literalText, "x")
+            XCTAssertTrue(nodes[0].source.hasSuffix(#"\]"#))
+            XCTAssertEqual(nodes[1].kind, .paragraph)
+            XCTAssertEqual(nodes[1].source, " trailing")
+            XCTAssertEqual(NSMaxRange(nodes[0].sourceRange), nodes[1].sourceRange.location)
+            for native in [true, false] {
+                XCTAssertEqual(MathSyntax.sections(source, useNativeProjection: native), [.block("x"), .markdown(" trailing")])
+            }
+        }
+    }
+    func testOrdinaryEscapedBracketsRemainProseAndUnclosedMathStaysMutable() {
+        for source in [#"\[^escaped] and [^real]"#, #"\[ordinary] prose"#] {
+            XCTAssertEqual(MarkdownCoreParser().parse(source).children[0].kind, .paragraph)
+            for native in [true, false] { XCTAssertEqual(MathSyntax.sections(source, useNativeProjection: native), [.markdown(source)]) }
+        }
+        XCTAssertEqual(MathSyntax.sections("\\[\nx[0]\n"), [.block("x[0]")])
+        XCTAssertEqual(MathSyntax.sections(#"\[unfinished"#), [.block("unfinished")])
+        XCTAssertEqual(MathSyntax.sections(#"\[x[0]\]"#), [.block("x[0]")])
+    }
+
 }

@@ -21,7 +21,7 @@ enum CodeSyntaxHighlighter {
         "json": [],
         "shell": ["case", "do", "done", "elif", "else", "esac", "export", "fi", "for", "function", "if", "in", "local", "return", "then", "while"],
     ]
-    private static let literals: Set<String> = ["true", "false", "null", "nil", "None", "True", "False", "undefined"]
+    fileprivate static let literals: Set<String> = ["true", "false", "null", "nil", "None", "True", "False", "undefined"]
 
     static func normalizedLanguage(_ language: String?) -> String? {
         guard let raw = language?
@@ -380,6 +380,7 @@ private let markdownKeywords: Set<String> = ["todo", "fixme", "note"]
 
 private func classifyIdentifier(_ word: String, chars: [Character], end: Int, language: String) -> CodeSyntaxHighlighter.Kind? {
     let lower = word.lowercased()
+    if CodeSyntaxHighlighter.literals.contains(word) { return .literal }
     if keywords(for: language).contains(lower) || (CodeSyntaxHighlighter.keywordSets[language]?.contains(word) ?? false) || commonKeywords.contains(lower) {
         return .keyword
     }

@@ -18,16 +18,18 @@ public struct MarkdownFontToken {
         let size = MarkdownTokenValidation.positive(self.size, fallback: 17)
         if let fontName { return .custom(fontName, size: size, relativeTo: role).weight(weight) }
         #if os(iOS)
-        // System font PostScript names such as .SFUI-* are private and cannot
-        // be loaded through Font.custom. Scale the system size with the same
-        // Dynamic Type role used by the selectable UIKit reader instead.
-        let scaledSize = UIFontMetrics(forTextStyle: MarkdownTypography.uiTextStyle(role)).scaledValue(for: size)
-        return .system(size: scaledSize, weight: weight, design: monospaced ? .monospaced : .default)
+        return font(relativeTo: role, traits: UITraitCollection.current)
         #else
         return .system(size: size, weight: weight, design: monospaced ? .monospaced : .default)
         #endif
     }
     #if os(iOS)
+    /// The renderer supplies its SwiftUI environment traits rather than the process category.
+    func font(relativeTo role: Font.TextStyle, traits: UITraitCollection) -> Font {
+        if fontName != nil { return font(relativeTo: role) }
+        return .system(size: uiFont(textStyle: role, traits: traits).pointSize,
+                       weight: weight, design: monospaced ? .monospaced : .default)
+    }
     var uiWeight: UIFont.Weight {
         switch weight {
         case .ultraLight: .ultraLight

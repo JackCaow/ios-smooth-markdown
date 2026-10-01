@@ -27,8 +27,14 @@ enum MathSyntax {
                 var content = node.source.trimmingCharacters(in: .whitespacesAndNewlines)
                 if content.hasPrefix("$$") || content.hasPrefix("\\[") { content = String(content.dropFirst(2)) }
                 if content.hasSuffix("$$") || content.hasSuffix("\\]") { content = String(content.dropLast(2)) }
-                sections.append(.block(content.trimmingCharacters(in: .whitespacesAndNewlines)))
+                sections.append(.block(node.literalText ?? content.trimmingCharacters(in: .whitespacesAndNewlines)))
                 cursor = NSMaxRange(node.sourceRange)
+                // A closed display formula owns its delimiters; consume only
+                // an immediately following line ending, retaining any prose.
+                if cursor < original.length, original.character(at: cursor) == 13 {
+                    cursor += 1
+                    if cursor < original.length, original.character(at: cursor) == 10 { cursor += 1 }
+                } else if cursor < original.length, original.character(at: cursor) == 10 { cursor += 1 }
             }
             if cursor < original.length { sections.append(.markdown(original.substring(from: cursor))) }
             return sections
@@ -58,7 +64,7 @@ enum MathSyntax {
                 index += 1
                 continue
             }
-            guard trimmed.hasPrefix("$$") || trimmed.hasPrefix("\\[") else {
+            guard trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) else {
                 ordinary.append(line)
                 index += 1
                 continue
@@ -68,25 +74,18 @@ enum MathSyntax {
                 ordinary.removeAll()
             }
             let closing = trimmed.hasPrefix("$$") ? "$$" : "\\]"
-            var opening = String(trimmed.dropFirst(2))
-            if opening.hasSuffix(closing) {
-                opening = String(opening.dropLast(2))
-                result.append(.block(opening.trimmingCharacters(in: .whitespacesAndNewlines)))
-                index += 1
-                continue
-            }
-            var contents: [String] = opening.isEmpty ? [] : [opening]
+            var body = String(trimmed.dropFirst(2))
             index += 1
-            while index < lines.count {
-                let next = lines[index].trimmingCharacters(in: .whitespaces)
-                if next.hasPrefix(closing) {
-                    index += 1
-                    break
-                }
-                contents.append(lines[index])
-                index += 1
+            while mathClosing(body, delimiter: closing) == nil, index < lines.count {
+                body += "\n" + lines[index]; index += 1
             }
-            result.append(.block(contents.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)))
+            if let close = mathClosing(body, delimiter: closing) {
+                result.append(.block(String(body[..<close.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)))
+                let trailing = String(body[close.upperBound...])
+                if closing == #"\]"#, !trailing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { ordinary.append(trailing) }
+            } else {
+                result.append(.block(body.trimmingCharacters(in: .whitespacesAndNewlines)))
+            }
         }
         if !ordinary.isEmpty { result.append(.markdown(ordinary.joined(separator: "\n"))) }
         return result
@@ -148,6 +147,28 @@ enum MathSyntax {
         }
         if !ordinary.isEmpty { result.append(.text(ordinary)) }
         return result
+    }
+
+    private static func backslashMathOpen(_ text: String) -> Bool {
+        guard text.hasPrefix(#"\["#) else { return false }
+        let payload = String(text.dropFirst(2))
+        return mathClosing(payload, delimiter: #"\]"#) != nil || mathClosing(payload, delimiter: "]") == nil
+    }
+
+    private static func mathClosing(_ source: String, delimiter: String) -> Range<String.Index>? {
+        if delimiter == "$$" { return source.range(of: delimiter) }
+        var cursor = source.startIndex
+        while cursor < source.endIndex, let found = source.range(of: delimiter, range: cursor..<source.endIndex) {
+            var before = found.lowerBound; var escapes = 0
+            while before > source.startIndex {
+                let previous = source.index(before: before)
+                guard source[previous] == "\\" else { break }
+                escapes += 1; before = previous
+            }
+            if escapes % 2 == 0 { return found }
+            cursor = found.upperBound
+        }
+        return nil
     }
 
     private static func boundaryText(_ text: String) -> String {

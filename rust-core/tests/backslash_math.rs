@@ -44,3 +44,44 @@ fn every_stream_prefix_matches_batch_including_unclosed_blocks_and_references() 
         assert_eq!(current, parse(prefix, Options::default()), "prefix {prefix:?}");
     }
 }
+
+#[test]
+fn escaped_bracket_prose_and_closed_math_trailers_keep_their_source() {
+    for source in [r"\[^escaped] and [^real]", r"\[ordinary] prose"] {
+        let root = parse(source, Options::default());
+        assert_eq!(root.children[0].kind, Kind::Paragraph);
+        assert!(math(&root, Kind::BlockMath).is_empty());
+    }
+    for source in [r"\[x\] trailing", "\\[\nx\n\\] trailing"] {
+        let root = parse(source, Options::default());
+        assert_eq!(root.children.len(), 2);
+        assert_eq!(root.children[0].kind, Kind::BlockMath);
+        assert_eq!(root.children[0].literal.as_deref(), Some("x"));
+        assert!(root.children[0].source.ends_with(r"\]"));
+        assert_eq!(root.children[1].kind, Kind::Paragraph);
+        assert_eq!(root.children[1].source, " trailing");
+        assert_eq!(root.children[0].span.start + root.children[0].span.len, root.children[1].span.start);
+    }
+}
+
+#[test]
+fn every_prefix_keeps_bracket_prose_and_math_trailers_equivalent() {
+    for source in [
+        "a\n\nb\n\nc\n\n\\[^escaped] and [^real]\n\nend",
+        "a\n\nb\n\nc\n\n\\[ordinary] prose\n\nend",
+        "a\n\nb\n\nc\n\n\\[x\\] trailing\n\nend",
+        "a\n\nb\n\nc\n\n\\[\nx[0]\n\n\\] trailing\n\nend",
+        "a\n\nb\n\nc\n\n\\[x[0]\\] trailing\n\nend",
+    ] {
+        let mut session = Session::new(Options::default());
+        let mut current = Node::new(Kind::Document, "", 0, 0);
+        for end in source.char_indices().map(|(i,_)| i).chain(std::iter::once(source.len())) {
+            let prefix = &source[..end];
+            let delta = session.update(&prefix.encode_utf16().collect::<Vec<_>>());
+            current.children.truncate(delta.retained_blocks);
+            current.children.extend(delta.children);
+            current.source = prefix.to_owned(); current.span.len = prefix.encode_utf16().count() as u32;
+            assert_eq!(current, parse(prefix, Options::default()), "prefix {prefix:?}");
+        }
+    }
+}

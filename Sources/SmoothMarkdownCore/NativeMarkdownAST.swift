@@ -148,15 +148,38 @@ public struct NativeMarkdownASTParser {
                 continue
             }
             let trimmed = text.trimmingCharacters(in: .whitespaces)
-            if enableNativeExtensions, trimmed.hasPrefix("$$") || trimmed.hasPrefix("\\[") {
+            if enableNativeExtensions, trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) {
                 let closing = trimmed.hasPrefix("$$") ? "$$" : "\\]"
                 var body = String(trimmed.dropFirst(2))
                 index += 1
-                while body.range(of: closing) == nil, index < lines.count {
+                while mathClosing(body, delimiter: closing) == nil, index < lines.count {
                     body += "\n" + lines[index].text; index += 1
                 }
-                if let end = body.range(of: closing) { body = String(body[..<end.lowerBound]) }
-                result.append(node(.blockMath, start, index, literalText: body.trimmingCharacters(in: .whitespacesAndNewlines))); continue
+                let close = mathClosing(body, delimiter: closing)
+                let literal = (close.map { String(body[..<$0.lowerBound]) } ?? body).trimmingCharacters(in: .whitespacesAndNewlines)
+                var math = node(.blockMath, start, index, literalText: literal)
+                var trailing: NativeMarkdownNode?
+                if closing == #"\]"#, close != nil {
+                    let last = lines[index - 1]
+                    let prefix = index == start + 1 ? last.text.count - last.text.trimmingCharacters(in: .whitespaces).count + 2 : 0
+                    let searchStart = last.text.index(last.text.startIndex, offsetBy: prefix)
+                    let suffix = String(last.text[searchStart...])
+                    let end = prefix + suffix.distance(from: suffix.startIndex, to: mathClosing(suffix, delimiter: closing)!.upperBound)
+                    let endIndex = last.text.index(last.text.startIndex, offsetBy: end)
+                    let sourceEnd = last.start + String(last.text[..<endIndex]).utf16.count - last.virtualIndent
+                    let range = NSRange(location: math.sourceRange.location, length: sourceEnd - math.sourceRange.location)
+                    math = .init(kind: .blockMath, source: (source as NSString).substring(with: range), sourceRange: range, literalText: literal)
+                    let text = String(last.text[endIndex...])
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        let line = Line(text: text, raw: text + (last.raw.hasSuffix("\n") ? "\n" : ""), start: sourceEnd, sourceEnd: last.end, projected: last.projected)
+                        let range = NSRange(location: sourceEnd, length: last.end - sourceEnd)
+                        trailing = .init(kind: .paragraph, source: (source as NSString).substring(with: range), sourceRange: range,
+                            children: paragraphInlines([line], source: source, references: references))
+                    }
+                }
+                result.append(math)
+                if let trailing { result.append(trailing) }
+                continue
             }
             if let heading = heading(text) {
                 let body = heading.body
@@ -245,6 +268,7 @@ public struct NativeMarkdownASTParser {
             }
             index += 1
             while index < lines.count, !lines[index].isBlank,
+                  !(enableNativeExtensions && (lines[index].text.trimmingCharacters(in: .whitespaces).hasPrefix("$$") || backslashMathOpen(lines[index].text.trimmingCharacters(in: .whitespaces)))),
                   (lines[index].lazyContinuation ||
                    (setextLevel(lines[index].text) == nil &&
                     !interruptsParagraph(at: index, lines: lines))) { index += 1 }
@@ -365,6 +389,27 @@ public struct NativeMarkdownASTParser {
     private func setextLevel(_ line: String) -> Int? {
         if match(#"^ {0,3}=+[ \t]*$"#, line) != nil { return 1 }
         if match(#"^ {0,3}-+[ \t]*$"#, line) != nil { return 2 }
+        return nil
+    }
+
+    private func backslashMathOpen(_ text: String) -> Bool {
+        guard text.hasPrefix(#"\["#) else { return false }
+        let payload = String(text.dropFirst(2))
+        return mathClosing(payload, delimiter: #"\]"#) != nil || mathClosing(payload, delimiter: "]") == nil
+    }
+    private func mathClosing(_ source: String, delimiter: String) -> Range<String.Index>? {
+        if delimiter == "$$" { return source.range(of: delimiter) }
+        var cursor = source.startIndex
+        while cursor < source.endIndex, let found = source.range(of: delimiter, range: cursor..<source.endIndex) {
+            var before = found.lowerBound; var escapes = 0
+            while before > source.startIndex {
+                let previous = source.index(before: before)
+                guard source[previous] == "\\" else { break }
+                escapes += 1; before = previous
+            }
+            if escapes % 2 == 0 { return found }
+            cursor = found.upperBound
+        }
         return nil
     }
 
