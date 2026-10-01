@@ -42,10 +42,7 @@ public struct MermaidPlugin: BlockParserPlugin {
         if let diagram = MermaidParser.parse(match.content) {
             return AnyView(MarkdownMermaidFence(diagram: diagram, theme: theme(for: match), onNodeTap: onNodeTap))
         }
-        return AnyView(VStack(alignment: .leading, spacing: 6) {
-            SwiftUI.Text("Unsupported Mermaid diagram").font(.caption).foregroundColor(.secondary)
-            SwiftUI.Text(match.content).font(.system(.body, design: .monospaced)).textSelection(.enabled)
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(12))
+        return AnyView(UnsupportedMermaidFence(content: match.content))
     }
 
     func theme(for match: BlockPluginMatch) -> MermaidTheme? {
@@ -78,5 +75,16 @@ private struct MarkdownMermaidFence: View {
         MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap, style: tokens.mermaid)
             .frame(maxHeight: tokens.mermaid.maxHeight)
             .padding(tokens.mermaid.outerPadding)
+    }
+}
+
+private struct UnsupportedMermaidFence: View {
+    let content: String
+    @Environment(\.markdownStrings) private var strings
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SwiftUI.Text(strings["Unsupported Mermaid diagram"]).font(.caption).foregroundColor(.secondary)
+            SwiftUI.Text(content).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
     }
 }

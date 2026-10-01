@@ -346,15 +346,22 @@ s:14SmoothMarkdown0B12PluginTokensV8artifactAA0bc5PanelD0Vvp | var artifact: Mar
 s:14SmoothMarkdown0B12PluginTokensV8thinkingAA0bc5PanelD0Vvp | var thinking: MarkdownPluginPanelTokens
 s:14SmoothMarkdown0B12PluginTokensV8toolCallAA0bc5PanelD0Vvp | var toolCall: MarkdownPluginPanelTokens
 s:14SmoothMarkdown0B12SyntaxColorsV | struct MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV10diffRemove7SwiftUI5ColorVSgvp | var diffRemove: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV10normalizedACyF | func normalized() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV11punctuation7SwiftUI5ColorVSgvp | var punctuation: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV4darkACyFZ | static func dark() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV4type7SwiftUI5ColorVSgvp | var type: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV5lightACyFZ | static func light() -> MarkdownSyntaxColors
 s:14SmoothMarkdown0B12SyntaxColorsV6number7SwiftUI5ColorVvp | var number: Color
 s:14SmoothMarkdown0B12SyntaxColorsV6string7SwiftUI5ColorVvp | var string: Color
 s:14SmoothMarkdown0B12SyntaxColorsV7comment7SwiftUI5ColorVvp | var comment: Color
+s:14SmoothMarkdown0B12SyntaxColorsV7diffAdd7SwiftUI5ColorVSgvp | var diffAdd: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV7keyword6string7comment6number7literalAC7SwiftUI5ColorV_A4Ktcfc | init(keyword: Color = .purple, string: Color = .red, comment: Color = .green, number: Color = .blue, literal: Color = .teal)
 s:14SmoothMarkdown0B12SyntaxColorsV7keyword7SwiftUI5ColorVvp | var keyword: Color
 s:14SmoothMarkdown0B12SyntaxColorsV7literal7SwiftUI5ColorVvp | var literal: Color
+s:14SmoothMarkdown0B12SyntaxColorsV8function7SwiftUI5ColorVSgvp | var function: Color?
+s:14SmoothMarkdown0B12SyntaxColorsV8operator7SwiftUI5ColorVSgvp | var `operator`: Color?
+s:14SmoothMarkdown0B12SyntaxColorsV8property7SwiftUI5ColorVSgvp | var property: Color?
 s:14SmoothMarkdown0B13DetailsTokensV | struct MarkdownDetailsTokens
 s:14SmoothMarkdown0B13DetailsTokensV10normalizedACyF | func normalized() -> MarkdownDetailsTokens
 s:14SmoothMarkdown0B13DetailsTokensV11bodyPadding7SwiftUI10EdgeInsetsVvp | var bodyPadding: EdgeInsets
