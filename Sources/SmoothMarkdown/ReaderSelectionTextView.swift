@@ -12,6 +12,7 @@ private let externalLinkCueAttribute = NSAttributedString.Key("SmoothMarkdownExt
 @available(iOS 17.0, *)
 struct ReaderSelectionTextView: UIViewRepresentable {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.markdownStrings) private var strings
     @Environment(\.readerTextSelectionMenuBuilder) private var textSelectionMenuBuilder
     let document: ReaderSelectionDocument
     let styleSheet: MarkdownStyleSheet
@@ -25,7 +26,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     private var quotePadding: EdgeInsets {
         let base = styleSheet.blockquotePadding
         return useEnhancedComponents
-            ? EdgeInsets(top: base.top, leading: base.leading + 36,
+            ? EdgeInsets(top: base.top, leading: base.leading + (styleSheet.designTokens.quote.showIcon ? (styleSheet.designTokens.quote.iconTypography?.uiFont(textStyle: .body, traits: MarkdownTypography.traits(for: dynamicTypeSize)).pointSize ?? styleSheet.designTokens.quote.iconSize) + styleSheet.designTokens.quote.iconSpacing : 0),
                          bottom: base.bottom, trailing: base.trailing)
             : base
     }
@@ -102,18 +103,24 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             view.isSelectable = selectable && onTextLongPress == nil && onCharacterTap == nil
             view.invalidateIntrinsicContentSize()
         }
-        let decoration = styleSheet.resolvedBlockquoteDecoration
         view.quoteRegions = built.quoteRegions
         view.ruleRegions = built.ruleRegions
         view.headingRegions = built.headingRegions
+        applyDecorationStyles(to: view)
+    }
+
+    /// Shared by grouped selection and whole-document selection hosts.
+    func applyDecorationStyles(to view: QuoteTextView) {
+        let decoration = styleSheet.resolvedBlockquoteDecoration
         view.ruleColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
-        view.keycapBorderColor = UIColor(styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
+        view.designTokens = styleSheet.designTokens
+        view.keycapBorderColor = UIColor(styleSheet.designTokens.keyboard.borderColor ?? styleSheet.ruleColor ?? Color.secondary.opacity(0.4))
         view.ruleThickness = styleSheet.horizontalRuleThickness
         view.enhancedBlockquotes = useEnhancedComponents
-        view.quoteBarColor = useEnhancedComponents ? (view.tintColor ?? UIColor.systemBlue).withAlphaComponent(0.6)
-                                                   : UIColor(decoration.borderColor ?? .accentColor)
-        view.quoteBackgroundColor = useEnhancedComponents ? nil : decoration.backgroundColor.map(UIColor.init)
-        view.quoteBorderWidth = useEnhancedComponents ? 4 : decoration.borderWidth
+        let explicitBorder = styleSheet.blockquoteDecoration?.borderColor ?? styleSheet.quoteBarColor
+        view.quoteBarColor = UIColor(explicitBorder ?? (useEnhancedComponents ? Color.accentColor.opacity(styleSheet.designTokens.quote.borderAlpha) : decoration.borderColor ?? .accentColor))
+        view.quoteBackgroundColor = decoration.backgroundColor.map(UIColor.init)
+        view.quoteBorderWidth = decoration.borderWidth
         view.quotePadding = quotePadding
     }
 
@@ -131,7 +138,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
     private func selectionAccessibilityActions(for view: QuoteTextView) -> [UIAccessibilityCustomAction] {
         guard selectable || onTextLongPress != nil else { return [] }
         return [UIAccessibilityCustomAction(
-            name: "Select all reader text", target: view, selector: #selector(QuoteTextView.selectAllReaderText)
+            name: strings.selectAllReaderText, target: view, selector: #selector(QuoteTextView.selectAllReaderText)
         )]
     }
 
@@ -300,8 +307,9 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 + CGFloat(line.quoteDepth) * quotePadding.leading
             if line.kind == .detailsSummary { paragraph.firstLineHeadIndent += 28 }
             if line.kind == .footnoteDefinition { paragraph.firstLineHeadIndent += 16 }
-            if useEnhancedComponents, let headingLevel, headingLevel <= 2 {
-                paragraph.firstLineHeadIndent += 16
+            if useEnhancedComponents, let headingLevel, headingLevel <= styleSheet.designTokens.heading.decoratedThroughLevel {
+                paragraph.firstLineHeadIndent += styleSheet.designTokens.heading.padding.leading
+                    + styleSheet.designTokens.heading.barWidth + styleSheet.designTokens.heading.barSpacing
             }
             paragraph.headIndent = paragraph.firstLineHeadIndent
             if line.quoteDepth > 0 {
@@ -319,9 +327,10 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 paragraph.paragraphSpacingBefore += 8
                 paragraph.paragraphSpacing += 8
             }
-            if useEnhancedComponents, let headingLevel, headingLevel <= 2 {
-                paragraph.paragraphSpacingBefore += 8
-                paragraph.paragraphSpacing += 10
+            if useEnhancedComponents, let headingLevel, headingLevel <= styleSheet.designTokens.heading.decoratedThroughLevel {
+                paragraph.tailIndent -= styleSheet.designTokens.heading.padding.trailing
+                paragraph.paragraphSpacingBefore += styleSheet.designTokens.heading.padding.top
+                paragraph.paragraphSpacing += styleSheet.designTokens.heading.padding.bottom + styleSheet.designTokens.heading.ruleThickness
             }
             let semanticStyle = headingLevel.flatMap { level -> Font.TextStyle? in
                 let index = level - 1
@@ -329,11 +338,14 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     ? styleSheet.readerHeadingTextStyles[index] : nil
             } ?? styleSheet.readerParagraphTextStyle
             let textStyle = MarkdownTypography.uiTextStyle(semanticStyle)
-            let baseFont = MarkdownTypography.font(textStyle: textStyle, weight: weight,
-                                                   customSize: nil, traits: traits)
+            let fontToken = headingLevel.flatMap { level in
+                styleSheet.designTokens.typography.headings.flatMap { $0.indices.contains(level - 1) ? $0[level - 1] : nil }
+            } ?? (headingLevel == nil ? styleSheet.designTokens.typography.paragraph : nil)
+            let baseFont = fontToken?.uiFont(textStyle: semanticStyle, traits: traits)
+                ?? MarkdownTypography.font(textStyle: textStyle, weight: weight, customSize: nil, traits: traits)
             // Flutter's light stylesheet uses 1.5 for prose and 1.3/1.4 for headings.
             // A minimum height respects larger inline glyphs and keeps Dynamic Type scaling.
-            let heightFactor: CGFloat = headingLevel.map { $0 <= 2 ? 1.3 : 1.4 } ?? 1.5
+            let heightFactor: CGFloat = headingLevel.map { styleSheet.designTokens.typography.headingLineHeights[min(max($0 - 1, 0), 5)] } ?? styleSheet.designTokens.typography.paragraphLineHeight
             paragraph.minimumLineHeight = baseFont.pointSize * heightFactor
             paragraph.lineBreakStrategy = headingLevel == nil ? [] : .pushOut
             for (runIndex, run) in line.runs.enumerated() {
@@ -344,10 +356,16 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     underline: run.htmlUnderline, highlight: run.highlighted)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
                 let keycapStyle = styleSheet.kbdStyle
-                let scaledFont = MarkdownTypography.font(textStyle: textStyle,
-                                                         weight: fontWeight,
-                                                         customSize: run.keycap ? (keycapStyle?.fontSize ?? 13) : inlineStyle.fontSize,
-                                                         traits: traits)
+                let scaledFont: UIFont
+                if run.keycap || inlineStyle.fontSize != nil {
+                    scaledFont = MarkdownTypography.font(textStyle: textStyle, weight: fontWeight,
+                        customSize: run.keycap ? (keycapStyle?.fontSize ?? styleSheet.designTokens.keyboard.fontSize) : inlineStyle.fontSize,
+                        traits: traits)
+                } else if fontToken != nil {
+                    if inlineStyle.bold == true, let descriptor = baseFont.fontDescriptor.withSymbolicTraits(baseFont.fontDescriptor.symbolicTraits.union(.traitBold)) {
+                        scaledFont = UIFont(descriptor: descriptor, size: baseFont.pointSize)
+                    } else { scaledFont = baseFont }
+                } else { scaledFont = MarkdownTypography.font(textStyle: textStyle, weight: fontWeight, customSize: nil, traits: traits) }
                 let font = run.keycap || inlineStyle.monospaced == true
                     ? UIFont.monospacedSystemFont(ofSize: scaledFont.pointSize, weight: fontWeight)
                     : scaledFont
@@ -402,7 +420,12 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                                                                  traits: traits)
                     attributes[.foregroundColor] = UIColor(styleSheet.footnoteColor ?? .blue)
                 }
-                if run.pluginAccent { attributes[.foregroundColor] = UIColor.blue }
+                if run.pluginAccent {
+                    let pluginStyle = run.text.hasPrefix("@") ? styleSheet.designTokens.plugins.mentionStyle : styleSheet.designTokens.plugins.hashtagStyle
+                    if let color = pluginStyle.textColor { attributes[.foregroundColor] = UIColor(color) }
+                    if let color = pluginStyle.backgroundColor { attributes[.backgroundColor] = UIColor(color) }
+                    if let size = pluginStyle.fontSize { attributes[.font] = MarkdownTypography.font(textStyle: textStyle, weight: pluginStyle.bold == true ? .bold : weight, customSize: size, traits: traits) }
+                }
                 // Keep short inline code together when wrapping. NBSP has the
                 // same UTF-16 length as a space, so native selection offsets stay
                 // valid; the marker restores exact source text on Copy.
@@ -430,7 +453,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                     let paddingFont = UIFont.systemFont(ofSize: 1)
                     let padding: [NSAttributedString.Key: Any] = [
                         .font: paddingFont, .foregroundColor: UIColor.clear,
-                        .paragraphStyle: paragraph, .kern: 4.5,
+                        .paragraphStyle: paragraph, .kern: max(0, (styleSheet.designTokens.keyboard.padding.leading + styleSheet.designTokens.keyboard.padding.trailing) / 2 - 0.5),
                         keycapAttribute: output.length + runIndex,
                         keycapPaddingAttribute: true,
                     ]
@@ -444,7 +467,7 @@ struct ReaderSelectionTextView: UIViewRepresentable {
             if line.kind == .rule {
                 ruleRegions.append(NSRange(location: start, length: output.length - start))
             }
-            if useEnhancedComponents, let headingLevel, headingLevel <= 2, output.length > start {
+            if useEnhancedComponents, let headingLevel, headingLevel <= styleSheet.designTokens.heading.decoratedThroughLevel, output.length > start {
                 headingRegions.append(NSRange(location: start, length: output.length - start))
             }
             for (depth, id) in line.quoteIDs.enumerated() {
@@ -483,6 +506,7 @@ class QuoteTextView: UITextView {
     var quoteBackgroundColor: UIColor? { didSet { setNeedsDisplay() } }
     var quoteBorderWidth: CGFloat = 4 { didSet { setNeedsDisplay() } }
     var quotePadding = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16) { didSet { setNeedsDisplay() } }
+    var designTokens = MarkdownDesignTokens() { didSet { setNeedsDisplay() } }
     var enhancedBlockquotes = false { didSet { setNeedsDisplay() } }
 
     @objc func selectAllReaderText() -> Bool {
@@ -553,29 +577,47 @@ class QuoteTextView: UITextView {
         // Geometry below must come from the completed layout used by the text.
         layoutManager.ensureLayout(for: textContainer)
         let quoteFrames = quoteFrames()
-        if enhancedBlockquotes, let context = UIGraphicsGetCurrentContext() {
+        if enhancedBlockquotes, let context = UIGraphicsGetCurrentContext(), designTokens.quote.shadowRadius > 0 {
+            context.saveGState()
+            context.setShadow(offset: CGSize(width: designTokens.quote.shadowX, height: designTokens.quote.shadowY),
+                              blur: designTokens.quote.shadowRadius, color: UIColor(designTokens.quote.shadowColor).cgColor)
+            for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
+                let path = UIBezierPath(roundedRect: frame, byRoundingCorners: [.topRight, .bottomRight],
+                                        cornerRadii: CGSize(width: designTokens.quote.cornerRadius, height: designTokens.quote.cornerRadius))
+                (quoteBackgroundColor ?? UIColor(designTokens.quote.gradientStartColor ?? .white)).setFill()
+                path.fill()
+            }
+            context.restoreGState()
+        }
+        if enhancedBlockquotes && quoteBackgroundColor == nil, let context = UIGraphicsGetCurrentContext() {
             let dark = traitCollection.userInterfaceStyle == .dark
-            let start = UIColor(white: dark ? 0.10 : 0.98, alpha: 1)
-            let end = UIColor(white: dark ? 0.15 : 0.95, alpha: 1)
+            let start = designTokens.quote.gradientStartColor.map(UIColor.init) ?? UIColor(white: dark ? 0.10 : 0.98, alpha: 1)
+            let end = designTokens.quote.gradientEndColor.map(UIColor.init) ?? UIColor(white: dark ? 0.15 : 0.95, alpha: 1)
             if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
                                          colors: [start.cgColor, end.cgColor] as CFArray,
                                          locations: [0, 1]) {
                 for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
                     context.saveGState()
-                    context.clip(to: frame)
+                    context.addPath(UIBezierPath(roundedRect: frame, byRoundingCorners: [.topRight, .bottomRight], cornerRadii: CGSize(width: designTokens.quote.cornerRadius, height: designTokens.quote.cornerRadius)).cgPath)
+                    context.clip()
                     context.drawLinearGradient(gradient,
                         start: CGPoint(x: frame.minX, y: frame.minY),
                         end: CGPoint(x: frame.maxX, y: frame.maxY), options: [])
                     context.restoreGState()
-                    ("❝" as NSString).draw(at: CGPoint(x: frame.minX + 12, y: frame.minY + 8),
-                        withAttributes: [.font: UIFont.systemFont(ofSize: 24),
-                                         .foregroundColor: tintColor.withAlphaComponent(0.4)])
+
                 }
             }
         } else if let quoteBackgroundColor {
             quoteBackgroundColor.setFill()
             for (frame, _) in quoteFrames.sorted(by: { $0.1 < $1.1 }) {
-                UIRectFill(frame)
+                UIBezierPath(roundedRect: frame, byRoundingCorners: [.topRight, .bottomRight], cornerRadii: CGSize(width: designTokens.quote.cornerRadius, height: designTokens.quote.cornerRadius)).fill()
+            }
+        }
+        if enhancedBlockquotes && designTokens.quote.showIcon {
+            for (frame, _) in quoteFrames {
+                ("❝" as NSString).draw(at: CGPoint(x: frame.minX + 12, y: frame.minY + 8),
+                    withAttributes: [.font: designTokens.quote.iconTypography?.uiFont(textStyle: .body, traits: traitCollection) ?? UIFont.systemFont(ofSize: designTokens.quote.iconSize),
+                                     .foregroundColor: designTokens.quote.iconColor.map(UIColor.init) ?? tintColor.withAlphaComponent(designTokens.quote.iconAlpha)])
             }
         }
         drawInlineCodeBackgrounds()
@@ -651,15 +693,15 @@ class QuoteTextView: UITextView {
                                                             effectiveRange: nil) as? UIFont else { return }
                 let baseline = lineRect.minY + self.layoutManager.location(forGlyphAt: segment.location).y
                 let frame = CGRect(x: self.textContainerInset.left + glyphRect.minX,
-                                   y: self.textContainerInset.top + baseline - font.ascender - 1,
+                                   y: self.textContainerInset.top + baseline - font.ascender - self.designTokens.keyboard.padding.top,
                                    width: glyphRect.width,
-                                   height: font.ascender - font.descender + 2)
-                let path = UIBezierPath(roundedRect: frame, cornerRadius: 4)
-                self.keycapBorderColor.withAlphaComponent(0.12).setFill()
+                                   height: font.ascender - font.descender + self.designTokens.keyboard.padding.top + self.designTokens.keyboard.padding.bottom)
+                let path = UIBezierPath(roundedRect: frame, cornerRadius: self.designTokens.keyboard.cornerRadius)
+                (self.designTokens.keyboard.backgroundColor.map(UIColor.init) ?? self.keycapBorderColor.withAlphaComponent(self.designTokens.keyboard.backgroundAlpha)).setFill()
                 path.fill()
                 self.keycapBorderColor.setStroke()
-                path.lineWidth = 1
-                path.stroke()
+                path.lineWidth = self.designTokens.keyboard.borderWidth
+                if path.lineWidth > 0 { path.stroke() }
             }
         }
     }
@@ -667,11 +709,11 @@ class QuoteTextView: UITextView {
     private func drawHeadingDecorations() {
         guard let context = UIGraphicsGetCurrentContext(),
               let barGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                           colors: [tintColor.cgColor, tintColor.withAlphaComponent(0.3).cgColor] as CFArray,
+                                           colors: [(designTokens.heading.accentColor.map(UIColor.init) ?? (tintColor ?? .systemBlue)).cgColor, (designTokens.heading.accentColor.map(UIColor.init) ?? (tintColor ?? .systemBlue)).withAlphaComponent(designTokens.heading.barEndAlpha).cgColor] as CFArray,
                                            locations: [0, 1]),
               let underlineGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                                 colors: [tintColor.withAlphaComponent(0.3).cgColor,
-                                                          tintColor.withAlphaComponent(0).cgColor] as CFArray,
+                                                 colors: [(designTokens.heading.accentColor.map(UIColor.init) ?? (tintColor ?? .systemBlue)).withAlphaComponent(designTokens.heading.ruleStartAlpha).cgColor,
+                                                          (designTokens.heading.accentColor.map(UIColor.init) ?? (tintColor ?? .systemBlue)).withAlphaComponent(designTokens.heading.ruleEndAlpha).cgColor] as CFArray,
                                                  locations: [0, 1]) else { return }
         for range in headingRegions where range.location < textStorage.length {
             let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -679,20 +721,20 @@ class QuoteTextView: UITextView {
             guard glyphFrame.width > 0, glyphFrame.height > 0 else { continue }
             let font = textStorage.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont
             let barHeight = font?.pointSize ?? 24
-            let x = textContainerInset.left + glyphFrame.minX - 16
+            let x = textContainerInset.left + glyphFrame.minX - designTokens.heading.barWidth - designTokens.heading.barSpacing
             let y = textContainerInset.top + glyphFrame.midY - barHeight / 2
             context.saveGState()
-            context.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: y, width: 4, height: barHeight),
-                                         cornerRadius: 2).cgPath)
+            context.addPath(UIBezierPath(roundedRect: CGRect(x: x, y: y, width: designTokens.heading.barWidth, height: barHeight),
+                                         cornerRadius: designTokens.heading.barRadius).cgPath)
             context.clip()
             context.drawLinearGradient(barGradient, start: CGPoint(x: x, y: y),
                                        end: CGPoint(x: x, y: y + barHeight), options: [])
             context.restoreGState()
 
-            let underlineY = textContainerInset.top + glyphFrame.maxY + 8
-            let underlineWidth = max(0, bounds.width - x - textContainerInset.right)
+            let underlineY = textContainerInset.top + glyphFrame.maxY + designTokens.heading.padding.bottom
+            let underlineWidth = max(0, bounds.width - x - textContainerInset.right - designTokens.heading.padding.trailing)
             context.saveGState()
-            context.clip(to: CGRect(x: x, y: underlineY, width: underlineWidth, height: 2))
+            context.clip(to: CGRect(x: x, y: underlineY, width: underlineWidth, height: designTokens.heading.ruleThickness))
             context.drawLinearGradient(underlineGradient, start: CGPoint(x: x, y: underlineY),
                                        end: CGPoint(x: x + underlineWidth, y: underlineY), options: [])
             context.restoreGState()
@@ -700,17 +742,17 @@ class QuoteTextView: UITextView {
     }
 
     private func drawExternalLinkCues() {
-        guard textStorage.length > 0 else { return }
+        guard textStorage.length > 0, designTokens.link.showExternalIcon, designTokens.link.iconSize > 0 else { return }
         textStorage.enumerateAttribute(externalLinkCueAttribute,
                                        in: NSRange(location: 0, length: textStorage.length)) { value, range, _ in
             guard value != nil, range.length > 0 else { return }
             let glyph = self.layoutManager.glyphIndexForCharacter(at: NSMaxRange(range) - 1)
             let bounds = self.layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1),
                                                           in: self.textContainer)
-            ("↗" as NSString).draw(at: CGPoint(x: self.textContainerInset.left + bounds.maxX + 1,
-                                                y: self.textContainerInset.top + bounds.minY + 1),
-                                   withAttributes: [.font: UIFont.systemFont(ofSize: 12),
-                                                    .foregroundColor: self.tintColor ?? UIColor.systemBlue])
+            ("↗" as NSString).draw(at: CGPoint(x: self.textContainerInset.left + bounds.maxX + self.designTokens.link.iconGap,
+                                                y: self.textContainerInset.top + bounds.minY + self.designTokens.link.iconTopOffset),
+                                   withAttributes: [.font: UIFont.systemFont(ofSize: self.designTokens.link.iconSize),
+                                                    .foregroundColor: self.designTokens.link.iconColor.map(UIColor.init) ?? self.tintColor ?? UIColor.systemBlue])
         }
     }
 }

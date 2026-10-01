@@ -59,7 +59,7 @@ final class MarkdownTypographyTests: XCTestCase {
         let style = MarkdownStyleSheet.light()
         let built = ReaderSelectionTextView(document: document, styleSheet: style,
                                             onLinkTap: nil, onTextLongPress: nil, selectable: true,
-                                            onCharacterTap: nil)
+                                            onCharacterTap: nil, useEnhancedComponents: true)
             .attributedContent(traits: MarkdownTypography.traits(for: .large))
         XCTAssertEqual(built.headingRegions.count, 2)
         XCTAssertEqual(built.headingRegions.map {
@@ -142,5 +142,50 @@ final class MarkdownTypographyTests: XCTestCase {
                        "var x = 42;")
         XCTAssertNil(QuoteTextView.transformedCopyText(in: text, ruleRegions: [], range: bodyRange))
     }
+    func testPublicNamedFontAndLineHeightTokensReachSelectableReaderAndScale() throws {
+        var style = MarkdownStyleSheet.light()
+        style.designTokens.typography.paragraph = MarkdownFontToken(fontName: "Helvetica", size: 22)
+        style.designTokens.typography.paragraphLineHeight = 1.8
+        let document = try XCTUnwrap(ReaderSelectionDocument.compose(
+            Array(MarkdownSyntax.parse("Custom body").children), enableHTML: false, plugins: nil))
+        let reader = ReaderSelectionTextView(document: document, styleSheet: style,
+            onLinkTap: nil, onTextLongPress: nil, selectable: true, onCharacterTap: nil)
+        let normal = reader.attributedContent(traits: MarkdownTypography.traits(for: .large)).text
+        let accessible = reader.attributedContent(traits: MarkdownTypography.traits(for: .accessibility2)).text
+        let normalFont = try XCTUnwrap(normal.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
+        let accessibleFont = try XCTUnwrap(accessible.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)
+        let normalParagraph = try XCTUnwrap(normal.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)
+        let accessibleParagraph = try XCTUnwrap(accessible.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)
+        XCTAssertEqual(normalFont.familyName, "Helvetica")
+        XCTAssertEqual(normalFont.pointSize, 22, accuracy: 0.1)
+        XCTAssertEqual(normalParagraph.minimumLineHeight, normalFont.pointSize * 1.8, accuracy: 0.1)
+        XCTAssertGreaterThan(accessibleFont.pointSize, normalFont.pointSize)
+        XCTAssertEqual(accessibleParagraph.minimumLineHeight, accessibleFont.pointSize * 1.8, accuracy: 0.1)
+    }
+
+    func testPluginColorsReachSelectableNativeTextWithoutChangingSource() throws {
+        let plugins = ParserPluginRegistry()
+        try plugins.register(MentionPlugin())
+        try plugins.register(HashtagPlugin())
+        let source = "Hello @alice #ios"
+        let document = try XCTUnwrap(ReaderSelectionDocument.compose(
+            Array(MarkdownSyntax.parse(source).children), enableHTML: false, plugins: plugins))
+        var style = MarkdownStyleSheet.light()
+        style.designTokens.plugins.mentionStyle = MarkdownInlineTextStyle(textColor: .purple)
+        style.designTokens.plugins.hashtagStyle = MarkdownInlineTextStyle(textColor: .green, backgroundColor: .yellow)
+        let text = ReaderSelectionTextView(document: document, styleSheet: style,
+            onLinkTap: nil, onTextLongPress: nil, selectable: true, onCharacterTap: nil)
+            .attributedContent(traits: MarkdownTypography.traits(for: .large)).text
+        let mention = (text.string as NSString).range(of: "@alice")
+        let hashtag = (text.string as NSString).range(of: "#ios")
+        XCTAssertNotEqual(mention.location, NSNotFound)
+        XCTAssertNotEqual(hashtag.location, NSNotFound)
+        guard mention.location != NSNotFound, hashtag.location != NSNotFound else { return }
+        XCTAssertEqual(text.attribute(.foregroundColor, at: mention.location, effectiveRange: nil) as? UIColor, UIColor(Color.purple))
+        XCTAssertEqual(text.attribute(.foregroundColor, at: hashtag.location, effectiveRange: nil) as? UIColor, UIColor(Color.green))
+        XCTAssertEqual(text.attribute(.backgroundColor, at: hashtag.location, effectiveRange: nil) as? UIColor, UIColor(Color.yellow))
+        XCTAssertTrue(text.string.contains(source))
+    }
+
 }
 #endif

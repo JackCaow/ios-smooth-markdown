@@ -1,11 +1,11 @@
 import Foundation
 
 /// Decodes CommonMark text after its structural delimiters have been recognized.
-enum NativeMarkdownTextDecoder {
+public enum NativeMarkdownTextDecoder {
     private static let escapedPunctuation = CharacterSet(charactersIn:
         ##"!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"##)
 
-    static func decode(_ source: String) -> String {
+    public static func decode(_ source: String) -> String {
         let characters = Array(source)
         var result = ""
         result.reserveCapacity(source.count)
@@ -36,7 +36,7 @@ enum NativeMarkdownTextDecoder {
         return result
     }
 
-    static func codeSpan(_ source: String) -> String {
+    public static func codeSpan(_ source: String) -> String {
         let markerCount = source.prefix(while: { $0 == "`" }).count
         guard markerCount > 0, source.count >= markerCount * 2 else { return source }
         let inner = source.dropFirst(markerCount).dropLast(markerCount)

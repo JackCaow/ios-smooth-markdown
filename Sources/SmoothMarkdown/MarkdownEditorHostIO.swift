@@ -1,3 +1,6 @@
+#if canImport(SmoothMarkdownCore)
+import SmoothMarkdownCore
+#endif
 import Foundation
 #if canImport(UIKit)
 import UIKit

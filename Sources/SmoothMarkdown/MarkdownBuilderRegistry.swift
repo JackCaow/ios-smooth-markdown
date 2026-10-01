@@ -156,7 +156,10 @@ public struct MarkdownRenderContext {
 
 /// Mutable, insertion-ordered registry matching Flutter's exact-key-then-`canBuild` lookup.
 /// An empty registry keeps every native renderer; registering one type overrides only its matches.
-public final class BuilderRegistry {
+public final class BuilderRegistry: ObservableObject {
+    /// Advances after an effective mutation. UI-bound registries must be mutated on the main thread.
+    @Published public private(set) var revision: UInt64 = 0
+    private func changed() { revision &+= 1 }
     private var builders: [String: any MarkdownWidgetBuilder] = [:]
     private var keys: [String] = []
 
@@ -165,14 +168,18 @@ public final class BuilderRegistry {
     public func register(_ nodeType: String, builder: any MarkdownWidgetBuilder) {
         if builders[nodeType] == nil { keys.append(nodeType) }
         builders[nodeType] = builder
+        changed()
     }
 
     public func unregister(_ nodeType: String) {
-        builders.removeValue(forKey: nodeType)
+        guard builders.removeValue(forKey: nodeType) != nil else { return }
+        changed()
         keys.removeAll { $0 == nodeType }
     }
 
     public func clear() {
+        guard !builders.isEmpty else { return }
+        changed()
         builders.removeAll()
         keys.removeAll()
     }

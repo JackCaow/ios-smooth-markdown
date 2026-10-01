@@ -17,11 +17,12 @@ struct NativeMathWebView: View {
     let size: CGFloat
     let display: Bool
     let color: Color?
+    var fontFamily: String = "serif"
     @Environment(\.colorScheme) private var colorScheme
     @State private var image: NativeMathPlatformImage?
 
     private var colorHex: String { NativeMathColorHex.resolve(color ?? .primary, scheme: colorScheme) }
-    private var key: String { "\(latex)|\(size)|\(display)|\(colorHex)" }
+    private var key: String { "\(latex)|\(size)|\(display)|\(colorHex)|\(fontFamily)" }
 
     var body: some View {
         Group {
@@ -37,7 +38,7 @@ struct NativeMathWebView: View {
         .task(id: key) {
             image = nil
             let result = await NativeMathSnapshotRenderer.shared.render(
-                latex: latex, size: size, display: display, colorHex: colorHex)
+                latex: latex, size: size, display: display, colorHex: colorHex, fontFamily: fontFamily)
             if !Task.isCancelled { image = result }
         }
     }
@@ -98,10 +99,10 @@ final class NativeMathSnapshotRenderer: NSObject, WKNavigationDelegate {
         cache.totalCostLimit = 32 * 1024 * 1024
     }
 
-    func render(latex: String, size: CGFloat, display: Bool, colorHex: String) async -> NativeMathPlatformImage? {
-        let key = "\(latex)|\(size)|\(display)|\(colorHex)" as NSString
+    func render(latex: String, size: CGFloat, display: Bool, colorHex: String, fontFamily: String = "serif") async -> NativeMathPlatformImage? {
+        let key = "\(latex)|\(size)|\(display)|\(colorHex)|\(fontFamily)" as NSString
         if let cached = cache.object(forKey: key) { return cached }
-        let html = NativeMathML.html(latex, size: Int(size.rounded()), display: display, colorHex: colorHex)
+        let html = NativeMathML.html(latex, size: Int(size.rounded()), display: display, colorHex: colorHex, fontFamily: fontFamily)
         return await withCheckedContinuation { continuation in
             jobs.append(Job(id: UUID(), key: key, html: html, continuation: continuation))
             startNext()

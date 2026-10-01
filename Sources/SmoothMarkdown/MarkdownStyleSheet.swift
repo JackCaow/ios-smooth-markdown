@@ -91,6 +91,11 @@ public struct MarkdownCodeBlockDecoration {
 /// Visual settings for `SmoothMarkdownView` and `StreamMarkdownView`.
 /// Nil colors and fonts inherit the host application's SwiftUI appearance.
 public struct MarkdownStyleSheet {
+    private var storedDesignTokens: MarkdownDesignTokens
+    public var designTokens: MarkdownDesignTokens {
+        get { storedDesignTokens }
+        set { storedDesignTokens = newValue.normalized() }
+    }
     public var backgroundColor: Color?
     public var textColor: Color?
     public var headingColor: Color?
@@ -206,8 +211,10 @@ public struct MarkdownStyleSheet {
         kbdStyle: MarkdownInlineTextStyle? = nil,
         tableBorder: MarkdownTableBorder? = nil,
         underlineStyle: MarkdownInlineTextStyle? = nil,
-        highlightStyle: MarkdownInlineTextStyle? = nil
+        highlightStyle: MarkdownInlineTextStyle? = nil,
+        designTokens: MarkdownDesignTokens = .init()
     ) {
+        self.storedDesignTokens = designTokens.normalized()
         self.backgroundColor = backgroundColor
         self.textColor = textColor
         self.headingColor = headingColor
@@ -260,6 +267,7 @@ public struct MarkdownStyleSheet {
         self.codePadding = max(0, codePadding)
         self.tableCellPadding = max(0, tableCellPadding)
         self.darkCodeHighlighting = darkCodeHighlighting
+        self = normalized()
     }
 
     public static func `default`() -> Self { Self() }
@@ -340,7 +348,7 @@ public struct MarkdownStyleSheet {
     internal var resolvedBlockquoteDecoration: MarkdownBlockquoteDecoration {
         if let blockquoteDecoration {
             return MarkdownBlockquoteDecoration(
-                backgroundColor: blockquoteDecoration.backgroundColor,
+                backgroundColor: blockquoteDecoration.backgroundColor ?? quoteBackground,
                 borderColor: blockquoteDecoration.borderColor ?? quoteBarColor ?? .accentColor,
                 borderWidth: blockquoteDecoration.borderWidth)
         }

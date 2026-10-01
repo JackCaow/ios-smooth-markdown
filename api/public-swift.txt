@@ -1,0 +1,1531 @@
+s:14SmoothMarkdown06StreamB11AccumulatorC | @MainActor final class StreamMarkdownAccumulator
+s:14SmoothMarkdown06StreamB11AccumulatorC11visibleTextSSvp | @Published @MainActor var visibleText: String { get set }
+s:14SmoothMarkdown06StreamB11AccumulatorC14throttleMillis10enableHTMLACs5Int64V_Sbtcfc | @MainActor init(throttleMillis: Int64 = 50, enableHTML: Bool = false)
+s:14SmoothMarkdown06StreamB11AccumulatorC5reset14throttleMillis10enableHTMLys5Int64VSg_SbSgtF | @MainActor func reset(throttleMillis: Int64? = nil, enableHTML: Bool? = nil)
+s:14SmoothMarkdown06StreamB11AccumulatorC6appendyySSF | @MainActor func append(_ chunk: String)
+s:14SmoothMarkdown06StreamB11AccumulatorC6cancelyyF | @MainActor func cancel()
+s:14SmoothMarkdown06StreamB11AccumulatorC6finishyyF | @MainActor func finish()
+s:14SmoothMarkdown06StreamB11AccumulatorC7setHTMLyySbF | @MainActor func setHTML(_ enabled: Bool)
+s:14SmoothMarkdown06StreamB4ViewV | @MainActor struct StreamMarkdownView<Chunks> where Chunks : AsyncSequence, Chunks.Element == String
+s:14SmoothMarkdown06StreamB4ViewV07loadingD07SwiftUI03AnyD0VSgvp | @MainActor let loadingView: AnyView?
+s:14SmoothMarkdown06StreamB4ViewV10enableHTMLSbvp | @MainActor let enableHTML: Bool
+s:14SmoothMarkdown06StreamB4ViewV10onCodeCopyySS_SSSgtcSgvp | @MainActor let onCodeCopy: ((String, String?) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV10onCompleteySScSgvp | @MainActor let onComplete: ((String) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV10onImageTapy10Foundation3URLVcSgvp | @MainActor let onImageTap: ((URL) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV10scrollableSbvp | @MainActor let scrollable: Bool
+s:14SmoothMarkdown06StreamB4ViewV10selectableSbvp | @MainActor let selectable: Bool
+s:14SmoothMarkdown06StreamB4ViewV10styleSheetAA0b5StyleF0Vvp | @MainActor let styleSheet: MarkdownStyleSheet
+s:14SmoothMarkdown06StreamB4ViewV11codeBuilder7SwiftUI03AnyD0VSS_SSSgtcSgvp | @MainActor let codeBuilder: ((String, String?) -> AnyView)?
+s:14SmoothMarkdown06StreamB4ViewV12errorBuilder7SwiftUI03AnyD0Vs5Error_pcSgvp | @MainActor let errorBuilder: ((any Error) -> AnyView)?
+s:14SmoothMarkdown06StreamB4ViewV12imageBuilder7SwiftUI03AnyD0VSS_SSSgAHtcSgvp | @MainActor let imageBuilder: ((String, String?, String?) -> AnyView)?
+s:14SmoothMarkdown06StreamB4ViewV14throttleMilliss5Int64Vvp | @MainActor let throttleMillis: Int64
+s:14SmoothMarkdown06StreamB4ViewV15builderRegistryAA07BuilderF0CSgvp | @MainActor let builderRegistry: BuilderRegistry?
+s:14SmoothMarkdown06StreamB4ViewV15onTextLongPressyyyccSgvp | @MainActor let onTextLongPress: ((@escaping () -> Void) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV15resourceOptionsAA0b8ResourceF0Vvp | @MainActor var resourceOptions: MarkdownResourceOptions { get }
+s:14SmoothMarkdown06StreamB4ViewV16codeBlockOptionsAA04CodefG0Vvp | @MainActor let codeBlockOptions: CodeBlockOptions
+s:14SmoothMarkdown06StreamB4ViewV19selectionControllerAA0a9SelectionF0CSgvp | @MainActor let selectionController: SmoothSelectionController?
+s:14SmoothMarkdown06StreamB4ViewV21useEnhancedComponentsSbvp | @MainActor let useEnhancedComponents: Bool
+s:14SmoothMarkdown06StreamB4ViewV22onImageTapWithMetadataySS_SSSgAEtcSgvp | @MainActor let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV25enableCrossBlockSelectionSbvp | @MainActor let enableCrossBlockSelection: Bool
+s:14SmoothMarkdown06StreamB4ViewV4bodyQrvp | @MainActor var body: some View { get }
+s:14SmoothMarkdown06StreamB4ViewV6chunks13renderOptions09selectionG06events06streamG00J2ID10styleSheet7plugins8builders08resourceG07stringsACyxGx_AA0b6RenderG0VAA0b9SelectionG0VAA0B6EventsVAA0bcG0VSSSgAA0b5StyleM0VAA20ParserPluginRegistryCSgAA0B8BuildersVAA0b8ResourceG0VSgAA0B7StringsVSgtcfc | @MainActor init(chunks: Chunks, renderOptions: MarkdownRenderOptions, selectionOptions: MarkdownSelectionOptions = .init(), events: MarkdownEvents = .init(), streamOptions: MarkdownStreamOptions = .init(), streamID: String? = nil, styleSheet: MarkdownStyleSheet = .default(), plugins: ParserPluginRegistry? = nil, builders: MarkdownBuilders = .init(), resourceOptions: MarkdownResourceOptions? = nil, strings: MarkdownStrings? = nil)
+s:14SmoothMarkdown06StreamB4ViewV6chunks8streamID14throttleMillis10enableHTML21useEnhancedComponents9onLinkTap0oqP00o5ImageQ00orQ12WithMetadata0oqR012imageBuilder16codeBlockOptions0wV00O8CodeCopy0O13TextLongPress0O5Error0O8Complete10styleSheet7plugins15builderRegistry10selectable19selectionController0j5CrossX9Selection10scrollable07loadingD005errorV008resourceY07stringsACyxGx_SSSgs5Int64VS2by10Foundation3URLVcSgySScSgA11_ySS_A5_A5_tcSgA13_7SwiftUI03AnyD0VSS_A5_A5_tcSgAA0zxY0VSgA16_SS_A5_tcSgySS_A5_tcSgyyyccSgys5Error_pcSgA12_AA0B10StyleSheetVAA20ParserPluginRegistryCSgAA0V8RegistryCSgSbAA0A19SelectionControllerCSgS2bA16_SgA16_sA24__pcSgAA0b8ResourceY0VSgAA0B7StringsVSgtcfc | @MainActor init(chunks: Chunks, streamID: String? = nil, throttleMillis: Int64 = 50, enableHTML: Bool = false, useEnhancedComponents: Bool = false, onLinkTap: ((URL) -> Void)? = nil, onTapLink: ((String) -> Void)? = nil, onImageTap: ((URL) -> Void)? = nil, onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil, onTapImage: ((String, String?, String?) -> Void)? = nil, imageBuilder: ((String, String?, String?) -> AnyView)? = nil, codeBlockOptions: CodeBlockOptions? = nil, codeBuilder: ((String, String?) -> AnyView)? = nil, onCodeCopy: ((String, String?) -> Void)? = nil, onTextLongPress: ((@escaping () -> Void) -> Void)? = nil, onError: ((any Error) -> Void)? = nil, onComplete: ((String) -> Void)? = nil, styleSheet: MarkdownStyleSheet = .default(), plugins: ParserPluginRegistry? = nil, builderRegistry: BuilderRegistry? = nil, selectable: Bool = false, selectionController: SmoothSelectionController? = nil, enableCrossBlockSelection: Bool = true, scrollable: Bool = true, loadingView: AnyView? = nil, errorBuilder: ((any Error) -> AnyView)? = nil, resourceOptions: MarkdownResourceOptions? = nil, strings: MarkdownStrings? = nil)
+s:14SmoothMarkdown06StreamB4ViewV6chunksxvp | @MainActor let chunks: Chunks
+s:14SmoothMarkdown06StreamB4ViewV7onErrorys0F0_pcSgvp | @MainActor let onError: ((any Error) -> Void)?
+s:14SmoothMarkdown06StreamB4ViewV7pluginsAA20ParserPluginRegistryCSgvp | @MainActor let plugins: ParserPluginRegistry?
+s:14SmoothMarkdown06StreamB4ViewV7stringsAA0B7StringsVvp | @MainActor var strings: MarkdownStrings { get }
+s:14SmoothMarkdown06StreamB4ViewV8streamIDSSSgvp | @MainActor let streamID: String?
+s:14SmoothMarkdown06StreamB4ViewV9onLinkTapy10Foundation3URLVcSgvp | @MainActor let onLinkTap: ((URL) -> Void)?
+s:14SmoothMarkdown06StreamB6BufferV | struct StreamMarkdownBuffer
+s:14SmoothMarkdown06StreamB6BufferV11visibleTextSSvp | var visibleText: String { get }
+s:14SmoothMarkdown06StreamB6BufferV14intervalMillis05startF010enableHTMLACs5Int64V_AHSbtcfc | init(intervalMillis: Int64 = 50, startMillis: Int64 = 0, enableHTML: Bool = false)
+s:14SmoothMarkdown06StreamB6BufferV5flush9nowMillisys5Int64V_tF | mutating func flush(nowMillis: Int64)
+s:14SmoothMarkdown06StreamB6BufferV5reset9nowMillisys5Int64V_tF | mutating func reset(nowMillis: Int64)
+s:14SmoothMarkdown06StreamB6BufferV6append_9nowMilliss5Int64VSgSS_AGtF | mutating func append(_ chunk: String, nowMillis: Int64) -> Int64?
+s:14SmoothMarkdown06StreamB6BufferV6finish9nowMillisys5Int64V_tF | mutating func finish(nowMillis: Int64)
+s:14SmoothMarkdown06StreamB6BufferV7setHTMLyySbF | mutating func setHTML(_ enabled: Bool)
+s:14SmoothMarkdown06StreamB6BufferV8fullTextSSvp | var fullText: String { get }
+s:14SmoothMarkdown0A19SelectionControllerC | final class SmoothSelectionController
+s:14SmoothMarkdown0A19SelectionControllerC10isAttachedSbvp | var isAttached: Bool { get }
+s:14SmoothMarkdown0A19SelectionControllerCACycfc | init()
+s:14SmoothMarkdown0B0O | enum Markdown
+s:14SmoothMarkdown0B0O4LinkC | final class Link
+s:14SmoothMarkdown0B0O4LinkC11destination5title8children5range6sourceAESSSg_AKSayAA6MarkupCGSnyAA14SourceLocationVGSgAKtcfc | init(destination: String?, title: String? = nil, children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown0B0O4LinkC11destinationSSSgvp | let destination: String?
+s:14SmoothMarkdown0B0O4LinkC5titleSSSgvp | let title: String?
+s:14SmoothMarkdown0B0O4TextC | final class Text
+s:14SmoothMarkdown0B0O4TextC6stringSSvp | let string: String
+s:14SmoothMarkdown0B0O4TextC_5range6sourceAESS_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ string: String, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown0B0O5ImageC | final class Image
+s:14SmoothMarkdown0B0O5ImageC3altSSvp | var alt: String { get }
+s:14SmoothMarkdown0B0O5ImageC5titleSSSgvp | let title: String?
+s:14SmoothMarkdown0B0O5ImageC6source5title8children5range9rawSourceAESSSg_AKSayAA6MarkupCGSnyAA0I8LocationVGSgAKtcfc | init(source: String?, title: String? = nil, children: [Markup] = [], range: Range<SourceLocation>? = nil, rawSource: String? = nil)
+s:14SmoothMarkdown0B0O5ImageC6sourceSSSgvp | let source: String?
+s:14SmoothMarkdown0B0O5TableC | final class Table
+s:14SmoothMarkdown0B0O5TableC15ColumnAlignmentO | enum ColumnAlignment
+s:14SmoothMarkdown0B0O5TableC15ColumnAlignmentO4leftyA2GmF | case left
+s:14SmoothMarkdown0B0O5TableC15ColumnAlignmentO5rightyA2GmF | case right
+s:14SmoothMarkdown0B0O5TableC15ColumnAlignmentO6centeryA2GmF | case center
+s:14SmoothMarkdown0B0O5TableC16columnAlignmentsSayAE15ColumnAlignmentOSgGvp | let columnAlignments: [Markdown.Table.ColumnAlignment?]
+s:14SmoothMarkdown0B0O5TableC3RowC | final class Row
+s:14SmoothMarkdown0B0O5TableC4BodyC | final class Body
+s:14SmoothMarkdown0B0O5TableC4CellC | final class Cell
+s:14SmoothMarkdown0B0O5TableC4HeadC | final class Head
+s:14SmoothMarkdown0B0O5TableC4bodyAE4BodyCvp | let body: Markdown.Table.Body
+s:14SmoothMarkdown0B0O5TableC4head4body10alignments5range6sourceA2E4HeadC_AE4BodyCSayAE15ColumnAlignmentOSgGSnyAA14SourceLocationVGSgSSSgtcfc | init(head: Markdown.Table.Head = Head(), body: Markdown.Table.Body = Body(), alignments: [Markdown.Table.ColumnAlignment?] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown0B0O5TableC4headAE4HeadCvp | let head: Markdown.Table.Head
+s:14SmoothMarkdown0B0O8ListItemC | final class ListItem
+s:14SmoothMarkdown0B0O8ListItemC8CheckboxO | enum Checkbox
+s:14SmoothMarkdown0B0O8ListItemC8CheckboxO7checkedyA2GmF | case checked
+s:14SmoothMarkdown0B0O8ListItemC8CheckboxO9uncheckedyA2GmF | case unchecked
+s:14SmoothMarkdown0B0O8ListItemC8checkbox8children5range6sourceA2E8CheckboxOSg_SayAA6MarkupCGSnyAA14SourceLocationVGSgSSSgtcfc | init(checkbox: Markdown.ListItem.Checkbox? = nil, children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown0B0O8ListItemC8checkboxAE8CheckboxOSgvp | let checkbox: Markdown.ListItem.Checkbox?
+s:14SmoothMarkdown0B0O9CodeBlocka | typealias CodeBlock = NativeCodeBlock
+s:14SmoothMarkdown0B10CodeTokensV | struct MarkdownCodeTokens
+s:14SmoothMarkdown0B10CodeTokensV10normalizedACyF | func normalized() -> MarkdownCodeTokens
+s:14SmoothMarkdown0B10CodeTokensV11copiedColor7SwiftUI0F0Vvp | var copiedColor: Color
+s:14SmoothMarkdown0B10CodeTokensV11copiedLabelSSSgvp | var copiedLabel: String?
+s:14SmoothMarkdown0B10CodeTokensV11copyPadding7SwiftUI10EdgeInsetsVvp | var copyPadding: EdgeInsets
+s:14SmoothMarkdown0B10CodeTokensV12languageFont7SwiftUI0F0VSgvp | var languageFont: Font?
+s:14SmoothMarkdown0B10CodeTokensV12syntaxColorsAA0b6SyntaxF0VSgvp | var syntaxColors: MarkdownSyntaxColors?
+s:14SmoothMarkdown0B10CodeTokensV13headerPadding0E7Spacing12languageFont0H5Color0h10BackgroundJ00hF00H12CornerRadius0hK5Alpha04copyI00oJ006copiedJ00okJ00pkJ00oF00olM00okN00pkN00O5Label0pQ00O15FeedbackSeconds12syntaxColors13showScrollbarAC7SwiftUI10EdgeInsetsV_14CoreFoundation7CGFloatVAZ0I0VSgAZ0J0VSgA9_A0_A3_SdA6_A9_A8_A9_A9_A0_A3_S2dSSSgA10_SdAA0b6SyntaxU0VSgSbtcfc | init(headerPadding: EdgeInsets = .init(top: 8, leading: 8, bottom: 0, trailing: 8), headerSpacing: CGFloat = 8, languageFont: Font? = nil, languageColor: Color? = nil, languageBackgroundColor: Color? = nil, languagePadding: EdgeInsets = .init(top: 4, leading: 8, bottom: 4, trailing: 8), languageCornerRadius: CGFloat = 4, languageBackgroundAlpha: Double = 0.12, copyFont: Font? = nil, copyColor: Color? = nil, copiedColor: Color = .green, copyBackgroundColor: Color? = nil, copiedBackgroundColor: Color? = nil, copyPadding: EdgeInsets = .init(top: 5, leading: 7, bottom: 5, trailing: 7), copyCornerRadius: CGFloat = 4, copyBackgroundAlpha: Double = 0.1, copiedBackgroundAlpha: Double = 0.16, copyLabel: String? = nil, copiedLabel: String? = nil, copyFeedbackSeconds: Double = 2, syntaxColors: MarkdownSyntaxColors? = nil, showScrollbar: Bool = true)
+s:14SmoothMarkdown0B10CodeTokensV13headerPadding7SwiftUI10EdgeInsetsVvp | var headerPadding: EdgeInsets
+s:14SmoothMarkdown0B10CodeTokensV13headerSpacing14CoreFoundation7CGFloatVvp | var headerSpacing: CGFloat
+s:14SmoothMarkdown0B10CodeTokensV13languageColor7SwiftUI0F0VSgvp | var languageColor: Color?
+s:14SmoothMarkdown0B10CodeTokensV13showScrollbarSbvp | var showScrollbar: Bool
+s:14SmoothMarkdown0B10CodeTokensV15languagePadding7SwiftUI10EdgeInsetsVvp | var languagePadding: EdgeInsets
+s:14SmoothMarkdown0B10CodeTokensV16copyCornerRadius14CoreFoundation7CGFloatVvp | var copyCornerRadius: CGFloat
+s:14SmoothMarkdown0B10CodeTokensV19copyBackgroundAlphaSdvp | var copyBackgroundAlpha: Double
+s:14SmoothMarkdown0B10CodeTokensV19copyBackgroundColor7SwiftUI0G0VSgvp | var copyBackgroundColor: Color?
+s:14SmoothMarkdown0B10CodeTokensV19copyFeedbackSecondsSdvp | var copyFeedbackSeconds: Double
+s:14SmoothMarkdown0B10CodeTokensV20languageCornerRadius14CoreFoundation7CGFloatVvp | var languageCornerRadius: CGFloat
+s:14SmoothMarkdown0B10CodeTokensV21copiedBackgroundAlphaSdvp | var copiedBackgroundAlpha: Double
+s:14SmoothMarkdown0B10CodeTokensV21copiedBackgroundColor7SwiftUI0G0VSgvp | var copiedBackgroundColor: Color?
+s:14SmoothMarkdown0B10CodeTokensV23languageBackgroundAlphaSdvp | var languageBackgroundAlpha: Double
+s:14SmoothMarkdown0B10CodeTokensV23languageBackgroundColor7SwiftUI0G0VSgvp | var languageBackgroundColor: Color?
+s:14SmoothMarkdown0B10CodeTokensV8copyFont7SwiftUI0F0VSgvp | var copyFont: Font?
+s:14SmoothMarkdown0B10CodeTokensV9copyColor7SwiftUI0F0VSgvp | var copyColor: Color?
+s:14SmoothMarkdown0B10CodeTokensV9copyLabelSSSgvp | var copyLabel: String?
+s:14SmoothMarkdown0B10EditorModeO | enum MarkdownEditorMode
+s:14SmoothMarkdown0B10EditorModeO5splityA2CmF | case split
+s:14SmoothMarkdown0B10EditorModeO6sourceyA2CmF | case source
+s:14SmoothMarkdown0B10EditorModeO7previewyA2CmF | case preview
+s:14SmoothMarkdown0B10EditorModeO8rawValueACSgSS_tcfc | init?(rawValue: String)
+s:14SmoothMarkdown0B10EditorModeO9formattedyA2CmF | case formatted
+s:14SmoothMarkdown0B10ImageEventV | struct MarkdownImageEvent
+s:14SmoothMarkdown0B10ImageEventV3altSSSgvp | let alt: String?
+s:14SmoothMarkdown0B10ImageEventV5titleSSSgvp | let title: String?
+s:14SmoothMarkdown0B10ImageEventV6source3alt5titleACSS_SSSgAGtcfc | init(source: String, alt: String? = nil, title: String? = nil)
+s:14SmoothMarkdown0B10ImageEventV6sourceSSvp | let source: String
+s:14SmoothMarkdown0B10InlineMarkO | enum MarkdownInlineMark
+s:14SmoothMarkdown0B10InlineMarkO13strikethroughyA2CmF | case strikethrough
+s:14SmoothMarkdown0B10InlineMarkO4boldyA2CmF | case bold
+s:14SmoothMarkdown0B10InlineMarkO4codeyA2CmF | case code
+s:14SmoothMarkdown0B10InlineMarkO4linkyACSS_tcACmF | case link(destination: String)
+s:14SmoothMarkdown0B10InlineMarkO6italicyA2CmF | case italic
+s:14SmoothMarkdown0B10LinkTokensV | struct MarkdownLinkTokens
+s:14SmoothMarkdown0B10LinkTokensV10normalizedACyF | func normalized() -> MarkdownLinkTokens
+s:14SmoothMarkdown0B10LinkTokensV13iconTopOffset14CoreFoundation7CGFloatVvp | var iconTopOffset: CGFloat
+s:14SmoothMarkdown0B10LinkTokensV16showExternalIcon9iconColor0H4Size0H3Gap0H9TopOffsetACSb_7SwiftUI0I0VSg14CoreFoundation7CGFloatVA2Otcfc | init(showExternalIcon: Bool = true, iconColor: Color? = nil, iconSize: CGFloat = 12, iconGap: CGFloat = 2, iconTopOffset: CGFloat = 1)
+s:14SmoothMarkdown0B10LinkTokensV16showExternalIconSbvp | var showExternalIcon: Bool
+s:14SmoothMarkdown0B10LinkTokensV7iconGap14CoreFoundation7CGFloatVvp | var iconGap: CGFloat
+s:14SmoothMarkdown0B10LinkTokensV8iconSize14CoreFoundation7CGFloatVvp | var iconSize: CGFloat
+s:14SmoothMarkdown0B10LinkTokensV9iconColor7SwiftUI0F0VSgvp | var iconColor: Color?
+s:14SmoothMarkdown0B10MathTokensV | struct MarkdownMathTokens
+s:14SmoothMarkdown0B10MathTokensV10fontFamilySSvp | var fontFamily: String
+s:14SmoothMarkdown0B10MathTokensV10normalizedACyF | func normalized() -> MarkdownMathTokens
+s:14SmoothMarkdown0B10MathTokensV12blockPadding7SwiftUI10EdgeInsetsVvp | var blockPadding: EdgeInsets
+s:14SmoothMarkdown0B10MathTokensV12displayScale14CoreFoundation7CGFloatVvp | var displayScale: CGFloat
+s:14SmoothMarkdown0B10MathTokensV14inlineFontSize12displayScale10fontFamily5color12blockPaddingAC14CoreFoundation7CGFloatV_AKSS7SwiftUI5ColorVSgAL10EdgeInsetsVtcfc | init(inlineFontSize: CGFloat = 16, displayScale: CGFloat = 1.25, fontFamily: String = "serif", color: Color? = nil, blockPadding: EdgeInsets = .init(top: 12, leading: 0, bottom: 12, trailing: 0))
+s:14SmoothMarkdown0B10MathTokensV14inlineFontSize14CoreFoundation7CGFloatVvp | var inlineFontSize: CGFloat
+s:14SmoothMarkdown0B10MathTokensV5color7SwiftUI5ColorVSgvp | var color: Color?
+s:14SmoothMarkdown0B10PluginNodeV | struct MarkdownPluginNode
+s:14SmoothMarkdown0B10PluginNodeV10attributesSDyS2SGvp | let attributes: [String : String]
+s:14SmoothMarkdown0B10PluginNodeV4KindO | enum Kind
+s:14SmoothMarkdown0B10PluginNodeV4KindO5blockyA2EmF | case block
+s:14SmoothMarkdown0B10PluginNodeV4KindO6inlineyA2EmF | case inline
+s:14SmoothMarkdown0B10PluginNodeV4kindAC4KindOvp | let kind: MarkdownPluginNode.Kind
+s:14SmoothMarkdown0B10PluginNodeV4typeSSvp | let type: String
+s:14SmoothMarkdown0B10PluginNodeV6plugin5matchAcA011BlockParserC0_p_AA0gC5MatchVtcfc | init(plugin: any BlockParserPlugin, match: BlockPluginMatch)
+s:14SmoothMarkdown0B10PluginNodeV6plugin5matchAcA012InlineParserC0_p_AA0gC5MatchVtcfc | init(plugin: any InlineParserPlugin, match: InlinePluginMatch)
+s:14SmoothMarkdown0B10PluginNodeV6sourceSSvp | let source: String
+s:14SmoothMarkdown0B10PluginNodeV7contentSSvp | let content: String
+s:14SmoothMarkdown0B10SourceListV | struct MarkdownSourceList
+s:14SmoothMarkdown0B10SourceListV02toB0SSyF | func toMarkdown() -> String
+s:14SmoothMarkdown0B10SourceListV13indentingItem2atACSgSi_tF | func indentingItem(at index: Int) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV13splittingItem2at13contentOffsetACSgSi_SitF | func splittingItem(at index: Int, contentOffset: Int) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV14outdentingItem2atACSgSi_tF | func outdentingItem(at index: Int) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV18insertingEmptyItem5afterACSgSi_tF | func insertingEmptyItem(after index: Int) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV18settingTaskChecked2at2toACSgSi_SbtF | func settingTaskChecked(at index: Int, to checked: Bool) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV20removingSiblingItems4from2toACSgSi_SitF | func removingSiblingItems(from first: Int, to last: Int) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV20replacingItemContent2at4withACSgSi_SStF | func replacingItemContent(at index: Int, with content: String) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV28replacingContinuationContent2at9lineIndex4withACSgSi_SiSStF | func replacingContinuationContent(at itemIndex: Int, lineIndex: Int, with content: String) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV36replacingTrailingContinuationContent2at9lineIndex4withACSgSi_SiSStF | func replacingTrailingContinuationContent(at itemIndex: Int, lineIndex: Int, with content: String) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10SourceListV5itemsSayAA0bcD4ItemVGvp | let items: [MarkdownSourceListItem]
+s:14SmoothMarkdown0B10SourceListV5parseyACSgSSFZ | static func parse(_ source: String) -> MarkdownSourceList?
+s:14SmoothMarkdown0B10StyleSheetV | struct MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV010inlineCodeC0AA0b10InlineTextC0VSgvp | var inlineCodeStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV011superscriptC0AA0b10InlineTextC0VSgvp | var superscriptStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV013strikethroughC0AA0b10InlineTextC0VSgvp | var strikethroughStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV019readerParagraphTextC07SwiftUI4FontV0gC0Ovp | var readerParagraphTextStyle: Font.TextStyle
+s:14SmoothMarkdown0B10StyleSheetV03kbdC0AA0b10InlineTextC0VSgvp | var kbdStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV04boldC0AA0b10InlineTextC0VSgvp | var boldStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV04linkC0AA0b10InlineTextC0VSgvp | var linkStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV06italicC0AA0b10InlineTextC0VSgvp | var italicStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV09highlightC0AA0b10InlineTextC0VSgvp | var highlightStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV09subscriptC0AA0b10InlineTextC0VSgvp | var subscriptStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV09underlineC0AA0b10InlineTextC0VSgvp | var underlineStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV10listIndent14CoreFoundation7CGFloatVvp | var listIndent: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV10normalizedACyF | func normalized() -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV11codePadding14CoreFoundation7CGFloatVvp | var codePadding: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV11listSpacing14CoreFoundation7CGFloatVvp | var listSpacing: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV11tableBorderAA0b5TableF0VSgvp | var tableBorder: MarkdownTableBorder?
+s:14SmoothMarkdown0B10StyleSheetV12blockSpacing14CoreFoundation7CGFloatVvp | var blockSpacing: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV12designTokensAA0b6DesignF0Vvp | var designTokens: MarkdownDesignTokens { get set }
+s:14SmoothMarkdown0B10StyleSheetV12headingColor7SwiftUI0F0VSgvp | var headingColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV12headingFontsSay7SwiftUI4FontVGSgvp | var headingFonts: [Font]?
+s:14SmoothMarkdown0B10StyleSheetV12quoteSpacing14CoreFoundation7CGFloatVvp | var quoteSpacing: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV13codeTextColor7SwiftUI0G0VSgvp | var codeTextColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV13footnoteColor7SwiftUI0F0VSgvp | var footnoteColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV13paragraphFont7SwiftUI0F0VSgvp | var paragraphFont: Font?
+s:14SmoothMarkdown0B10StyleSheetV13quoteBarColor7SwiftUI0G0VSgvp | var quoteBarColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV13tableCellFont7SwiftUI0G0VSgvp | var tableCellFont: Font?
+s:14SmoothMarkdown0B10StyleSheetV14codeBackground7SwiftUI5ColorVSgvp | var codeBackground: Color?
+s:14SmoothMarkdown0B10StyleSheetV14contentPadding14CoreFoundation7CGFloatVvp | var contentPadding: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV14highlightColor7SwiftUI0F0VSgvp | var highlightColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV14listBulletFont7SwiftUI0G0VSgvp | var listBulletFont: Font?
+s:14SmoothMarkdown0B10StyleSheetV15backgroundColor04textF007headingF004linkF014codeBackground0j4TextF0010inlineCodeK00mnlF008quoteBarF00oK0011tableBorderF00q6HeaderkF004ruleF023horizontalRuleThickness08footnoteF009highlightF00H5Fonts13paragraphFont0J4Font0qS4Font0Q8CellFont015readerParagraphlC0013readerHeadingL6Styles14listBulletFont010listBulletF012blockSpacing14contentPadding0O7Spacing11listSpacing10listIndent0J7Padding0Q11CellPadding04darkN12Highlighting20blockquoteDecoration17blockquotePadding0J15BlockDecoration0J12BlockPadding04boldC006italicC0013strikethroughC00iC00mnC009subscriptC0011superscriptC003kbdC00qR009underlineC00yC012designTokensAC7SwiftUI0F0VSg_A28_A28_A28_A28_A28_A28_A28_A28_A28_A28_A28_A28_14CoreFoundation7CGFloatVA28_A28_SayA25_4FontVGSgA33_SgA36_A36_A36_A33_0lC0OSayA38_GA36_A28_A31_A31_A31_A31_A31_A31_A31_SbSgAA0B20BlockquoteDecorationVSgA25_10EdgeInsetsVAA0bN15BlockDecorationVSgA45_SgAA0b6InlinelC0VSgA52_A52_A52_A52_A52_A52_A52_AA0b5TableR0VSgA52_A52_AA0B12DesignTokensVtcfc | init(backgroundColor: Color? = nil, textColor: Color? = nil, headingColor: Color? = nil, linkColor: Color? = nil, codeBackground: Color? = nil, codeTextColor: Color? = nil, inlineCodeBackground: Color? = nil, inlineCodeTextColor: Color? = nil, quoteBarColor: Color? = nil, quoteBackground: Color? = nil, tableBorderColor: Color? = nil, tableHeaderBackgroundColor: Color? = nil, ruleColor: Color? = nil, horizontalRuleThickness: CGFloat = 1, footnoteColor: Color? = nil, highlightColor: Color? = nil, headingFonts: [Font]? = nil, paragraphFont: Font? = nil, codeFont: Font? = nil, tableHeaderFont: Font? = nil, tableCellFont: Font? = nil, readerParagraphTextStyle: Font.TextStyle = .body, readerHeadingTextStyles: [Font.TextStyle] = [.title, .title2, .title3, .headline, .subheadline, .footnote], listBulletFont: Font? = nil, listBulletColor: Color? = nil, blockSpacing: CGFloat = 12, contentPadding: CGFloat = 16, quoteSpacing: CGFloat = 8, listSpacing: CGFloat = 4, listIndent: CGFloat = 32, codePadding: CGFloat = 12, tableCellPadding: CGFloat = 8, darkCodeHighlighting: Bool? = nil, blockquoteDecoration: MarkdownBlockquoteDecoration? = nil, blockquotePadding: EdgeInsets = EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16), codeBlockDecoration: MarkdownCodeBlockDecoration? = nil, codeBlockPadding: EdgeInsets? = nil, boldStyle: MarkdownInlineTextStyle? = nil, italicStyle: MarkdownInlineTextStyle? = nil, strikethroughStyle: MarkdownInlineTextStyle? = nil, linkStyle: MarkdownInlineTextStyle? = nil, inlineCodeStyle: MarkdownInlineTextStyle? = nil, subscriptStyle: MarkdownInlineTextStyle? = nil, superscriptStyle: MarkdownInlineTextStyle? = nil, kbdStyle: MarkdownInlineTextStyle? = nil, tableBorder: MarkdownTableBorder? = nil, underlineStyle: MarkdownInlineTextStyle? = nil, highlightStyle: MarkdownInlineTextStyle? = nil, designTokens: MarkdownDesignTokens = .init())
+s:14SmoothMarkdown0B10StyleSheetV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV15listBulletColor7SwiftUI0G0VSgvp | var listBulletColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV15quoteBackground7SwiftUI5ColorVSgvp | var quoteBackground: Color?
+s:14SmoothMarkdown0B10StyleSheetV15tableHeaderFont7SwiftUI0G0VSgvp | var tableHeaderFont: Font?
+s:14SmoothMarkdown0B10StyleSheetV16codeBlockPadding7SwiftUI10EdgeInsetsVSgvp | var codeBlockPadding: EdgeInsets?
+s:14SmoothMarkdown0B10StyleSheetV16tableBorderColor7SwiftUI0G0VSgvp | var tableBorderColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV16tableCellPadding14CoreFoundation7CGFloatVvp | var tableCellPadding: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV17blockquotePadding7SwiftUI10EdgeInsetsVvp | var blockquotePadding: EdgeInsets
+s:14SmoothMarkdown0B10StyleSheetV19codeBlockDecorationAA0b4CodefG0VSgvp | var codeBlockDecoration: MarkdownCodeBlockDecoration?
+s:14SmoothMarkdown0B10StyleSheetV19inlineCodeTextColor7SwiftUI0H0VSgvp | var inlineCodeTextColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV20blockquoteDecorationAA0b10BlockquoteF0VSgvp | var blockquoteDecoration: MarkdownBlockquoteDecoration?
+s:14SmoothMarkdown0B10StyleSheetV20darkCodeHighlightingSbSgvp | var darkCodeHighlighting: Bool?
+s:14SmoothMarkdown0B10StyleSheetV20inlineCodeBackground7SwiftUI5ColorVSgvp | var inlineCodeBackground: Color?
+s:14SmoothMarkdown0B10StyleSheetV23horizontalRuleThickness14CoreFoundation7CGFloatVvp | var horizontalRuleThickness: CGFloat
+s:14SmoothMarkdown0B10StyleSheetV23readerHeadingTextStylesSay7SwiftUI4FontV0gC0OGvp | var readerHeadingTextStyles: [Font.TextStyle]
+s:14SmoothMarkdown0B10StyleSheetV26tableHeaderBackgroundColor7SwiftUI0H0VSgvp | var tableHeaderBackgroundColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV4darkACyFZ | static func dark() -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV5lightACyFZ | static func light() -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV6github4darkACSb_tFZ | static func github(dark: Bool = false) -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV6vscode4darkACSb_tFZ | static func vscode(dark: Bool = false) -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV7defaultACyFZ | static func `default`() -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV8codeFont7SwiftUI0F0VSgvp | var codeFont: Font?
+s:14SmoothMarkdown0B10StyleSheetV8resolvedACyF | func resolved() -> MarkdownStyleSheet
+s:14SmoothMarkdown0B10StyleSheetV9linkColor7SwiftUI0F0VSgvp | var linkColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV9ruleColor7SwiftUI0F0VSgvp | var ruleColor: Color?
+s:14SmoothMarkdown0B10StyleSheetV9textColor7SwiftUI0F0VSgvp | var textColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV | struct MarkdownEditorTheme
+s:14SmoothMarkdown0B11EditorThemeV12blockPadding7SwiftUI10EdgeInsetsVSgvp | var blockPadding: EdgeInsets?
+s:14SmoothMarkdown0B11EditorThemeV12dividerColor7SwiftUI0F0VSgvp | var dividerColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV12tablePadding7SwiftUI10EdgeInsetsVSgvp | var tablePadding: EdgeInsets?
+s:14SmoothMarkdown0B11EditorThemeV12toolbarColor7SwiftUI0F0VSgvp | var toolbarColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV13sourcePadding7SwiftUI10EdgeInsetsVSgvp | var sourcePadding: EdgeInsets?
+s:14SmoothMarkdown0B11EditorThemeV14contentPadding7SwiftUI10EdgeInsetsVSgvp | var contentPadding: EdgeInsets?
+s:14SmoothMarkdown0B11EditorThemeV14previewPadding7SwiftUI10EdgeInsetsVSgvp | var previewPadding: EdgeInsets?
+s:14SmoothMarkdown0B11EditorThemeV14searchBarColor7SwiftUI0G0VSgvp | var searchBarColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV14selectionColor7SwiftUI0F0VSgvp | var selectionColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV14sourceFontNameSSSgvp | var sourceFontName: String?
+s:14SmoothMarkdown0B11EditorThemeV14sourceFontSize14CoreFoundation7CGFloatVSgvp | var sourceFontSize: CGFloat?
+s:14SmoothMarkdown0B11EditorThemeV15sourceTextColor7SwiftUI0G0VSgvp | var sourceTextColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV16blockBorderColor7SwiftUI0G0VSgvp | var blockBorderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV16blockHeaderColor7SwiftUI0G0VSgvp | var blockHeaderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV16tableBorderColor7SwiftUI0G0VSgvp | var tableBorderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV16tableHeaderColor7SwiftUI0G0VSgvp | var tableHeaderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV16toolbarIconColor7SwiftUI0G0VSgvp | var toolbarIconColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV17blockBorderRadius14CoreFoundation7CGFloatVSgvp | var blockBorderRadius: CGFloat?
+s:14SmoothMarkdown0B11EditorThemeV17editorBorderColor7SwiftUI0G0VSgvp | var editorBorderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV18editorBorderRadius14CoreFoundation7CGFloatVSgvp | var editorBorderRadius: CGFloat?
+s:14SmoothMarkdown0B11EditorThemeV19tableSelectionColor7SwiftUI0G0VSgvp | var tableSelectionColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV20blockHeaderTextColor7SwiftUI0H0VSgvp | var blockHeaderTextColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV20suggestionPanelColor7SwiftUI0G0VSgvp | var suggestionPanelColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV21editorBackgroundColor0e6BorderG00eH6Radius07toolbarG00j4IconG009searchBarG007dividerG006sourcefG00o4TextG00O8FontName0oQ4Size0O7Padding07previewfG00uT007contentT005blockhG00w6HeaderG00wxpG00whI00wT005tablehG00yxG00y9SelectionG00y6ActivehG00yT009selectionG0015suggestionPanelG0018suggestionSelectedfG0AC7SwiftUI0G0VSg_A7_14CoreFoundation7CGFloatVSgA7_A7_A7_A7_A7_A7_SSSgA11_A4_10EdgeInsetsVSgA7_A15_A15_A7_A7_A7_A11_A15_A7_A7_A7_A7_A15_A7_A7_A7_tcfc | init(editorBackgroundColor: Color? = nil, editorBorderColor: Color? = nil, editorBorderRadius: CGFloat? = nil, toolbarColor: Color? = nil, toolbarIconColor: Color? = nil, searchBarColor: Color? = nil, dividerColor: Color? = nil, sourceBackgroundColor: Color? = nil, sourceTextColor: Color? = nil, sourceFontName: String? = nil, sourceFontSize: CGFloat? = nil, sourcePadding: EdgeInsets? = nil, previewBackgroundColor: Color? = nil, previewPadding: EdgeInsets? = nil, contentPadding: EdgeInsets? = nil, blockBorderColor: Color? = nil, blockHeaderColor: Color? = nil, blockHeaderTextColor: Color? = nil, blockBorderRadius: CGFloat? = nil, blockPadding: EdgeInsets? = nil, tableBorderColor: Color? = nil, tableHeaderColor: Color? = nil, tableSelectionColor: Color? = nil, tableActiveBorderColor: Color? = nil, tablePadding: EdgeInsets? = nil, selectionColor: Color? = nil, suggestionPanelColor: Color? = nil, suggestionSelectedBackgroundColor: Color? = nil)
+s:14SmoothMarkdown0B11EditorThemeV21editorBackgroundColor7SwiftUI0G0VSgvp | var editorBackgroundColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV21sourceBackgroundColor7SwiftUI0G0VSgvp | var sourceBackgroundColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV22previewBackgroundColor7SwiftUI0G0VSgvp | var previewBackgroundColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV22tableActiveBorderColor7SwiftUI0H0VSgvp | var tableActiveBorderColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV33suggestionSelectedBackgroundColor7SwiftUI0H0VSgvp | var suggestionSelectedBackgroundColor: Color?
+s:14SmoothMarkdown0B11EditorThemeV7mergingyA2CSgF | func merging(_ override: MarkdownEditorTheme?) -> MarkdownEditorTheme
+s:14SmoothMarkdown0B11InlineStyleV | struct MarkdownInlineStyle
+s:14SmoothMarkdown0B11InlineStyleV4bold6italic6strike4linkACSb_S2b10Foundation3URLVSgtcfc | init(bold: Bool = false, italic: Bool = false, strike: Bool = false, link: URL? = nil)
+s:14SmoothMarkdown0B11InlineStyleV4boldSbvp | let bold: Bool
+s:14SmoothMarkdown0B11InlineStyleV4link10Foundation3URLVSgvp | let link: URL?
+s:14SmoothMarkdown0B11InlineStyleV6italicSbvp | let italic: Bool
+s:14SmoothMarkdown0B11InlineStyleV6strikeSbvp | let strike: Bool
+s:14SmoothMarkdown0B11QuoteTokensV | struct MarkdownQuoteTokens
+s:14SmoothMarkdown0B11QuoteTokensV10normalizedACyF | func normalized() -> MarkdownQuoteTokens
+s:14SmoothMarkdown0B11QuoteTokensV11borderAlphaSdvp | var borderAlpha: Double
+s:14SmoothMarkdown0B11QuoteTokensV11iconSpacing14CoreFoundation7CGFloatVvp | var iconSpacing: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV11shadowColor7SwiftUI0F0Vvp | var shadowColor: Color
+s:14SmoothMarkdown0B11QuoteTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV12shadowRadius14CoreFoundation7CGFloatVvp | var shadowRadius: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV14iconTypographyAA0B9FontTokenVSgvp | var iconTypography: MarkdownFontToken?
+s:14SmoothMarkdown0B11QuoteTokensV16gradientEndColor7SwiftUI0G0VSgvp | var gradientEndColor: Color?
+s:14SmoothMarkdown0B11QuoteTokensV18gradientStartColor0e3EndG011borderAlpha8showIcon04iconG00mJ00M4Font0M10Typography0M4Size0M7Spacing12cornerRadius06shadowG00tS00T1X0T1YAC7SwiftUI0G0VSg_AVSdSbAVSdAS0N0VSgAA0bN5TokenVSg14CoreFoundation7CGFloatVA3_A3_AUA3_A3_A3_tcfc | init(gradientStartColor: Color? = nil, gradientEndColor: Color? = nil, borderAlpha: Double = 0.6, showIcon: Bool = true, iconColor: Color? = nil, iconAlpha: Double = 0.4, iconFont: Font? = nil, iconTypography: MarkdownFontToken? = nil, iconSize: CGFloat = 24, iconSpacing: CGFloat = 12, cornerRadius: CGFloat = 4, shadowColor: Color = .black.opacity(0.05), shadowRadius: CGFloat = 4, shadowX: CGFloat = 0, shadowY: CGFloat = 2)
+s:14SmoothMarkdown0B11QuoteTokensV18gradientStartColor7SwiftUI0G0VSgvp | var gradientStartColor: Color?
+s:14SmoothMarkdown0B11QuoteTokensV7shadowX14CoreFoundation7CGFloatVvp | var shadowX: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV7shadowY14CoreFoundation7CGFloatVvp | var shadowY: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV8iconFont7SwiftUI0F0VSgvp | var iconFont: Font?
+s:14SmoothMarkdown0B11QuoteTokensV8iconSize14CoreFoundation7CGFloatVvp | var iconSize: CGFloat
+s:14SmoothMarkdown0B11QuoteTokensV8showIconSbvp | var showIcon: Bool
+s:14SmoothMarkdown0B11QuoteTokensV9iconAlphaSdvp | var iconAlpha: Double
+s:14SmoothMarkdown0B11QuoteTokensV9iconColor7SwiftUI0F0VSgvp | var iconColor: Color?
+s:14SmoothMarkdown0B11SourceQuoteV | struct MarkdownSourceQuote
+s:14SmoothMarkdown0B11SourceQuoteV02toB0SSyF | func toMarkdown() -> String
+s:14SmoothMarkdown0B11SourceQuoteV4LineV | struct Line
+s:14SmoothMarkdown0B11SourceQuoteV4LineV10bodyOffsetSivp | var bodyOffset: Int { get }
+s:14SmoothMarkdown0B11SourceQuoteV4LineV12sourceOffsetSivp | let sourceOffset: Int
+s:14SmoothMarkdown0B11SourceQuoteV4LineV6endingSSvp | let ending: String
+s:14SmoothMarkdown0B11SourceQuoteV4LineV6prefixSSvp | let prefix: String
+s:14SmoothMarkdown0B11SourceQuoteV4LineV7contentSSvp | let content: String
+s:14SmoothMarkdown0B11SourceQuoteV5linesSayAC4LineVGvp | let lines: [MarkdownSourceQuote.Line]
+s:14SmoothMarkdown0B11SourceQuoteV6sourceACSgSS_tcfc | init?(source: String)
+s:14SmoothMarkdown0B11SourceTableV | struct MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV02toB0SSyF | func toMarkdown() -> String
+s:14SmoothMarkdown0B11SourceTableV10alignmentsSayAA0bD9AlignmentOSgGvp | var alignments: [MarkdownTableAlignment?]
+s:14SmoothMarkdown0B11SourceTableV11columnCountSivp | var columnCount: Int { get }
+s:14SmoothMarkdown0B11SourceTableV11deletingRowyACSiF | func deletingRow(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV13replacingCell8rowIndex06columnH04text6headerACSi_SiSSSbtF | func replacingCell(rowIndex: Int, columnIndex: Int, text: String, header: Bool = false) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV14deletingColumnyACSiF | func deletingColumn(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV17insertingRowAfteryACSiF | func insertingRowAfter(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV18insertingRowBeforeyACSiF | func insertingRowBefore(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV20insertingColumnAfteryACSiF | func insertingColumnAfter(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV21insertingColumnBeforeyACSiF | func insertingColumnBefore(_ index: Int) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV22settingColumnAlignment_2toACSi_AA0bdG0OSgtF | func settingColumnAlignment(_ index: Int, to alignment: MarkdownTableAlignment?) -> MarkdownSourceTable
+s:14SmoothMarkdown0B11SourceTableV4rowsSaySaySSGGvp | var rows: [[String]]
+s:14SmoothMarkdown0B11SourceTableV5parseyACSgSSFZ | static func parse(_ source: String) -> MarkdownSourceTable?
+s:14SmoothMarkdown0B11SourceTableV7headersSaySSGvp | var headers: [String]
+s:14SmoothMarkdown0B11TableBorderV | struct MarkdownTableBorder
+s:14SmoothMarkdown0B11TableBorderV14verticalInsideAA0bcD4SideVSgvp | var verticalInside: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B11TableBorderV16horizontalInsideAA0bcD4SideVSgvp | var horizontalInside: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B11TableBorderV3all5color5widthAC7SwiftUI5ColorV_14CoreFoundation7CGFloatVtFZ | static func all(color: Color, width: CGFloat = 1) -> MarkdownTableBorder
+s:14SmoothMarkdown0B11TableBorderV3top5right6bottom4left16horizontalInside08verticalJ0AcA0bcD4SideVSg_A5Ltcfc | init(top: MarkdownTableBorderSide? = nil, right: MarkdownTableBorderSide? = nil, bottom: MarkdownTableBorderSide? = nil, left: MarkdownTableBorderSide? = nil, horizontalInside: MarkdownTableBorderSide? = nil, verticalInside: MarkdownTableBorderSide? = nil)
+s:14SmoothMarkdown0B11TableBorderV3topAA0bcD4SideVSgvp | var top: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B11TableBorderV4leftAA0bcD4SideVSgvp | var left: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B11TableBorderV5rightAA0bcD4SideVSgvp | var right: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B11TableBorderV6bottomAA0bcD4SideVSgvp | var bottom: MarkdownTableBorderSide?
+s:14SmoothMarkdown0B12DesignTokensV | struct MarkdownDesignTokens
+s:14SmoothMarkdown0B12DesignTokensV10normalizedACyF | func normalized() -> MarkdownDesignTokens
+s:14SmoothMarkdown0B12DesignTokensV10typographyAA0b10TypographyD0Vvp | var typography: MarkdownTypographyTokens
+s:14SmoothMarkdown0B12DesignTokensV15footnotePadding7SwiftUI10EdgeInsetsVvp | var footnotePadding: EdgeInsets
+s:14SmoothMarkdown0B12DesignTokensV23imagePlaceholderMinSize14CoreFoundation7CGFloatVvp | var imagePlaceholderMinSize: CGFloat
+s:14SmoothMarkdown0B12DesignTokensV4codeAA0b4CodeD0Vvp | var code: MarkdownCodeTokens
+s:14SmoothMarkdown0B12DesignTokensV4linkAA0b4LinkD0Vvp | var link: MarkdownLinkTokens
+s:14SmoothMarkdown0B12DesignTokensV4mathAA0b4MathD0Vvp | var math: MarkdownMathTokens
+s:14SmoothMarkdown0B12DesignTokensV5quoteAA0b5QuoteD0Vvp | var quote: MarkdownQuoteTokens
+s:14SmoothMarkdown0B12DesignTokensV7detailsAA0b7DetailsD0Vvp | var details: MarkdownDetailsTokens
+s:14SmoothMarkdown0B12DesignTokensV7headingAA0b7HeadingD0Vvp | var heading: MarkdownHeadingTokens
+s:14SmoothMarkdown0B12DesignTokensV7mermaidAA0b7MermaidD0Vvp | var mermaid: MarkdownMermaidTokens
+s:14SmoothMarkdown0B12DesignTokensV7pluginsAA0b6PluginD0Vvp | var plugins: MarkdownPluginTokens
+s:14SmoothMarkdown0B12DesignTokensV8document10typography7heading5quote4code4link7details8keyboard4math7plugins7mermaid15footnotePadding23imagePlaceholderMinSizeAcA0b8DocumentD0V_AA0b10TypographyD0VAA0b7HeadingD0VAA0b5QuoteD0VAA0b4CodeD0VAA0b4LinkD0VAA0b7DetailsD0VAA0b8KeyboardD0VAA0b4MathD0VAA0b6PluginD0VAA0b7MermaidD0V7SwiftUI10EdgeInsetsV14CoreFoundation7CGFloatVtcfc | init(document: MarkdownDocumentTokens = .init(), typography: MarkdownTypographyTokens = .init(), heading: MarkdownHeadingTokens = .init(), quote: MarkdownQuoteTokens = .init(), code: MarkdownCodeTokens = .init(), link: MarkdownLinkTokens = .init(), details: MarkdownDetailsTokens = .init(), keyboard: MarkdownKeyboardTokens = .init(), math: MarkdownMathTokens = .init(), plugins: MarkdownPluginTokens = .init(), mermaid: MarkdownMermaidTokens = .init(), footnotePadding: EdgeInsets = .init(top: 8, leading: 16, bottom: 8, trailing: 0), imagePlaceholderMinSize: CGFloat = 48)
+s:14SmoothMarkdown0B12DesignTokensV8documentAA0b8DocumentD0Vvp | var document: MarkdownDocumentTokens
+s:14SmoothMarkdown0B12DesignTokensV8keyboardAA0b8KeyboardD0Vvp | var keyboard: MarkdownKeyboardTokens
+s:14SmoothMarkdown0B12EditorHostIOC | @MainActor final class MarkdownEditorHostIO
+s:14SmoothMarkdown0B12EditorHostIOC06exportB0SbyYaF | @discardableResult @MainActor func exportMarkdown() async -> Bool
+s:14SmoothMarkdown0B12EditorHostIOC06importB0SbyYaF | @discardableResult @MainActor func importMarkdown() async -> Bool
+s:14SmoothMarkdown0B12EditorHostIOC0B8Exportera | typealias MarkdownExporter = (String) async throws -> Void
+s:14SmoothMarkdown0B12EditorHostIOC0B8Importera | typealias MarkdownImporter = () async throws -> String?
+s:14SmoothMarkdown0B12EditorHostIOC10controller11onPickImage0g6ImportB00g6ExportB00gK3PDF0giH5Event0gM0AcA0bC10ControllerC_AA0bcI9SelectionVSgyYaKcSgSSSgyYaKcSgySSYaKcSgySS_SStYaKcSgyAA0bcihM0VcSgyAA0bcD7IOEventVcSgtcfc | @MainActor init(controller: MarkdownEditorController, onPickImage: MarkdownEditorHostIO.ImagePicker? = nil, onImportMarkdown: MarkdownEditorHostIO.MarkdownImporter? = nil, onExportMarkdown: MarkdownEditorHostIO.MarkdownExporter? = nil, onExportPDF: MarkdownEditorHostIO.PDFExporter? = nil, onImagePickEvent: ((MarkdownEditorImagePickEvent) -> Void)? = nil, onEvent: ((MarkdownEditorHostIOEvent) -> Void)? = nil)
+s:14SmoothMarkdown0B12EditorHostIOC11ImagePickera | typealias ImagePicker = () async throws -> MarkdownEditorImageSelection?
+s:14SmoothMarkdown0B12EditorHostIOC11PDFExportera | typealias PDFExporter = (String, String) async throws -> Void
+s:14SmoothMarkdown0B12EditorHostIOC9exportPDFSbyYaF | @discardableResult @MainActor func exportPDF() async -> Bool
+s:14SmoothMarkdown0B12EditorHostIOC9pickImageSbyYaF | @discardableResult @MainActor func pickImage() async -> Bool
+s:14SmoothMarkdown0B12PluginTokensV | struct MarkdownPluginTokens
+s:14SmoothMarkdown0B12PluginTokensV10admonitionAA0b10AdmonitionD0Vvp | var admonition: MarkdownAdmonitionTokens
+s:14SmoothMarkdown0B12PluginTokensV10normalizedACyF | func normalized() -> MarkdownPluginTokens
+s:14SmoothMarkdown0B12PluginTokensV12hashtagStyleAA0b10InlineTextF0Vvp | var hashtagStyle: MarkdownInlineTextStyle
+s:14SmoothMarkdown0B12PluginTokensV12mentionStyle07hashtagF010admonition8thinking8artifact8toolCallAcA0b10InlineTextF0V_AkA0b10AdmonitionD0VAA0bc5PanelD0VA2Otcfc | init(mentionStyle: MarkdownInlineTextStyle = MarkdownInlineTextStyle(textColor: .blue), hashtagStyle: MarkdownInlineTextStyle = MarkdownInlineTextStyle(textColor: .blue), admonition: MarkdownAdmonitionTokens = MarkdownAdmonitionTokens(), thinking: MarkdownPluginPanelTokens = MarkdownPluginPanelTokens(borderWidth: 0, dividerThickness: 0), artifact: MarkdownPluginPanelTokens = MarkdownPluginPanelTokens(), toolCall: MarkdownPluginPanelTokens = MarkdownPluginPanelTokens())
+s:14SmoothMarkdown0B12PluginTokensV12mentionStyleAA0b10InlineTextF0Vvp | var mentionStyle: MarkdownInlineTextStyle
+s:14SmoothMarkdown0B12PluginTokensV8artifactAA0bc5PanelD0Vvp | var artifact: MarkdownPluginPanelTokens
+s:14SmoothMarkdown0B12PluginTokensV8thinkingAA0bc5PanelD0Vvp | var thinking: MarkdownPluginPanelTokens
+s:14SmoothMarkdown0B12PluginTokensV8toolCallAA0bc5PanelD0Vvp | var toolCall: MarkdownPluginPanelTokens
+s:14SmoothMarkdown0B12SyntaxColorsV | struct MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV10normalizedACyF | func normalized() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV4darkACyFZ | static func dark() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV5lightACyFZ | static func light() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV6number7SwiftUI5ColorVvp | var number: Color
+s:14SmoothMarkdown0B12SyntaxColorsV6string7SwiftUI5ColorVvp | var string: Color
+s:14SmoothMarkdown0B12SyntaxColorsV7comment7SwiftUI5ColorVvp | var comment: Color
+s:14SmoothMarkdown0B12SyntaxColorsV7keyword6string7comment6number7literalAC7SwiftUI5ColorV_A4Ktcfc | init(keyword: Color = .purple, string: Color = .red, comment: Color = .green, number: Color = .blue, literal: Color = .teal)
+s:14SmoothMarkdown0B12SyntaxColorsV7keyword7SwiftUI5ColorVvp | var keyword: Color
+s:14SmoothMarkdown0B12SyntaxColorsV7literal7SwiftUI5ColorVvp | var literal: Color
+s:14SmoothMarkdown0B13DetailsTokensV | struct MarkdownDetailsTokens
+s:14SmoothMarkdown0B13DetailsTokensV10normalizedACyF | func normalized() -> MarkdownDetailsTokens
+s:14SmoothMarkdown0B13DetailsTokensV11bodyPadding7SwiftUI10EdgeInsetsVvp | var bodyPadding: EdgeInsets
+s:14SmoothMarkdown0B13DetailsTokensV11borderColor7SwiftUI0F0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B13DetailsTokensV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B13DetailsTokensV11iconSpacing14CoreFoundation7CGFloatVvp | var iconSpacing: CGFloat
+s:14SmoothMarkdown0B13DetailsTokensV12cornerRadius12outerPadding11borderWidth0I5Color010backgroundK007summaryH004bodyH011iconSpacing0oJ00O4Font0oK016dividerThicknessAC14CoreFoundation7CGFloatV_7SwiftUI10EdgeInsetsVArS0K0VSgAx2u2rS0Q0VSgAxRtcfc | init(cornerRadius: CGFloat = 6, outerPadding: EdgeInsets = .init(top: 8, leading: 0, bottom: 8, trailing: 0), borderWidth: CGFloat = 1, borderColor: Color? = nil, backgroundColor: Color? = nil, summaryPadding: EdgeInsets = .init(top: 12, leading: 12, bottom: 12, trailing: 12), bodyPadding: EdgeInsets = .init(top: 0, leading: 12, bottom: 12, trailing: 12), iconSpacing: CGFloat = 8, iconWidth: CGFloat = 20, iconFont: Font? = nil, iconColor: Color? = nil, dividerThickness: CGFloat = 1)
+s:14SmoothMarkdown0B13DetailsTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B13DetailsTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
+s:14SmoothMarkdown0B13DetailsTokensV14summaryPadding7SwiftUI10EdgeInsetsVvp | var summaryPadding: EdgeInsets
+s:14SmoothMarkdown0B13DetailsTokensV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B13DetailsTokensV16dividerThickness14CoreFoundation7CGFloatVvp | var dividerThickness: CGFloat
+s:14SmoothMarkdown0B13DetailsTokensV8iconFont7SwiftUI0F0VSgvp | var iconFont: Font?
+s:14SmoothMarkdown0B13DetailsTokensV9iconColor7SwiftUI0F0VSgvp | var iconColor: Color?
+s:14SmoothMarkdown0B13DetailsTokensV9iconWidth14CoreFoundation7CGFloatVvp | var iconWidth: CGFloat
+s:14SmoothMarkdown0B13DocumentBlockV | struct MarkdownDocumentBlock
+s:14SmoothMarkdown0B13DocumentBlockV13leadingTriviaSSvp | let leadingTrivia: String
+s:14SmoothMarkdown0B13DocumentBlockV16replacingContentyACSgSSF | func replacingContent(_ content: String) -> MarkdownDocumentBlock?
+s:14SmoothMarkdown0B13DocumentBlockV21replacingCodeLanguageyACSgSSF | func replacingCodeLanguage(_ language: String) -> MarkdownDocumentBlock?
+s:14SmoothMarkdown0B13DocumentBlockV2id4kind6source13leadingTriviaACSS_AA0b8SemanticD0OS2Stcfc | init(id: String, kind: MarkdownSemanticBlock, source: String, leadingTrivia: String = "")
+s:14SmoothMarkdown0B13DocumentBlockV2idSSvp | let id: String
+s:14SmoothMarkdown0B13DocumentBlockV4kindAA0b8SemanticD0Ovp | let kind: MarkdownSemanticBlock
+s:14SmoothMarkdown0B13DocumentBlockV6sourceSSvp | let source: String
+s:14SmoothMarkdown0B13DocumentBlockV9plainTextSSvp | var plainText: String { get }
+s:14SmoothMarkdown0B13DocumentCodecV | struct MarkdownDocumentCodec
+s:14SmoothMarkdown0B13DocumentCodecV5parseyAA0bC0VSSF | func parse(_ markdown: String) -> MarkdownDocument
+s:14SmoothMarkdown0B13DocumentCodecV7pluginsAcA20ParserPluginRegistryCSg_tcfc | init(plugins: ParserPluginRegistry? = nil)
+s:14SmoothMarkdown0B13DocumentCodecV9serializeySSAA0bC0VF | func serialize(_ document: MarkdownDocument) -> String
+s:14SmoothMarkdown0B13EditorCommandO | enum MarkdownEditorCommand
+s:14SmoothMarkdown0B13EditorCommandO10blockquoteyA2CmF | case blockquote
+s:14SmoothMarkdown0B13EditorCommandO10inlineCodeyA2CmF | case inlineCode
+s:14SmoothMarkdown0B13EditorCommandO11orderedListyA2CmF | case orderedList
+s:14SmoothMarkdown0B13EditorCommandO13strikethroughyA2CmF | case strikethrough
+s:14SmoothMarkdown0B13EditorCommandO13unorderedListyA2CmF | case unorderedList
+s:14SmoothMarkdown0B13EditorCommandO14horizontalRuleyA2CmF | case horizontalRule
+s:14SmoothMarkdown0B13EditorCommandO14mermaidDiagramyA2CmF | case mermaidDiagram
+s:14SmoothMarkdown0B13EditorCommandO4boldyA2CmF | case bold
+s:14SmoothMarkdown0B13EditorCommandO4linkyA2CmF | case link
+s:14SmoothMarkdown0B13EditorCommandO5imageyA2CmF | case image
+s:14SmoothMarkdown0B13EditorCommandO5tableyA2CmF | case table
+s:14SmoothMarkdown0B13EditorCommandO6italicyA2CmF | case italic
+s:14SmoothMarkdown0B13EditorCommandO8heading1yA2CmF | case heading1
+s:14SmoothMarkdown0B13EditorCommandO8heading2yA2CmF | case heading2
+s:14SmoothMarkdown0B13EditorCommandO8heading3yA2CmF | case heading3
+s:14SmoothMarkdown0B13EditorCommandO8heading4yA2CmF | case heading4
+s:14SmoothMarkdown0B13EditorCommandO8heading5yA2CmF | case heading5
+s:14SmoothMarkdown0B13EditorCommandO8heading6yA2CmF | case heading6
+s:14SmoothMarkdown0B13EditorCommandO8taskListyA2CmF | case taskList
+s:14SmoothMarkdown0B13EditorCommandO8wikilinkyA2CmF | case wikilink
+s:14SmoothMarkdown0B13EditorCommandO9blockMathyA2CmF | case blockMath
+s:14SmoothMarkdown0B13EditorCommandO9codeBlockyA2CmF | case codeBlock
+s:14SmoothMarkdown0B13EditorCommandO9paragraphyA2CmF | case paragraph
+s:14SmoothMarkdown0B13ExtensionNodeV | struct MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV10attributesSDyS2SGvp | let attributes: [String : String]
+s:14SmoothMarkdown0B13ExtensionNodeV10inlineMathyACSSFZ | static func inlineMath(_ latex: String) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV17footnoteReferenceyACSSFZ | static func footnoteReference(_ label: String) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV18footnoteDefinition5label7contentACSS_SStFZ | static func footnoteDefinition(label: String, content: String) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV4KindO | enum Kind
+s:14SmoothMarkdown0B13ExtensionNodeV4KindO5blockyA2EmF | case block
+s:14SmoothMarkdown0B13ExtensionNodeV4KindO6inlineyA2EmF | case inline
+s:14SmoothMarkdown0B13ExtensionNodeV4kind4type6source7content10attributesA2C4KindO_S3SSDyS2SGtcfc | init(kind: MarkdownExtensionNode.Kind, type: String, source: String, content: String, attributes: [String : String] = [:])
+s:14SmoothMarkdown0B13ExtensionNodeV4kindAC4KindOvp | let kind: MarkdownExtensionNode.Kind
+s:14SmoothMarkdown0B13ExtensionNodeV4typeSSvp | let type: String
+s:14SmoothMarkdown0B13ExtensionNodeV6sourceSSvp | let source: String
+s:14SmoothMarkdown0B13ExtensionNodeV7contentSSvp | let content: String
+s:14SmoothMarkdown0B13ExtensionNodeV7details7summary7content6isOpenACSS_SSSbtFZ | static func details(summary: String, content: String, isOpen: Bool) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV9blockMathyACSSFZ | static func blockMath(_ latex: String) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13ExtensionNodeV9htmlStyle4type3tag4text10attributesACSS_S2SSDyS2SGtFZ | static func htmlStyle(type: String, tag: String, text: String, attributes: [String : String] = [:]) -> MarkdownExtensionNode
+s:14SmoothMarkdown0B13HeadingTokensV | struct MarkdownHeadingTokens
+s:14SmoothMarkdown0B13HeadingTokensV10barSpacing14CoreFoundation7CGFloatVvp | var barSpacing: CGFloat
+s:14SmoothMarkdown0B13HeadingTokensV10normalizedACyF | func normalized() -> MarkdownHeadingTokens
+s:14SmoothMarkdown0B13HeadingTokensV11accentColor21decoratedThroughLevel7padding8barWidth0K6Radius0K7Spacing0K8EndAlpha13ruleThickness0q5StartP00qoP0AC7SwiftUI0F0VSg_SiAN10EdgeInsetsV14CoreFoundation7CGFloatVA2VSdAVS2dtcfc | init(accentColor: Color? = nil, decoratedThroughLevel: Int = 2, padding: EdgeInsets = .init(top: 8, leading: 0, bottom: 8, trailing: 0), barWidth: CGFloat = 4, barRadius: CGFloat = 2, barSpacing: CGFloat = 12, barEndAlpha: Double = 0.3, ruleThickness: CGFloat = 2, ruleStartAlpha: Double = 0.3, ruleEndAlpha: Double = 0)
+s:14SmoothMarkdown0B13HeadingTokensV11accentColor7SwiftUI0F0VSgvp | var accentColor: Color?
+s:14SmoothMarkdown0B13HeadingTokensV11barEndAlphaSdvp | var barEndAlpha: Double
+s:14SmoothMarkdown0B13HeadingTokensV12ruleEndAlphaSdvp | var ruleEndAlpha: Double
+s:14SmoothMarkdown0B13HeadingTokensV13ruleThickness14CoreFoundation7CGFloatVvp | var ruleThickness: CGFloat
+s:14SmoothMarkdown0B13HeadingTokensV14ruleStartAlphaSdvp | var ruleStartAlpha: Double
+s:14SmoothMarkdown0B13HeadingTokensV21decoratedThroughLevelSivp | var decoratedThroughLevel: Int
+s:14SmoothMarkdown0B13HeadingTokensV7padding7SwiftUI10EdgeInsetsVvp | var padding: EdgeInsets
+s:14SmoothMarkdown0B13HeadingTokensV8barWidth14CoreFoundation7CGFloatVvp | var barWidth: CGFloat
+s:14SmoothMarkdown0B13HeadingTokensV9barRadius14CoreFoundation7CGFloatVvp | var barRadius: CGFloat
+s:14SmoothMarkdown0B13HeadingValuesV | struct MarkdownHeadingValues<Value>
+s:14SmoothMarkdown0B13HeadingValuesV2h12h22h32h42h52h6ACyxGx_xxxxxtcfc | init(h1: Value, h2: Value, h3: Value, h4: Value, h5: Value, h6: Value)
+s:14SmoothMarkdown0B13HeadingValuesV2h1xvp | var h1: Value
+s:14SmoothMarkdown0B13HeadingValuesV2h2xvp | var h2: Value
+s:14SmoothMarkdown0B13HeadingValuesV2h3xvp | var h3: Value
+s:14SmoothMarkdown0B13HeadingValuesV2h4xvp | var h4: Value
+s:14SmoothMarkdown0B13HeadingValuesV2h5xvp | var h5: Value
+s:14SmoothMarkdown0B13HeadingValuesV2h6xvp | var h6: Value
+s:14SmoothMarkdown0B13HeadingValuesV5levelxSi_tcip | subscript(level level: Int) -> Value { get set }
+s:14SmoothMarkdown0B13HeadingValuesV6valuesSayxGvp | var values: [Value] { get }
+s:14SmoothMarkdown0B13MermaidTokensV | struct MarkdownMermaidTokens
+s:14SmoothMarkdown0B13MermaidTokensV10normalizedACyF | func normalized() -> MarkdownMermaidTokens
+s:14SmoothMarkdown0B13MermaidTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
+s:14SmoothMarkdown0B13MermaidTokensV4font7SwiftUI4FontVSgvp | var font: Font?
+s:14SmoothMarkdown0B13MermaidTokensV6colors4font12outerPadding9maxHeightAcA0C7PaletteVSg_7SwiftUI4FontVSgAK10EdgeInsetsV14CoreFoundation7CGFloatVtcfc | init(colors: MermaidPalette? = nil, font: Font? = nil, outerPadding: EdgeInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0), maxHeight: CGFloat = 420)
+s:14SmoothMarkdown0B13MermaidTokensV6colorsAA0C7PaletteVSgvp | var colors: MermaidPalette?
+s:14SmoothMarkdown0B13MermaidTokensV9maxHeight14CoreFoundation7CGFloatVvp | var maxHeight: CGFloat
+s:14SmoothMarkdown0B13RenderContextV | struct MarkdownRenderContext
+s:14SmoothMarkdown0B13RenderContextV06renderB07SwiftUI7AnyViewVSScSgvp | let renderMarkdown: ((String) -> AnyView)?
+s:14SmoothMarkdown0B13RenderContextV10selectableSbvp | let selectable: Bool
+s:14SmoothMarkdown0B13RenderContextV10styleSheet10selectable11renderBlock0H6Inline0hB011inlineStyleAcA0blF0V_Sb7SwiftUI7AnyViewVAA6MarkupCcAnPcSgANSScSgAA0bjL0VSgtcfc | init(styleSheet: MarkdownStyleSheet, selectable: Bool, renderBlock: @escaping (Markup) -> AnyView, renderInline: ((Markup) -> AnyView)? = nil, renderMarkdown: ((String) -> AnyView)? = nil, inlineStyle: MarkdownInlineStyle? = nil)
+s:14SmoothMarkdown0B13RenderContextV10styleSheetAA0b5StyleF0Vvp | let styleSheet: MarkdownStyleSheet
+s:14SmoothMarkdown0B13RenderContextV11inlineStyleAA0b6InlineF0VSgvp | let inlineStyle: MarkdownInlineStyle?
+s:14SmoothMarkdown0B13RenderContextV11renderBlocky7SwiftUI7AnyViewVAA6MarkupCcvp | let renderBlock: (Markup) -> AnyView
+s:14SmoothMarkdown0B13RenderContextV12renderInline7SwiftUI7AnyViewVAA6MarkupCcSgvp | let renderInline: ((Markup) -> AnyView)?
+s:14SmoothMarkdown0B13RenderOptionsV | struct MarkdownRenderOptions
+s:14SmoothMarkdown0B13RenderOptionsV09codeBlockD0AA04CodefD0VSgvp | var codeBlockOptions: CodeBlockOptions?
+s:14SmoothMarkdown0B13RenderOptionsV10enableHTML21useEnhancedComponents0E5Cache10scrollable09codeBlockD0ACSb_S3bAA04CodemD0VSgtcfc | init(enableHTML: Bool = false, useEnhancedComponents: Bool = false, enableCache: Bool = true, scrollable: Bool = true, codeBlockOptions: CodeBlockOptions? = nil)
+s:14SmoothMarkdown0B13RenderOptionsV10enableHTMLSbvp | var enableHTML: Bool
+s:14SmoothMarkdown0B13RenderOptionsV10scrollableSbvp | var scrollable: Bool
+s:14SmoothMarkdown0B13RenderOptionsV11enableCacheSbvp | var enableCache: Bool
+s:14SmoothMarkdown0B13RenderOptionsV21useEnhancedComponentsSbvp | var useEnhancedComponents: Bool
+s:14SmoothMarkdown0B13SemanticBlockO | enum MarkdownSemanticBlock
+s:14SmoothMarkdown0B13SemanticBlockO10fencedCodeyACSS_S2StcACmF | case fencedCode(fence: String, info: String, code: String)
+s:14SmoothMarkdown0B13SemanticBlockO14horizontalRuleyA2CmF | case horizontalRule
+s:14SmoothMarkdown0B13SemanticBlockO3rawyA2CmF | case raw
+s:14SmoothMarkdown0B13SemanticBlockO4listyAcA0B10SourceListVcACmF | case list(MarkdownSourceList)
+s:14SmoothMarkdown0B13SemanticBlockO5tableyAcA0B11SourceTableVcACmF | case table(MarkdownSourceTable)
+s:14SmoothMarkdown0B13SemanticBlockO6pluginyACSS_AA0D11PluginMatchVtcACmF | case plugin(id: String, match: BlockPluginMatch)
+s:14SmoothMarkdown0B13SemanticBlockO7headingyACSi_SStcACmF | case heading(level: Int, markdown: String)
+s:14SmoothMarkdown0B13SemanticBlockO9paragraphyACSS_tcACmF | case paragraph(markdown: String)
+s:14SmoothMarkdown0B13StreamOptionsV | struct MarkdownStreamOptions
+s:14SmoothMarkdown0B13StreamOptionsV12errorContent7SwiftUI7AnyViewVs5Error_pcSgvp | var errorContent: ((any Error) -> AnyView)?
+s:14SmoothMarkdown0B13StreamOptionsV14loadingContent7SwiftUI7AnyViewVSgvp | var loadingContent: AnyView?
+s:14SmoothMarkdown0B13StreamOptionsV14throttleMillis14loadingContent05errorH0ACs5Int64V_7SwiftUI7AnyViewVSgAKs5Error_pcSgtcfc | init(throttleMillis: Int64 = 50, loadingContent: AnyView? = nil, errorContent: ((any Error) -> AnyView)? = nil)
+s:14SmoothMarkdown0B13StreamOptionsV14throttleMilliss5Int64Vvp | var throttleMillis: Int64
+s:14SmoothMarkdown0B13WidgetBuilderP | protocol MarkdownWidgetBuilder
+s:14SmoothMarkdown0B13WidgetBuilderP5build_7context7SwiftUI7AnyViewVAA0B10PluginNodeV_AA0B13RenderContextVtF | func build(_ node: MarkdownPluginNode, context: MarkdownRenderContext) -> AnyView
+s:14SmoothMarkdown0B13WidgetBuilderP5build_7context7SwiftUI7AnyViewVAA0B13ExtensionNodeV_AA0B13RenderContextVtF | func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView
+s:14SmoothMarkdown0B13WidgetBuilderP5build_7context7SwiftUI7AnyViewVAA6MarkupC_AA0B13RenderContextVtF | func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView
+s:14SmoothMarkdown0B13WidgetBuilderP8canBuildySbAA0B10PluginNodeVF | func canBuild(_ node: MarkdownPluginNode) -> Bool
+s:14SmoothMarkdown0B13WidgetBuilderP8canBuildySbAA0B13ExtensionNodeVF | func canBuild(_ node: MarkdownExtensionNode) -> Bool
+s:14SmoothMarkdown0B13WidgetBuilderP8canBuildySbAA6MarkupCF | func canBuild(_ node: Markup) -> Bool
+s:14SmoothMarkdown0B13WidgetBuilderPAAE5build_7context7SwiftUI7AnyViewVAA0B10PluginNodeV_AA0B13RenderContextVtF | func build(_ node: MarkdownPluginNode, context: MarkdownRenderContext) -> AnyView
+s:14SmoothMarkdown0B13WidgetBuilderPAAE5build_7context7SwiftUI7AnyViewVAA0B13ExtensionNodeV_AA0B13RenderContextVtF | func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView
+s:14SmoothMarkdown0B13WidgetBuilderPAAE8canBuildySbAA0B10PluginNodeVF | func canBuild(_ node: MarkdownPluginNode) -> Bool
+s:14SmoothMarkdown0B13WidgetBuilderPAAE8canBuildySbAA0B13ExtensionNodeVF | func canBuild(_ node: MarkdownExtensionNode) -> Bool
+s:14SmoothMarkdown0B14DocumentEditorC | final class MarkdownDocumentEditor
+s:14SmoothMarkdown0B14DocumentEditorC17moveTopLevelBlock2id2toSbSS_SitF | @discardableResult func moveTopLevelBlock(id: String, to index: Int) -> Bool
+s:14SmoothMarkdown0B14DocumentEditorC19replaceBlockContent2id4withSbSS_SStF | @discardableResult func replaceBlockContent(id: String, with content: String) -> Bool
+s:14SmoothMarkdown0B14DocumentEditorC4redoSbyF | @discardableResult func redo() -> Bool
+s:14SmoothMarkdown0B14DocumentEditorC4undoSbyF | @discardableResult func undo() -> Bool
+s:14SmoothMarkdown0B14DocumentEditorC7canRedoSbvp | var canRedo: Bool { get }
+s:14SmoothMarkdown0B14DocumentEditorC7canUndoSbvp | var canUndo: Bool { get }
+s:14SmoothMarkdown0B14DocumentEditorC8documentAA0bC0Vvp | var document: MarkdownDocument { get }
+s:14SmoothMarkdown0B14DocumentEditorC8documentAcA0bC0V_tcfc | init(document: MarkdownDocument)
+s:14SmoothMarkdown0B14DocumentEditorC8markdown5codecACSS_AA0bC5CodecVtcfc | convenience init(markdown: String, codec: MarkdownDocumentCodec = .init())
+s:14SmoothMarkdown0B14DocumentTokensV | struct MarkdownDocumentTokens
+s:14SmoothMarkdown0B14DocumentTokensV12headingColor7SwiftUI0F0VSgvp | var headingColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV13codeTextColor7SwiftUI0G0VSgvp | var codeTextColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV13footnoteColor7SwiftUI0F0VSgvp | var footnoteColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV13quoteBarColor7SwiftUI0G0VSgvp | var quoteBarColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV14codeBackground7SwiftUI5ColorVSgvp | var codeBackground: Color?
+s:14SmoothMarkdown0B14DocumentTokensV14highlightColor7SwiftUI0F0VSgvp | var highlightColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV15quoteBackground7SwiftUI5ColorVSgvp | var quoteBackground: Color?
+s:14SmoothMarkdown0B14DocumentTokensV16tableBorderColor7SwiftUI0G0VSgvp | var tableBorderColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV19inlineCodeTextColor7SwiftUI0H0VSgvp | var inlineCodeTextColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV20inlineCodeBackground7SwiftUI5ColorVSgvp | var inlineCodeBackground: Color?
+s:14SmoothMarkdown0B14DocumentTokensV26tableHeaderBackgroundColor7SwiftUI0H0VSgvp | var tableHeaderBackgroundColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV9linkColor7SwiftUI0F0VSgvp | var linkColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV9ruleColor7SwiftUI0F0VSgvp | var ruleColor: Color?
+s:14SmoothMarkdown0B14DocumentTokensV9textColor07headingF004linkF014codeBackground0i4TextF0010inlineCodeJ00lmkF009highlightF008footnoteF008quoteBarF00pJ0011tableBorderF004ruleF0010backgroundF00r6HeaderjF0AC7SwiftUI0F0VSg_A14Vtcfc | init(textColor: Color? = nil, headingColor: Color? = nil, linkColor: Color? = nil, codeBackground: Color? = nil, codeTextColor: Color? = nil, inlineCodeBackground: Color? = nil, inlineCodeTextColor: Color? = nil, highlightColor: Color? = nil, footnoteColor: Color? = nil, quoteBarColor: Color? = nil, quoteBackground: Color? = nil, tableBorderColor: Color? = nil, ruleColor: Color? = nil, backgroundColor: Color? = nil, tableHeaderBackgroundColor: Color? = nil)
+s:14SmoothMarkdown0B14DocumentTokensV9textColor7SwiftUI0F0VSgvp | var textColor: Color?
+s:14SmoothMarkdown0B14KeyboardTokensV | struct MarkdownKeyboardTokens
+s:14SmoothMarkdown0B14KeyboardTokensV10normalizedACyF | func normalized() -> MarkdownKeyboardTokens
+s:14SmoothMarkdown0B14KeyboardTokensV11borderColor7SwiftUI0F0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B14KeyboardTokensV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B14KeyboardTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B14KeyboardTokensV15backgroundAlphaSdvp | var backgroundAlpha: Double
+s:14SmoothMarkdown0B14KeyboardTokensV15backgroundColor06borderF00G5Width12cornerRadius7padding8fontSize0E5AlphaAC7SwiftUI0F0VSg_AN14CoreFoundation7CGFloatVAqK10EdgeInsetsVAQSdtcfc | init(backgroundColor: Color? = nil, borderColor: Color? = nil, borderWidth: CGFloat = 1, cornerRadius: CGFloat = 4, padding: EdgeInsets = .init(top: 1, leading: 5, bottom: 1, trailing: 5), fontSize: CGFloat = 13, backgroundAlpha: Double = 0.12)
+s:14SmoothMarkdown0B14KeyboardTokensV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B14KeyboardTokensV7padding7SwiftUI10EdgeInsetsVvp | var padding: EdgeInsets
+s:14SmoothMarkdown0B14KeyboardTokensV8fontSize14CoreFoundation7CGFloatVvp | var fontSize: CGFloat
+s:14SmoothMarkdown0B14ResourceLoaderP | protocol MarkdownResourceLoader : Sendable
+s:14SmoothMarkdown0B14ResourceLoaderP4loady10Foundation4DataVAA0bC7RequestVYaKF | func load(_ request: MarkdownResourceRequest) async throws -> Data
+s:14SmoothMarkdown0B14SourceListItemV | struct MarkdownSourceListItem
+s:14SmoothMarkdown0B14SourceListItemV10lineEndingSSvp | let lineEnding: String
+s:14SmoothMarkdown0B14SourceListItemV10taskMarkerSSSgvp | let taskMarker: String?
+s:14SmoothMarkdown0B14SourceListItemV11taskSpacingSSvp | let taskSpacing: String
+s:14SmoothMarkdown0B14SourceListItemV13continuationsSayAA0bcD12ContinuationVGvp | let continuations: [MarkdownSourceListContinuation]
+s:14SmoothMarkdown0B14SourceListItemV21trailingContinuationsSayAA0bcD12ContinuationVGvp | let trailingContinuations: [MarkdownSourceListContinuation]
+s:14SmoothMarkdown0B14SourceListItemV4KindO | enum Kind
+s:14SmoothMarkdown0B14SourceListItemV4KindO4taskyA2EmF | case task
+s:14SmoothMarkdown0B14SourceListItemV4KindO7orderedyA2EmF | case ordered
+s:14SmoothMarkdown0B14SourceListItemV4KindO9unorderedyA2EmF | case unordered
+s:14SmoothMarkdown0B14SourceListItemV4kindAC4KindOvp | var kind: MarkdownSourceListItem.Kind { get }
+s:14SmoothMarkdown0B14SourceListItemV6indentSSvp | let indent: String
+s:14SmoothMarkdown0B14SourceListItemV6markerSSvp | let marker: String
+s:14SmoothMarkdown0B14SourceListItemV6sourceSSvp | var source: String { get }
+s:14SmoothMarkdown0B14SourceListItemV7checkedSbSgvp | var checked: Bool? { get }
+s:14SmoothMarkdown0B14SourceListItemV7contentSSvp | let content: String
+s:14SmoothMarkdown0B14SourceListItemV7spacingSSvp | let spacing: String
+s:14SmoothMarkdown0B14TableAlignmentO | enum MarkdownTableAlignment
+s:14SmoothMarkdown0B14TableAlignmentO4leftyA2CmF | case left
+s:14SmoothMarkdown0B14TableAlignmentO5rightyA2CmF | case right
+s:14SmoothMarkdown0B14TableAlignmentO6centeryA2CmF | case center
+s:14SmoothMarkdown0B15CacheStatisticsV | struct MarkdownCacheStatistics
+s:14SmoothMarkdown0B15CacheStatisticsV11utilizationSdvp | var utilization: Double { get }
+s:14SmoothMarkdown0B15CacheStatisticsV4hitsSivp | let hits: Int
+s:14SmoothMarkdown0B15CacheStatisticsV4sizeSivp | let size: Int
+s:14SmoothMarkdown0B15CacheStatisticsV6missesSivp | let misses: Int
+s:14SmoothMarkdown0B15CacheStatisticsV7maxSizeSivp | let maxSize: Int
+s:14SmoothMarkdown0B15InlineTextStyleV | struct MarkdownInlineTextStyle
+s:14SmoothMarkdown0B15InlineTextStyleV10monospacedSbSgvp | var monospaced: Bool?
+s:14SmoothMarkdown0B15InlineTextStyleV10normalizedACyF | func normalized() -> MarkdownInlineTextStyle
+s:14SmoothMarkdown0B15InlineTextStyleV13strikethroughSbSgvp | var strikethrough: Bool?
+s:14SmoothMarkdown0B15InlineTextStyleV15backgroundColor7SwiftUI0G0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B15InlineTextStyleV4boldSbSgvp | var bold: Bool?
+s:14SmoothMarkdown0B15InlineTextStyleV6italicSbSgvp | var italic: Bool?
+s:14SmoothMarkdown0B15InlineTextStyleV8fontSize14CoreFoundation7CGFloatVSgvp | var fontSize: CGFloat?
+s:14SmoothMarkdown0B15InlineTextStyleV8fontSize9textColor010backgroundI04bold6italic13strikethrough9underline10monospacedAC14CoreFoundation7CGFloatVSg_7SwiftUI0I0VSgASSbSgA4Ttcfc | init(fontSize: CGFloat? = nil, textColor: Color? = nil, backgroundColor: Color? = nil, bold: Bool? = nil, italic: Bool? = nil, strikethrough: Bool? = nil, underline: Bool? = nil, monospaced: Bool? = nil)
+s:14SmoothMarkdown0B15InlineTextStyleV9textColor7SwiftUI0G0VSgvp | var textColor: Color?
+s:14SmoothMarkdown0B15InlineTextStyleV9underlineSbSgvp | var underline: Bool?
+s:14SmoothMarkdown0B15ResourceOptionsV | struct MarkdownResourceOptions
+s:14SmoothMarkdown0B15ResourceOptionsV11cachePolicyAA0bc5CacheF0Ovp | var cachePolicy: MarkdownResourceCachePolicy
+s:14SmoothMarkdown0B15ResourceOptionsV11placeholder7SwiftUI7AnyViewV10Foundation3URLV_SStcSgvp | var placeholder: ((URL, String) -> AnyView)?
+s:14SmoothMarkdown0B15ResourceOptionsV5error7SwiftUI7AnyViewV10Foundation3URLV_SStcSgvp | var error: ((URL, String) -> AnyView)?
+s:14SmoothMarkdown0B15ResourceOptionsV6loaderAA0bC6Loader_pSgvp | var loader: (any MarkdownResourceLoader)? { get set }
+s:14SmoothMarkdown0B15ResourceOptionsV7headers11cachePolicy6loader11placeholder5error8identityACSDyS2SG_AA0bc5CacheG0OAA0bC6Loader_pSg7SwiftUI7AnyViewV10Foundation3URLV_SStcSgAuR4UUIDVSgtcfc | init(headers: [String : String] = [:], cachePolicy: MarkdownResourceCachePolicy = .default, loader: (any MarkdownResourceLoader)? = nil, placeholder: ((URL, String) -> AnyView)? = nil, error: ((URL, String) -> AnyView)? = nil, identity: UUID? = nil)
+s:14SmoothMarkdown0B15ResourceOptionsV7headersSDyS2SGvp | var headers: [String : String]
+s:14SmoothMarkdown0B15ResourceOptionsV8identity10Foundation4UUIDVvp | var identity: UUID
+s:14SmoothMarkdown0B15ResourceRequestV | struct MarkdownResourceRequest
+s:14SmoothMarkdown0B15ResourceRequestV03urlD010Foundation10URLRequestVvp | var urlRequest: URLRequest { get }
+s:14SmoothMarkdown0B15ResourceRequestV11cachePolicyAA0bc5CacheF0Ovp | let cachePolicy: MarkdownResourceCachePolicy
+s:14SmoothMarkdown0B15ResourceRequestV3url10Foundation3URLVvp | let url: URL
+s:14SmoothMarkdown0B15ResourceRequestV3url7headers11cachePolicyAC10Foundation3URLV_SDyS2SGAA0bc5CacheH0Otcfc | init(url: URL, headers: [String : String] = [:], cachePolicy: MarkdownResourceCachePolicy = .default)
+s:14SmoothMarkdown0B15ResourceRequestV7headersSDyS2SGvp | let headers: [String : String]
+s:14SmoothMarkdown0B15TableBorderSideV | struct MarkdownTableBorderSide
+s:14SmoothMarkdown0B15TableBorderSideV5color5widthAC7SwiftUI5ColorV_14CoreFoundation7CGFloatVtcfc | init(color: Color, width: CGFloat = 1)
+s:14SmoothMarkdown0B15TableBorderSideV5color7SwiftUI5ColorVvp | var color: Color
+s:14SmoothMarkdown0B15TableBorderSideV5width14CoreFoundation7CGFloatVvp | var width: CGFloat
+s:14SmoothMarkdown0B16AdmonitionTokensV | struct MarkdownAdmonitionTokens
+s:14SmoothMarkdown0B16AdmonitionTokensV10normalizedACyF | func normalized() -> MarkdownAdmonitionTokens
+s:14SmoothMarkdown0B16AdmonitionTokensV10titleColor7SwiftUI0F0VSgvp | var titleColor: Color?
+s:14SmoothMarkdown0B16AdmonitionTokensV11accentWidth14CoreFoundation7CGFloatVvp | var accentWidth: CGFloat
+s:14SmoothMarkdown0B16AdmonitionTokensV11borderColor7SwiftUI0F0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B16AdmonitionTokensV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B16AdmonitionTokensV11contentFont7SwiftUI0F0VSgvp | var contentFont: Font?
+s:14SmoothMarkdown0B16AdmonitionTokensV12accentColors12outerPadding07contentH00I7Spacing12cornerRadius11borderWidth0M5Color010backgroundO00P5Alpha0eN005titleO00iO00R4Font0iS0ACSDySS7SwiftUI0O0VG_AR10EdgeInsetsVAW14CoreFoundation7CGFloatVA2zTSgA_SdAZA_A_AR0S0VSgA2_tcfc | init(accentColors: [String : Color] = ["note": .blue, "tip": .green, "warning": .orange, "danger": .red, "important": .purple, "custom": .blue], outerPadding: EdgeInsets = EdgeInsets(), contentPadding: EdgeInsets = EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), contentSpacing: CGFloat = 6, cornerRadius: CGFloat = 6, borderWidth: CGFloat = 0, borderColor: Color? = nil, backgroundColor: Color? = nil, backgroundAlpha: Double = 0.08, accentWidth: CGFloat = 3, titleColor: Color? = nil, contentColor: Color? = nil, titleFont: Font? = nil, contentFont: Font? = nil)
+s:14SmoothMarkdown0B16AdmonitionTokensV12accentColorsSDySS7SwiftUI5ColorVGvp | var accentColors: [String : Color]
+s:14SmoothMarkdown0B16AdmonitionTokensV12contentColor7SwiftUI0F0VSgvp | var contentColor: Color?
+s:14SmoothMarkdown0B16AdmonitionTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B16AdmonitionTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
+s:14SmoothMarkdown0B16AdmonitionTokensV14contentPadding7SwiftUI10EdgeInsetsVvp | var contentPadding: EdgeInsets
+s:14SmoothMarkdown0B16AdmonitionTokensV14contentSpacing14CoreFoundation7CGFloatVvp | var contentSpacing: CGFloat
+s:14SmoothMarkdown0B16AdmonitionTokensV15backgroundAlphaSdvp | var backgroundAlpha: Double
+s:14SmoothMarkdown0B16AdmonitionTokensV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B16AdmonitionTokensV9titleFont7SwiftUI0F0VSgvp | var titleFont: Font?
+s:14SmoothMarkdown0B16EditorControllerC | @MainActor final class MarkdownEditorController
+s:14SmoothMarkdown0B16EditorControllerC012insertHostedB5Block_2at8ifTextIsSbSS_So8_NSRangeVSStF | @discardableResult @MainActor func insertHostedMarkdownBlock(_ markdown: String, at range: NSRange, ifTextIs expectedText: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC027applySemanticBlockCommandToG5Range4from2to7commandSbSS_SSAA0bcH0OtF | @discardableResult @MainActor func applySemanticBlockCommandToBlockRange(from startID: String, to endID: String, command: MarkdownEditorCommand) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC028replaceSemanticTextRangeWithB6Blocks2id5range8markdown02ifG2IsSbSS_So8_NSRangeVS2SSgtF | @discardableResult @MainActor func replaceSemanticTextRangeWithMarkdownBlocks(id: String, range: NSRange, markdown: String, ifTextIs expectedText: String? = nil) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC028replaceSemanticTextRangeWithB6Blocks_8markdownSbAA0bfG9SelectionV_SStF | @discardableResult @MainActor func replaceSemanticTextRangeWithMarkdownBlocks(_ selection: MarkdownSemanticTextSelection, markdown: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC030canApplySemanticBlockCommandToH5Range4from2to7commandSbSS_SSAA0bcI0OtF | @MainActor func canApplySemanticBlockCommandToBlockRange(from startID: String, to endID: String, command: MarkdownEditorCommand) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC031canReplaceSemanticTextRangeWithB6Blocks_8markdownSbAA0bgH9SelectionV_SStF | @MainActor func canReplaceSemanticTextRangeWithMarkdownBlocks(_ selection: MarkdownSemanticTextSelection, markdown: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC06insertB0yySSF | @MainActor func insertMarkdown(_ markdown: String)
+s:14SmoothMarkdown0B16EditorControllerC06insertB5BlockyySSF | @MainActor func insertMarkdownBlock(_ markdown: String)
+s:14SmoothMarkdown0B16EditorControllerC11findMatches_13caseSensitiveSaySo8_NSRangeVGSS_SbtF | @MainActor func findMatches(_ query: String, caseSensitive: Bool = false) -> [NSRange]
+s:14SmoothMarkdown0B16EditorControllerC11insertTable4rows7columnsySi_SitF | @MainActor func insertTable(rows: Int = 3, columns: Int = 3)
+s:14SmoothMarkdown0B16EditorControllerC11transactionyxxyKXEKlF | @MainActor func transaction<T>(_ body: () throws -> T) rethrows -> T
+s:14SmoothMarkdown0B16EditorControllerC12applyCommand_8argumentyAA0bcF0O_SSSgtF | @MainActor func applyCommand(_ command: MarkdownEditorCommand, argument: String? = nil)
+s:14SmoothMarkdown0B16EditorControllerC12clearHistoryyyF | @MainActor func clearHistory()
+s:14SmoothMarkdown0B16EditorControllerC12replaceRange_4with08selectedF0ySo8_NSRangeV_SSAHSgtF | @MainActor func replaceRange(_ range: NSRange, with replacement: String, selectedRange: NSRange? = nil)
+s:14SmoothMarkdown0B16EditorControllerC12selectedTextSSvp | @MainActor var selectedText: String { get }
+s:14SmoothMarkdown0B16EditorControllerC12setSelectionyySo8_NSRangeVF | @MainActor func setSelection(_ range: NSRange)
+s:14SmoothMarkdown0B16EditorControllerC13parserPluginsAA20ParserPluginRegistryCSgvp | @MainActor var parserPlugins: ParserPluginRegistry? { get }
+s:14SmoothMarkdown0B16EditorControllerC14deleteTableRowySbSiF | @discardableResult @MainActor func deleteTableRow(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC15pasteTableCells_02inF03row6columnSbSS_SSS2itF | @discardableResult @MainActor func pasteTableCells(_ clipboard: String, inTable blockID: String, row: Int, column: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC15selectNextMatch_13caseSensitiveSo8_NSRangeVSgSS_SbtF | @discardableResult @MainActor func selectNextMatch(_ query: String, caseSensitive: Bool = false) -> NSRange?
+s:14SmoothMarkdown0B16EditorControllerC15updateFromInput4text9selection11isComposingySS_So8_NSRangeVSbtF | @MainActor func updateFromInput(text nextText: String, selection nextSelection: NSRange, isComposing: Bool = false)
+s:14SmoothMarkdown0B16EditorControllerC16replaceSelection_13selectedRangeySS_So8_NSRangeVSgtF | @MainActor func replaceSelection(_ replacement: String, selectedRange: NSRange? = nil)
+s:14SmoothMarkdown0B16EditorControllerC16semanticDocumentAA0bF0Vvp | @MainActor var semanticDocument: MarkdownDocument { get }
+s:14SmoothMarkdown0B16EditorControllerC16tableAtSelectionAA0B11SourceTableVSgyF | @MainActor func tableAtSelection() -> MarkdownSourceTable?
+s:14SmoothMarkdown0B16EditorControllerC17applySlashCommand_5matchSbAA0bcG0O_AA0bfG5MatchVtF | @discardableResult @MainActor func applySlashCommand(_ command: MarkdownEditorCommand, match: MarkdownSlashCommandMatch) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC17deleteTableColumnySbSiF | @discardableResult @MainActor func deleteTableColumn(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC17insertHostedImage_2at8ifTextIsSbAA0bcG9SelectionV_So8_NSRangeVSStF | @discardableResult @MainActor func insertHostedImage(_ image: MarkdownEditorImageSelection, at range: NSRange, ifTextIs expectedText: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC17slashCommandMatch7inBlock9selectionAA0b5SlashfG0VSgSS_So8_NSRangeVtF | @MainActor func slashCommandMatch(inBlock id: String, selection: NSRange) -> MarkdownSlashCommandMatch?
+s:14SmoothMarkdown0B16EditorControllerC18updateSemanticList2id_SbSS_AA0b6SourceG0VSgAGXEtF | @discardableResult @MainActor func updateSemanticList(id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC19insertTableRowAfterySbSiF | @discardableResult @MainActor func insertTableRowAfter(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC19removeSemanticBlock2idSbSS_tF | @discardableResult @MainActor func removeSemanticBlock(id: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC19updateSemanticTable2id_SbSS_AA0b6SourceG0VAGXEtF | @discardableResult @MainActor func updateSemanticTable(id: String, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC20copyVisibleTextRangeySSSgAA0bfG9SelectionVF | @MainActor func copyVisibleTextRange(_ selection: MarkdownVisibleTextSelection) -> String?
+s:14SmoothMarkdown0B16EditorControllerC20insertTableRowBeforeySbSiF | @discardableResult @MainActor func insertTableRowBefore(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC20replaceTableCellText8rowIndex06columnJ04text6headerSbSi_SiSSSbtF | @discardableResult @MainActor func replaceTableCellText(rowIndex: Int, columnIndex: Int, text: String, header: Bool = false) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC20setCodeBlockLanguage2id2toSbSS_SStF | @discardableResult @MainActor func setCodeBlockLanguage(id: String, to language: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC21copySemanticTextRangeySSSgAA0bfG9SelectionVF | @MainActor func copySemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> String?
+s:14SmoothMarkdown0B16EditorControllerC22copySemanticBlockRange4from2toSSSgSS_SStF | @MainActor func copySemanticBlockRange(from startID: String, to endID: String) -> String?
+s:14SmoothMarkdown0B16EditorControllerC22deleteTableAtSelectionSbyF | @discardableResult @MainActor func deleteTableAtSelection() -> Bool
+s:14SmoothMarkdown0B16EditorControllerC22deleteVisibleTextRangeySbAA0bfG9SelectionVF | @discardableResult @MainActor func deleteVisibleTextRange(_ selection: MarkdownVisibleTextSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC22insertTableColumnAfterySbSiF | @discardableResult @MainActor func insertTableColumnAfter(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23applyCustomSlashCommand_5matchSbSS_AA0bgH5MatchVtF | @discardableResult @MainActor func applyCustomSlashCommand(_ markdown: String, match: MarkdownSlashCommandMatch) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23applySemanticInlineMark2id9selection4markSo8_NSRangeVSgSS_AiA0bgH0OtF | @discardableResult @MainActor func applySemanticInlineMark(id: String, selection: NSRange, mark: MarkdownInlineMark) -> NSRange?
+s:14SmoothMarkdown0B16EditorControllerC23clearSemanticTableCellsySbAA0bfG13CellSelectionVF | @discardableResult @MainActor func clearSemanticTableCells(_ selection: MarkdownSemanticTableCellSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23deleteSemanticTextRangeySbAA0bfG9SelectionVF | @discardableResult @MainActor func deleteSemanticTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23insertTableColumnBeforeySbSiF | @discardableResult @MainActor func insertTableColumnBefore(_ index: Int) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23pasteSemanticTableCells_4intoSbSS_AA0bfG13CellSelectionVtF | @discardableResult @MainActor func pasteSemanticTableCells(_ clipboard: String, into selection: MarkdownSemanticTableCellSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23replaceVisibleTextRange_4withSbAA0bfG9SelectionV_SStF | @discardableResult @MainActor func replaceVisibleTextRange(_ selection: MarkdownVisibleTextSelection, with replacement: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC23setTableColumnAlignment_2toSbSi_AA0bfH0OSgtF | @discardableResult @MainActor func setTableColumnAlignment(_ index: Int, to alignment: MarkdownTableAlignment?) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC24deleteSemanticBlockRange4from2toSbSS_SStF | @discardableResult @MainActor func deleteSemanticBlockRange(from startID: String, to endID: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC24insertWikilinkSuggestion_7inBlock9selectionSo8_NSRangeVSgSS_SSAHtF | @discardableResult @MainActor func insertWikilinkSuggestion(_ title: String, inBlock id: String, selection: NSRange) -> NSRange?
+s:14SmoothMarkdown0B16EditorControllerC24pasteIntoTableCellSource_02inG03row6column11visibleText0M5RangeSbSS_SSS2iSSSo8_NSRangeVtF | @discardableResult @MainActor func pasteIntoTableCellSource(_ clipboard: String, inTable blockID: String, row: Int, column: Int, visibleText: String, visibleRange: NSRange) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC24replaceSemanticQuoteLine2id9lineIndex4withSbSS_SiSStF | @discardableResult @MainActor func replaceSemanticQuoteLine(id: String, lineIndex: Int, with content: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC24replaceSemanticTextRange_4withSbAA0bfG9SelectionV_SStF | @discardableResult @MainActor func replaceSemanticTextRange(_ selection: MarkdownSemanticTextSelection, with replacement: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC25copySemanticListItemRangeySSSgAA0bfgH9SelectionVF | @MainActor func copySemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> String?
+s:14SmoothMarkdown0B16EditorControllerC25replaceFrontmatterContent2id4withSbSS_SStF | @discardableResult @MainActor func replaceFrontmatterContent(id: String, with content: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC26canClearSemanticTableCellsySbAA0bgH13CellSelectionVF | @MainActor func canClearSemanticTableCells(_ selection: MarkdownSemanticTableCellSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC26canReplaceVisibleTextRange_4withSbAA0bgH9SelectionV_SStF | @MainActor func canReplaceVisibleTextRange(_ selection: MarkdownVisibleTextSelection, with replacement: String = "") -> Bool
+s:14SmoothMarkdown0B16EditorControllerC26semanticTableCellRectangleySNySiG4rows_AE7columnstSgAA0b8SemanticfG9SelectionVF | @MainActor func semanticTableCellRectangle(_ selection: MarkdownSemanticTableCellSelection) -> (rows: ClosedRange<Int>, columns: ClosedRange<Int>)?
+s:14SmoothMarkdown0B16EditorControllerC27canDeleteSemanticBlockRange4from2toSbSS_SStF | @MainActor func canDeleteSemanticBlockRange(from startID: String, to endID: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC27canReplaceSemanticTextRange_4withSbAA0bgH9SelectionV_SStF | @MainActor func canReplaceSemanticTextRange(_ selection: MarkdownSemanticTextSelection, with replacement: String = "") -> Bool
+s:14SmoothMarkdown0B16EditorControllerC27copySemanticTableCellsAsTSVySSSgAA0bfG13CellSelectionVF | @MainActor func copySemanticTableCellsAsTSV(_ selection: MarkdownSemanticTableCellSelection) -> String?
+s:14SmoothMarkdown0B16EditorControllerC27deleteSemanticListItemRangeySbAA0bfgH9SelectionVF | @discardableResult @MainActor func deleteSemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC27replaceSemanticBlockContent2id4withSbSS_SStF | @discardableResult @MainActor func replaceSemanticBlockContent(id: String, with content: String) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC27semanticTextHighlightRangesySDySSSo8_NSRangeVGSgAA0b8SemanticF9SelectionVF | @MainActor func semanticTextHighlightRanges(_ selection: MarkdownSemanticTextSelection) -> [String : NSRange]?
+s:14SmoothMarkdown0B16EditorControllerC30canDeleteSemanticListItemRangeySbAA0bghI9SelectionVF | @MainActor func canDeleteSemanticListItemRange(_ selection: MarkdownSemanticListItemSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC31semanticListItemHighlightRangesySDySSSDySiSo8_NSRangeVGGSgAA0B21SemanticTextSelectionVF | @MainActor func semanticListItemHighlightRanges(_ selection: MarkdownSemanticTextSelection) -> [String : [Int : NSRange]]?
+s:14SmoothMarkdown0B16EditorControllerC32semanticTableCellHighlightRangesySDySSSDySiSDySiSo8_NSRangeVGGGSgAA0B21SemanticTextSelectionVF | @MainActor func semanticTableCellHighlightRanges(_ selection: MarkdownSemanticTextSelection) -> [String : [Int : [Int : NSRange]]]?
+s:14SmoothMarkdown0B16EditorControllerC34applySemanticInlineMarkToTextRange_4markSbAA0bfJ9SelectionV_AA0bgH0OtF | @discardableResult @MainActor func applySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection, mark: MarkdownInlineMark) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC35applySemanticInlineMarkToTableCells_4markSbAA0bfJ13CellSelectionV_AA0bgH0OtF | @discardableResult @MainActor func applySemanticInlineMarkToTableCells(_ selection: MarkdownSemanticTableCellSelection, mark: MarkdownInlineMark) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC36applySemanticBlockCommandToTextRange_7commandSbAA0bfJ9SelectionV_AA0bcH0OtF | @discardableResult @MainActor func applySemanticBlockCommandToTextRange(_ selection: MarkdownSemanticTextSelection, command: MarkdownEditorCommand) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC37canApplySemanticInlineMarkToTextRange_4markSbAA0bgK9SelectionV_AA0bhI0OtF | @MainActor func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection, mark: MarkdownInlineMark) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC37canApplySemanticInlineMarkToTextRangeySbAA0bgK9SelectionVF | @MainActor func canApplySemanticInlineMarkToTextRange(_ selection: MarkdownSemanticTextSelection) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC38applySemanticInlineMarkToListItemRange_4markSbAA0bfjK9SelectionV_AA0bgH0OtF | @discardableResult @MainActor func applySemanticInlineMarkToListItemRange(_ selection: MarkdownSemanticListItemSelection, mark: MarkdownInlineMark) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC39canApplySemanticBlockCommandToTextRange_7commandSbAA0bgK9SelectionV_AA0bcI0OtF | @MainActor func canApplySemanticBlockCommandToTextRange(_ selection: MarkdownSemanticTextSelection, command: MarkdownEditorCommand) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC41applySemanticInlineMarkToVisibleTextRange_4markSbAA0bjK9SelectionV_AA0bgH0OtF | @discardableResult @MainActor func applySemanticInlineMarkToVisibleTextRange(_ selection: MarkdownVisibleTextSelection, mark: MarkdownInlineMark) -> Bool
+s:14SmoothMarkdown0B16EditorControllerC4modeAA0bC4ModeOvp | @Published @MainActor var mode: MarkdownEditorMode { get set }
+s:14SmoothMarkdown0B16EditorControllerC4redoSbyF | @discardableResult @MainActor func redo() -> Bool
+s:14SmoothMarkdown0B16EditorControllerC4text12historyLimit7pluginsACSS_SiAA20ParserPluginRegistryCSgtcfc | @MainActor init(text: String = "", historyLimit: Int = 100, plugins: ParserPluginRegistry? = nil)
+s:14SmoothMarkdown0B16EditorControllerC4textSSvp | @Published @MainActor var text: String { get set }
+s:14SmoothMarkdown0B16EditorControllerC4undoSbyF | @discardableResult @MainActor func undo() -> Bool
+s:14SmoothMarkdown0B16EditorControllerC7canRedoSbvp | @MainActor var canRedo: Bool { get }
+s:14SmoothMarkdown0B16EditorControllerC7canUndoSbvp | @MainActor var canUndo: Bool { get }
+s:14SmoothMarkdown0B16EditorControllerC7isDirtySbvp | @MainActor var isDirty: Bool { get }
+s:14SmoothMarkdown0B16EditorControllerC9markSavedyySSSgF | @MainActor func markSaved(_ saved: String? = nil)
+s:14SmoothMarkdown0B16EditorControllerC9savedTextSSvp | @Published @MainActor var savedText: String { get set }
+s:14SmoothMarkdown0B16EditorControllerC9selectionSo8_NSRangeVvp | @Published @MainActor var selection: NSRange { get set }
+s:14SmoothMarkdown0B16SelectionOptionsV | struct MarkdownSelectionOptions
+s:14SmoothMarkdown0B16SelectionOptionsV10controllerAA0aC10ControllerCSgvp | var controller: SmoothSelectionController?
+s:14SmoothMarkdown0B16SelectionOptionsV4ModeO | enum Mode
+s:14SmoothMarkdown0B16SelectionOptionsV4ModeO5blockyA2EmF | case block
+s:14SmoothMarkdown0B16SelectionOptionsV4ModeO8disabledyA2EmF | case disabled
+s:14SmoothMarkdown0B16SelectionOptionsV4ModeO8documentyA2EmF | case document
+s:14SmoothMarkdown0B16SelectionOptionsV4mode10controllerA2C4ModeO_AA0aC10ControllerCSgtcfc | init(mode: MarkdownSelectionOptions.Mode = .disabled, controller: SmoothSelectionController? = nil)
+s:14SmoothMarkdown0B16SelectionOptionsV4modeAC4ModeOvp | var mode: MarkdownSelectionOptions.Mode
+s:14SmoothMarkdown0B16TypographyTokensV | struct MarkdownTypographyTokens
+s:14SmoothMarkdown0B16TypographyTokensV10normalizedACyF | func normalized() -> MarkdownTypographyTokens
+s:14SmoothMarkdown0B16TypographyTokensV18headingLineHeightsSay14CoreFoundation7CGFloatVGvp | var headingLineHeights: [CGFloat]
+s:14SmoothMarkdown0B16TypographyTokensV19headingFontsByLevelAA0B13HeadingValuesVyAA0B9FontTokenVGSgvp | var headingFontsByLevel: MarkdownHeadingValues<MarkdownFontToken>? { get set }
+s:14SmoothMarkdown0B16TypographyTokensV19paragraphLineHeight14CoreFoundation7CGFloatVvp | var paragraphLineHeight: CGFloat
+s:14SmoothMarkdown0B16TypographyTokensV25headingLineHeightsByLevelAA0B13HeadingValuesVy14CoreFoundation7CGFloatVGvp | var headingLineHeightsByLevel: MarkdownHeadingValues<CGFloat> { get set }
+s:14SmoothMarkdown0B16TypographyTokensV8headingsSayAA0B9FontTokenVGSgvp | var headings: [MarkdownFontToken]?
+s:14SmoothMarkdown0B16TypographyTokensV9paragraph8headings0E10LineHeight07headingG7HeightsAcA0B9FontTokenVSg_SayAIGSg14CoreFoundation7CGFloatVSayAOGtcfc | init(paragraph: MarkdownFontToken? = nil, headings: [MarkdownFontToken]? = nil, paragraphLineHeight: CGFloat = 1.5, headingLineHeights: [CGFloat] = [1.3, 1.3, 1.4, 1.4, 1.4, 1.4])
+s:14SmoothMarkdown0B16TypographyTokensV9paragraphAA0B9FontTokenVSgvp | var paragraph: MarkdownFontToken?
+s:14SmoothMarkdown0B17EditorHostIOEventV | struct MarkdownEditorHostIOEvent
+s:14SmoothMarkdown0B17EditorHostIOEventV16errorDescriptionSSSgvp | let errorDescription: String?
+s:14SmoothMarkdown0B17EditorHostIOEventV5imageAA0bC14ImageSelectionVSgvp | let image: MarkdownEditorImageSelection?
+s:14SmoothMarkdown0B17EditorHostIOEventV6statusAA0bcD8IOStatusOvp | let status: MarkdownEditorHostIOStatus
+s:14SmoothMarkdown0B17EditorHostIOEventV9operation6status5image16errorDescriptionAcA0bcD11IOOperationO_AA0bcD8IOStatusOAA0bC14ImageSelectionVSgSSSgtcfc | init(operation: MarkdownEditorHostIOOperation, status: MarkdownEditorHostIOStatus, image: MarkdownEditorImageSelection? = nil, errorDescription: String? = nil)
+s:14SmoothMarkdown0B17EditorHostIOEventV9operationAA0bcD11IOOperationOvp | let operation: MarkdownEditorHostIOOperation
+s:14SmoothMarkdown0B17PluginPanelTokensV | struct MarkdownPluginPanelTokens
+s:14SmoothMarkdown0B17PluginPanelTokensV10normalizedACyF | func normalized() -> MarkdownPluginPanelTokens
+s:14SmoothMarkdown0B17PluginPanelTokensV10statusFont7SwiftUI0G0VSgvp | var statusFont: Font?
+s:14SmoothMarkdown0B17PluginPanelTokensV10titleColor7SwiftUI0G0VSgvp | var titleColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV11accentColor7SwiftUI0G0VSgvp | var accentColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV11borderColor7SwiftUI0G0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV11contentFont7SwiftUI0G0VSgvp | var contentFont: Font?
+s:14SmoothMarkdown0B17PluginPanelTokensV11iconSpacing14CoreFoundation7CGFloatVvp | var iconSpacing: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV12contentColor7SwiftUI0G0VSgvp | var contentColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV12metadataFont7SwiftUI0G0VSgvp | var metadataFont: Font?
+s:14SmoothMarkdown0B17PluginPanelTokensV12outerPadding06headerG007contentG008metadataG012cornerRadius11borderWidth0M5Color010backgroundO00h10BackgroundO005titleO00iO00jO006accentO00R4Font0iT00jT006statusT004iconT016dividerThickness0V7Spacing0jY018minimumControlSize20maximumContentHeight0U13IndicatorSize07sectionY019copyFeedbackSeconds0U6ColorsAC7SwiftUI10EdgeInsetsV_A5_A5_A5_14CoreFoundation7CGFloatVA8_A3_0O0VSgA11_A11_A11_A11_A11_A11_A3_0T0VSgA14_A14_A14_A14_A8_A8_A8_A8_A8_A8_A8_SdSDyAA14ToolCallStatusOA10_Gtcfc | init(outerPadding: EdgeInsets = EdgeInsets(), headerPadding: EdgeInsets = EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), contentPadding: EdgeInsets = EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12), metadataPadding: EdgeInsets = EdgeInsets(), cornerRadius: CGFloat = 8, borderWidth: CGFloat = 1, borderColor: Color? = nil, backgroundColor: Color? = nil, headerBackgroundColor: Color? = nil, titleColor: Color? = nil, contentColor: Color? = nil, metadataColor: Color? = nil, accentColor: Color? = nil, titleFont: Font? = nil, contentFont: Font? = nil, metadataFont: Font? = nil, statusFont: Font? = nil, iconFont: Font? = nil, dividerThickness: CGFloat = 1, iconSpacing: CGFloat = 8, metadataSpacing: CGFloat = 2, minimumControlSize: CGFloat = 44, maximumContentHeight: CGFloat = 400, statusIndicatorSize: CGFloat = 8, sectionSpacing: CGFloat = 4, copyFeedbackSeconds: Double = 2, statusColors: [ToolCallStatus : Color] = [.running: Color(red: 0.96, green: 0.62, blue: 0.04), .completed: Color(red: 0.06, green: 0.73, blue: 0.51), .failed: .red, .cancelled: .gray, .pending: .blue])
+s:14SmoothMarkdown0B17PluginPanelTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
+s:14SmoothMarkdown0B17PluginPanelTokensV12statusColorsSDyAA14ToolCallStatusO7SwiftUI5ColorVGvp | var statusColors: [ToolCallStatus : Color]
+s:14SmoothMarkdown0B17PluginPanelTokensV13headerPadding7SwiftUI10EdgeInsetsVvp | var headerPadding: EdgeInsets
+s:14SmoothMarkdown0B17PluginPanelTokensV13metadataColor7SwiftUI0G0VSgvp | var metadataColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV14contentPadding7SwiftUI10EdgeInsetsVvp | var contentPadding: EdgeInsets
+s:14SmoothMarkdown0B17PluginPanelTokensV14sectionSpacing14CoreFoundation7CGFloatVvp | var sectionSpacing: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV15backgroundColor7SwiftUI0G0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV15metadataPadding7SwiftUI10EdgeInsetsVvp | var metadataPadding: EdgeInsets
+s:14SmoothMarkdown0B17PluginPanelTokensV15metadataSpacing14CoreFoundation7CGFloatVvp | var metadataSpacing: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV16dividerThickness14CoreFoundation7CGFloatVvp | var dividerThickness: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV18minimumControlSize14CoreFoundation7CGFloatVvp | var minimumControlSize: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV19copyFeedbackSecondsSdvp | var copyFeedbackSeconds: Double
+s:14SmoothMarkdown0B17PluginPanelTokensV19statusIndicatorSize14CoreFoundation7CGFloatVvp | var statusIndicatorSize: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV20maximumContentHeight14CoreFoundation7CGFloatVvp | var maximumContentHeight: CGFloat
+s:14SmoothMarkdown0B17PluginPanelTokensV21headerBackgroundColor7SwiftUI0H0VSgvp | var headerBackgroundColor: Color?
+s:14SmoothMarkdown0B17PluginPanelTokensV8iconFont7SwiftUI0G0VSgvp | var iconFont: Font?
+s:14SmoothMarkdown0B17PluginPanelTokensV9titleFont7SwiftUI0G0VSgvp | var titleFont: Font?
+s:14SmoothMarkdown0B17SlashCommandMatchV | struct MarkdownSlashCommandMatch
+s:14SmoothMarkdown0B17SlashCommandMatchV5querySSvp | let query: String
+s:14SmoothMarkdown0B17SlashCommandMatchV5rangeSo8_NSRangeVvp | let range: NSRange
+s:14SmoothMarkdown0B18EditorCapabilitiesV | struct MarkdownEditorCapabilities
+s:14SmoothMarkdown0B18EditorCapabilitiesV16disabledCommandsACShyAA0bC7CommandOG_tcfc | init(disabledCommands: Set<MarkdownEditorCommand> = [])
+s:14SmoothMarkdown0B18EditorCapabilitiesV16disabledCommandsShyAA0bC7CommandOGvp | let disabledCommands: Set<MarkdownEditorCommand>
+s:14SmoothMarkdown0B18EditorCapabilitiesV22defaultToolbarCommandsSayAA0bC7CommandOGvpZ | static let defaultToolbarCommands: [MarkdownEditorCommand]
+s:14SmoothMarkdown0B18EditorCapabilitiesV22visibleToolbarCommands_15enableWikilinksSayAA0bC7CommandOGAHSg_SbtF | func visibleToolbarCommands(_ configured: [MarkdownEditorCommand]? = nil, enableWikilinks: Bool = true) -> [MarkdownEditorCommand]
+s:14SmoothMarkdown0B18EditorCapabilitiesV3allACvpZ | static let all: MarkdownEditorCapabilities
+s:14SmoothMarkdown0B18EditorCapabilitiesV8supportsySbAA0bC7CommandOF | func supports(_ command: MarkdownEditorCommand) -> Bool
+s:14SmoothMarkdown0B18EditorHostIOStatusO | enum MarkdownEditorHostIOStatus
+s:14SmoothMarkdown0B18EditorHostIOStatusO6failedyA2CmF | case failed
+s:14SmoothMarkdown0B18EditorHostIOStatusO7startedyA2CmF | case started
+s:14SmoothMarkdown0B18EditorHostIOStatusO9cancelledyA2CmF | case cancelled
+s:14SmoothMarkdown0B18EditorHostIOStatusO9completedyA2CmF | case completed
+s:14SmoothMarkdown0B18EditorSlashCommandV | struct MarkdownEditorSlashCommand
+s:14SmoothMarkdown0B18EditorSlashCommandV10onSelectedSSSgSSYacSgvp | let onSelected: ((String) async -> String?)?
+s:14SmoothMarkdown0B18EditorSlashCommandV10searchTextSSvp | let searchText: String
+s:14SmoothMarkdown0B18EditorSlashCommandV5title10searchText8markdown10onSelectedACSS_S2SSgAHSSYacSgtcfc | init(title: String, searchText: String, markdown: String? = nil, onSelected: ((String) async -> String?)? = nil)
+s:14SmoothMarkdown0B18EditorSlashCommandV5titleSSvp | let title: String
+s:14SmoothMarkdown0B18EditorSlashCommandV8markdownSSSgvp | let markdown: String?
+s:14SmoothMarkdown0B19CodeBlockDecorationV | struct MarkdownCodeBlockDecoration
+s:14SmoothMarkdown0B19CodeBlockDecorationV11borderColor7SwiftUI0G0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B19CodeBlockDecorationV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B19CodeBlockDecorationV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B19CodeBlockDecorationV15backgroundColor06borderG00H5Width12cornerRadiusAC7SwiftUI0G0VSg_AK14CoreFoundation7CGFloatVANtcfc | init(backgroundColor: Color? = nil, borderColor: Color? = nil, borderWidth: CGFloat = 0, cornerRadius: CGFloat = 0)
+s:14SmoothMarkdown0B19CodeBlockDecorationV15backgroundColor7SwiftUI0G0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B19ResourceCachePolicyO | enum MarkdownResourceCachePolicy
+s:14SmoothMarkdown0B19ResourceCachePolicyO6reloadyA2CmF | case reload
+s:14SmoothMarkdown0B19ResourceCachePolicyO7defaultyA2CmF | case `default`
+s:14SmoothMarkdown0B19ResourceCachePolicyO7noStoreyA2CmF | case noStore
+s:14SmoothMarkdown0B19ResourceCachePolicyO8rawValueACSgSS_tcfc | init?(rawValue: String)
+s:14SmoothMarkdown0B19VisibleTextPositionV | struct MarkdownVisibleTextPosition
+s:14SmoothMarkdown0B19VisibleTextPositionV6offsetSivp | let offset: Int
+s:14SmoothMarkdown0B19VisibleTextPositionV7blockID6offsetACSS_Sitcfc | init(blockID: String, offset: Int)
+s:14SmoothMarkdown0B19VisibleTextPositionV7blockIDSSvp | let blockID: String
+s:14SmoothMarkdown0B20BlockquoteDecorationV | struct MarkdownBlockquoteDecoration
+s:14SmoothMarkdown0B20BlockquoteDecorationV11borderColor7SwiftUI0F0VSgvp | var borderColor: Color?
+s:14SmoothMarkdown0B20BlockquoteDecorationV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B20BlockquoteDecorationV15backgroundColor06borderF00G5WidthAC7SwiftUI0F0VSg_AJ14CoreFoundation7CGFloatVtcfc | init(backgroundColor: Color? = nil, borderColor: Color? = nil, borderWidth: CGFloat = 4)
+s:14SmoothMarkdown0B20BlockquoteDecorationV15backgroundColor7SwiftUI0F0VSgvp | var backgroundColor: Color?
+s:14SmoothMarkdown0B20EditorImagePickEventV | struct MarkdownEditorImagePickEvent
+s:14SmoothMarkdown0B20EditorImagePickEventV16errorDescriptionSSSgvp | let errorDescription: String?
+s:14SmoothMarkdown0B20EditorImagePickEventV6status9selection16errorDescriptionAcA0bcdE6StatusO_AA0bcD9SelectionVSgSSSgtcfc | init(status: MarkdownEditorImagePickStatus, selection: MarkdownEditorImageSelection? = nil, errorDescription: String? = nil)
+s:14SmoothMarkdown0B20EditorImagePickEventV6statusAA0bcdE6StatusOvp | let status: MarkdownEditorImagePickStatus
+s:14SmoothMarkdown0B20EditorImagePickEventV9selectionAA0bcD9SelectionVSgvp | let selection: MarkdownEditorImageSelection?
+s:14SmoothMarkdown0B20EditorImageSelectionV | struct MarkdownEditorImageSelection
+s:14SmoothMarkdown0B20EditorImageSelectionV3altSSvp | let alt: String
+s:14SmoothMarkdown0B20EditorImageSelectionV3url3alt5titleACSS_S2SSgtcfc | init(url: String, alt: String = "", title: String? = nil)
+s:14SmoothMarkdown0B20EditorImageSelectionV3urlSSvp | let url: String
+s:14SmoothMarkdown0B20EditorImageSelectionV5titleSSSgvp | let title: String?
+s:14SmoothMarkdown0B20SemanticTextPositionV | struct MarkdownSemanticTextPosition
+s:14SmoothMarkdown0B20SemanticTextPositionV11tableColumnSiSgvp | let tableColumn: Int?
+s:14SmoothMarkdown0B20SemanticTextPositionV13listItemIndexSiSgvp | let listItemIndex: Int?
+s:14SmoothMarkdown0B20SemanticTextPositionV14quoteLineIndexSiSgvp | let quoteLineIndex: Int?
+s:14SmoothMarkdown0B20SemanticTextPositionV17listTrailingIndexSiSgvp | let listTrailingIndex: Int?
+s:14SmoothMarkdown0B20SemanticTextPositionV21listContinuationIndexSiSgvp | let listContinuationIndex: Int?
+s:14SmoothMarkdown0B20SemanticTextPositionV6offsetSivp | let offset: Int
+s:14SmoothMarkdown0B20SemanticTextPositionV7blockID6offset13listItemIndex0i12ContinuationK00i8TrailingK08tableRow0N6Column09quoteLineK0ACSS_S2iSgA5Ltcfc | init(blockID: String, offset: Int, listItemIndex: Int? = nil, listContinuationIndex: Int? = nil, listTrailingIndex: Int? = nil, tableRow: Int? = nil, tableColumn: Int? = nil, quoteLineIndex: Int? = nil)
+s:14SmoothMarkdown0B20SemanticTextPositionV7blockIDSSvp | let blockID: String
+s:14SmoothMarkdown0B20SemanticTextPositionV8tableRowSiSgvp | let tableRow: Int?
+s:14SmoothMarkdown0B20VisibleTextSelectionV | struct MarkdownVisibleTextSelection
+s:14SmoothMarkdown0B20VisibleTextSelectionV5focusAA0bcD8PositionVvp | let focus: MarkdownVisibleTextPosition
+s:14SmoothMarkdown0B20VisibleTextSelectionV6anchorAA0bcD8PositionVvp | let anchor: MarkdownVisibleTextPosition
+s:14SmoothMarkdown0B20VisibleTextSelectionV6source6anchor5focusACSS_AA0bcD8PositionVAHtcfc | init(source: String, anchor: MarkdownVisibleTextPosition, focus: MarkdownVisibleTextPosition)
+s:14SmoothMarkdown0B20VisibleTextSelectionV6sourceSSvp | let source: String
+s:14SmoothMarkdown0B21EditorHostIOOperationO | enum MarkdownEditorHostIOOperation
+s:14SmoothMarkdown0B21EditorHostIOOperationO14markdownExportyA2CmF | case markdownExport
+s:14SmoothMarkdown0B21EditorHostIOOperationO14markdownImportyA2CmF | case markdownImport
+s:14SmoothMarkdown0B21EditorHostIOOperationO9imagePickyA2CmF | case imagePick
+s:14SmoothMarkdown0B21EditorHostIOOperationO9pdfExportyA2CmF | case pdfExport
+s:14SmoothMarkdown0B21EditorImagePickStatusO | enum MarkdownEditorImagePickStatus
+s:14SmoothMarkdown0B21EditorImagePickStatusO6failedyA2CmF | case failed
+s:14SmoothMarkdown0B21EditorImagePickStatusO7pickingyA2CmF | case picking
+s:14SmoothMarkdown0B21EditorImagePickStatusO8insertedyA2CmF | case inserted
+s:14SmoothMarkdown0B21EditorImagePickStatusO9cancelledyA2CmF | case cancelled
+s:14SmoothMarkdown0B21SemanticTextSelectionV | struct MarkdownSemanticTextSelection
+s:14SmoothMarkdown0B21SemanticTextSelectionV5focusAA0bcD8PositionVvp | let focus: MarkdownSemanticTextPosition
+s:14SmoothMarkdown0B21SemanticTextSelectionV6anchor5focus6sourceAcA0bcD8PositionV_AHSSSgtcfc | init(anchor: MarkdownSemanticTextPosition, focus: MarkdownSemanticTextPosition, source: String? = nil)
+s:14SmoothMarkdown0B21SemanticTextSelectionV6anchorAA0bcD8PositionVvp | let anchor: MarkdownSemanticTextPosition
+s:14SmoothMarkdown0B21SemanticTextSelectionV6sourceSSSgvp | let source: String?
+s:14SmoothMarkdown0B22SourceListContinuationV | struct MarkdownSourceListContinuation
+s:14SmoothMarkdown0B22SourceListContinuationV10lineEndingSSvp | let lineEnding: String
+s:14SmoothMarkdown0B22SourceListContinuationV13leadingTriviaSSvp | let leadingTrivia: String
+s:14SmoothMarkdown0B22SourceListContinuationV6indentSSvp | let indent: String
+s:14SmoothMarkdown0B22SourceListContinuationV6sourceSSvp | var source: String { get }
+s:14SmoothMarkdown0B22SourceListContinuationV7contentSSvp | let content: String
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV | struct MarkdownEditorPerformanceSnapshot
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV10blockCountSivp | let blockCount: Int
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV11isComposingSbvp | let isComposing: Bool
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV12sourceLengthSivp | let sourceLength: Int
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV16searchMatchCountSivp | let searchMatchCount: Int
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV21formattedSegmentCountSiSgvp | let formattedSegmentCount: Int?
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV23slashSuggestionsVisibleSbSgvp | let slashSuggestionsVisible: Bool?
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV24formattedSegmentCacheHitSbSgvp | let formattedSegmentCacheHit: Bool?
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV26wikilinkSuggestionsVisibleSbSgvp | let wikilinkSuggestionsVisible: Bool?
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV32retainedFormattedSegmentKeyCountSiSgvp | let retainedFormattedSegmentKeyCount: Int?
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV4modeAA0bC4ModeOvp | let mode: MarkdownEditorMode
+s:14SmoothMarkdown0B25EditorPerformanceSnapshotV9timestamp10Foundation4DateVvp | let timestamp: Date
+s:14SmoothMarkdown0B25SemanticListItemSelectionV | struct MarkdownSemanticListItemSelection
+s:14SmoothMarkdown0B25SemanticListItemSelectionV10focusIndexSivp | let focusIndex: Int
+s:14SmoothMarkdown0B25SemanticListItemSelectionV11anchorIndexSivp | let anchorIndex: Int
+s:14SmoothMarkdown0B25SemanticListItemSelectionV7blockID11anchorIndex05focusJ0ACSS_S2itcfc | init(blockID: String, anchorIndex: Int, focusIndex: Int)
+s:14SmoothMarkdown0B25SemanticListItemSelectionV7blockIDSSvp | let blockID: String
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV | struct MarkdownSemanticTableCellSelection
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV11focusColumnSivp | let focusColumn: Int
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV12anchorColumnSivp | let anchorColumn: Int
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV7blockID9anchorRow0I6Column05focusJ00lK0ACSS_S4itcfc | init(blockID: String, anchorRow: Int, anchorColumn: Int, focusRow: Int, focusColumn: Int)
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV7blockIDSSvp | let blockID: String
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV8focusRowSivp | let focusRow: Int
+s:14SmoothMarkdown0B26SemanticTableCellSelectionV9anchorRowSivp | let anchorRow: Int
+s:14SmoothMarkdown0B6EventsV | struct MarkdownEvents
+s:14SmoothMarkdown0B6EventsV10onCodeCopyySS_SSSgtcSgvp | var onCodeCopy: ((String, String?) -> Void)?
+s:14SmoothMarkdown0B6EventsV10onCompleteySScSgvp | var onComplete: ((String) -> Void)?
+s:14SmoothMarkdown0B6EventsV10onImageTapyAA0bE5EventVcSgvp | var onImageTap: ((MarkdownImageEvent) -> Void)?
+s:14SmoothMarkdown0B6EventsV15onTextLongPressyyyccSgvp | var onTextLongPress: ((@escaping () -> Void) -> Void)?
+s:14SmoothMarkdown0B6EventsV7onErrorys0E0_pcSgvp | var onError: ((any Error) -> Void)?
+s:14SmoothMarkdown0B6EventsV9onLinkTap0d5ImageF00D8CodeCopy0D13TextLongPress0D5Error0D8CompleteACy10Foundation3URLVcSg_yAA0bG5EventVcSgySS_SSSgtcSgyyyccSgys0M0_pcSgySScSgtcfc | init(onLinkTap: ((URL) -> Void)? = nil, onImageTap: ((MarkdownImageEvent) -> Void)? = nil, onCodeCopy: ((String, String?) -> Void)? = nil, onTextLongPress: ((@escaping () -> Void) -> Void)? = nil, onError: ((any Error) -> Void)? = nil, onComplete: ((String) -> Void)? = nil)
+s:14SmoothMarkdown0B6EventsV9onLinkTapy10Foundation3URLVcSgvp | var onLinkTap: ((URL) -> Void)?
+s:14SmoothMarkdown0B7StringsV | struct MarkdownStrings
+s:14SmoothMarkdown0B7StringsV04copyB0SSvp | var copyMarkdown: String
+s:14SmoothMarkdown0B7StringsV10identifierSSvp | var identifier: String
+s:14SmoothMarkdown0B7StringsV10parametersSSvp | var parameters: String
+s:14SmoothMarkdown0B7StringsV11copyFormulaSSvp | var copyFormula: String
+s:14SmoothMarkdown0B7StringsV12copyArtifactSSvp | var copyArtifact: String
+s:14SmoothMarkdown0B7StringsV13copyTextRangeSSvp | var copyTextRange: String
+s:14SmoothMarkdown0B7StringsV13expandDetailsSSvp | var expandDetails: String
+s:14SmoothMarkdown0B7StringsV13rangeSelectedSSvp | var rangeSelected: String
+s:14SmoothMarkdown0B7StringsV14expandThinkingSSvp | var expandThinking: String
+s:14SmoothMarkdown0B7StringsV15collapseDetailsSSvp | var collapseDetails: String
+s:14SmoothMarkdown0B7StringsV15selectLastBlockSSvp | var selectLastBlock: String
+s:14SmoothMarkdown0B7StringsV16collapseThinkingSSvp | var collapseThinking: String
+s:14SmoothMarkdown0B7StringsV16selectFirstBlockSSvp | var selectFirstBlock: String
+s:14SmoothMarkdown0B7StringsV16selectionActionsSSvp | var selectionActions: String
+s:14SmoothMarkdown0B7StringsV17detailsToggleHintSSvp | var detailsToggleHint: String
+s:14SmoothMarkdown0B7StringsV17selectEntireBlockSSvp | var selectEntireBlock: String
+s:14SmoothMarkdown0B7StringsV18thinkingInProgressSSvp | var thinkingInProgress: String
+s:14SmoothMarkdown0B7StringsV19selectAllReaderTextSSvp | var selectAllReaderText: String
+s:14SmoothMarkdown0B7StringsV24selectSurroundingContentSSvp | var selectSurroundingContent: String
+s:14SmoothMarkdown0B7StringsV4codeSSvp | var code: String
+s:14SmoothMarkdown0B7StringsV4copySSvp | var copy: String
+s:14SmoothMarkdown0B7StringsV4toolSSvp | var tool: String
+s:14SmoothMarkdown0B7StringsV5errorSSvp | var error: String
+s:14SmoothMarkdown0B7StringsV6cancelSSvp | var cancel: String
+s:14SmoothMarkdown0B7StringsV6copiedSSvp | var copied: String
+s:14SmoothMarkdown0B7StringsV6failedSSvp | var failed: String
+s:14SmoothMarkdown0B7StringsV6formatyS2S_SDyS2SGtF | func format(_ template: String, _ values: [String : String]) -> String
+s:14SmoothMarkdown0B7StringsV6resultSSvp | var result: String
+s:14SmoothMarkdown0B7StringsV7actionsSSvp | var actions: String
+s:14SmoothMarkdown0B7StringsV7copyTSVSSvp | var copyTSV: String
+s:14SmoothMarkdown0B7StringsV7diagramSSvp | var diagram: String
+s:14SmoothMarkdown0B7StringsV7pendingSSvp | var pending: String
+s:14SmoothMarkdown0B7StringsV7runningSSvp | var running: String
+s:14SmoothMarkdown0B7StringsV8artifactSSvp | var artifact: String
+s:14SmoothMarkdown0B7StringsV8documentSSvp | var document: String
+s:14SmoothMarkdown0B7StringsV8expandedSSvp | var expanded: String
+s:14SmoothMarkdown0B7StringsV8thinkingSSvp | var thinking: String
+s:14SmoothMarkdown0B7StringsV9cancelledSSvp | var cancelled: String
+s:14SmoothMarkdown0B7StringsV9collapsedSSvp | var collapsed: String
+s:14SmoothMarkdown0B7StringsV9completedSSvp | var completed: String
+s:14SmoothMarkdown0B7StringsV9componentSSvp | var component: String
+s:14SmoothMarkdown0B7StringsV9copyCellsSSvp | var copyCells: String
+s:14SmoothMarkdown0B7StringsV9copyItemsSSvp | var copyItems: String
+s:14SmoothMarkdown0B7StringsV9overridesSDyS2SGvp | var overrides: [String : String]
+s:14SmoothMarkdown0B7StringsVACycfc | init()
+s:14SmoothMarkdown0B7StringsVyS2Scip | subscript(defaultLabel: String) -> String { get }
+s:14SmoothMarkdown0B8BuildersV | struct MarkdownBuilders
+s:14SmoothMarkdown0B8BuildersV4code7SwiftUI7AnyViewVSS_SSSgtcSgvp | var code: ((String, String?) -> AnyView)?
+s:14SmoothMarkdown0B8BuildersV5image7SwiftUI7AnyViewVSS_SSSgAHtcSgvp | var image: ((String, String?, String?) -> AnyView)?
+s:14SmoothMarkdown0B8BuildersV5nodes4code5imageAcA15BuilderRegistryCSg_7SwiftUI7AnyViewVSS_SSSgtcSgALSS_A2MtcSgtcfc | init(nodes: BuilderRegistry? = nil, code: ((String, String?) -> AnyView)? = nil, image: ((String, String?, String?) -> AnyView)? = nil)
+s:14SmoothMarkdown0B8BuildersV5nodesAA15BuilderRegistryCSgvp | var nodes: BuilderRegistry?
+s:14SmoothMarkdown0B8DocumentV | struct MarkdownDocument
+s:14SmoothMarkdown0B8DocumentV02toB0SSyF | func toMarkdown() -> String
+s:14SmoothMarkdown0B8DocumentV11movingBlock_2toACSS_SitF | func movingBlock(_ id: String, to targetIndex: Int) -> MarkdownDocument
+s:14SmoothMarkdown0B8DocumentV11sourceRange2ofSo8_NSRangeVSgSS_tF | func sourceRange(of id: String) -> NSRange?
+s:14SmoothMarkdown0B8DocumentV12updatingListyACSgSS_AA0b6SourceE0VSgAGXEtF | func updatingList(_ id: String, _ transform: (MarkdownSourceList) -> MarkdownSourceList?) -> MarkdownDocument?
+s:14SmoothMarkdown0B8DocumentV13removingBlockyACSSF | func removingBlock(_ id: String) -> MarkdownDocument
+s:14SmoothMarkdown0B8DocumentV13updatingTable_16preservingSource_ACSgSS_SbAA0bgE0VAHXEtF | func updatingTable(_ id: String, preservingSource: Bool = false, _ transform: (MarkdownSourceTable) -> MarkdownSourceTable) -> MarkdownDocument?
+s:14SmoothMarkdown0B8DocumentV14replacingBlockyAcA0bcE0VF | func replacingBlock(_ replacement: MarkdownDocumentBlock) -> MarkdownDocument
+s:14SmoothMarkdown0B8DocumentV14trailingTriviaSSvp | let trailingTrivia: String
+s:14SmoothMarkdown0B8DocumentV22sourceRangeOfTableCell7blockID3row6columnSo8_NSRangeVSgSS_S2itF | func sourceRangeOfTableCell(blockID: String, row: Int, column: Int) -> NSRange?
+s:14SmoothMarkdown0B8DocumentV6blocks14trailingTriviaACSayAA0bC5BlockVG_SStcfc | init(blocks: [MarkdownDocumentBlock], trailingTrivia: String = "")
+s:14SmoothMarkdown0B8DocumentV6blocksSayAA0bC5BlockVGvp | let blocks: [MarkdownDocumentBlock]
+s:14SmoothMarkdown0B8DocumentV7isEmptySbvp | var isEmpty: Bool { get }
+s:14SmoothMarkdown0B8DocumentV9blockByIdyAA0bC5BlockVSgSSF | func blockById(_ id: String) -> MarkdownDocumentBlock?
+s:14SmoothMarkdown0B8DocumentV9plainTextSSvp | var plainText: String { get }
+s:14SmoothMarkdown0B9FontTokenV | struct MarkdownFontToken
+s:14SmoothMarkdown0B9FontTokenV10monospacedSbvp | var monospaced: Bool
+s:14SmoothMarkdown0B9FontTokenV10normalizedACyF | func normalized() -> MarkdownFontToken
+s:14SmoothMarkdown0B9FontTokenV4font10relativeTo7SwiftUI0C0VAH9TextStyleO_tF | func font(relativeTo role: Font.TextStyle = .body) -> Font
+s:14SmoothMarkdown0B9FontTokenV4size14CoreFoundation7CGFloatVvp | var size: CGFloat
+s:14SmoothMarkdown0B9FontTokenV6weight7SwiftUI0C0V6WeightVvp | var weight: Font.Weight
+s:14SmoothMarkdown0B9FontTokenV8fontName4size6weight10monospacedACSSSg_14CoreFoundation7CGFloatV7SwiftUI0C0V6WeightVSbtcfc | init(fontName: String? = nil, size: CGFloat, weight: Font.Weight = .regular, monospaced: Bool = false)
+s:14SmoothMarkdown0B9FontTokenV8fontNameSSSgvp | var fontName: String?
+s:14SmoothMarkdown0aB4ViewV | @MainActor struct SmoothMarkdownView
+s:14SmoothMarkdown0aB4ViewV10clearCacheyyFZ | @MainActor static func clearCache()
+s:14SmoothMarkdown0aB4ViewV10enableHTMLSbvp | @MainActor let enableHTML: Bool
+s:14SmoothMarkdown0aB4ViewV10onCodeCopyySS_SSSgtcSgvp | @MainActor let onCodeCopy: ((String, String?) -> Void)?
+s:14SmoothMarkdown0aB4ViewV10onImageTapy10Foundation3URLVcSgvp | @MainActor let onImageTap: ((URL) -> Void)?
+s:14SmoothMarkdown0aB4ViewV10scrollableSbvp | @MainActor let scrollable: Bool
+s:14SmoothMarkdown0aB4ViewV10selectableSbvp | @MainActor let selectable: Bool
+s:14SmoothMarkdown0aB4ViewV10styleSheetAA0b5StyleE0Vvp | @MainActor let styleSheet: MarkdownStyleSheet
+s:14SmoothMarkdown0aB4ViewV11codeBuilder7SwiftUI03AnyC0VSS_SSSgtcSgvp | @MainActor let codeBuilder: ((String, String?) -> AnyView)?
+s:14SmoothMarkdown0aB4ViewV11enableCacheSbvp | @MainActor let enableCache: Bool
+s:14SmoothMarkdown0aB4ViewV12imageBuilder7SwiftUI03AnyC0VSS_SSSgAHtcSgvp | @MainActor let imageBuilder: ((String, String?, String?) -> AnyView)?
+s:14SmoothMarkdown0aB4ViewV15builderRegistryAA07BuilderE0CSgvp | @MainActor let builderRegistry: BuilderRegistry?
+s:14SmoothMarkdown0aB4ViewV15cacheStatisticsAA0b5CacheE0VvpZ | @MainActor static var cacheStatistics: MarkdownCacheStatistics { get }
+s:14SmoothMarkdown0aB4ViewV15onTextLongPressyyyccSgvp | @MainActor let onTextLongPress: ((@escaping () -> Void) -> Void)?
+s:14SmoothMarkdown0aB4ViewV15resourceOptionsAA0b8ResourceE0Vvp | @MainActor var resourceOptions: MarkdownResourceOptions { get }
+s:14SmoothMarkdown0aB4ViewV16codeBlockOptionsAA04CodeeF0Vvp | @MainActor let codeBlockOptions: CodeBlockOptions
+s:14SmoothMarkdown0aB4ViewV19selectionControllerAA0a9SelectionE0CSgvp | @MainActor let selectionController: SmoothSelectionController?
+s:14SmoothMarkdown0aB4ViewV21useEnhancedComponentsSbvp | @MainActor let useEnhancedComponents: Bool
+s:14SmoothMarkdown0aB4ViewV22onImageTapWithMetadataySS_SSSgAEtcSgvp | @MainActor let onImageTapWithMetadata: ((String, String?, String?) -> Void)?
+s:14SmoothMarkdown0aB4ViewV25enableCrossBlockSelectionSbvp | @MainActor let enableCrossBlockSelection: Bool
+s:14SmoothMarkdown0aB4ViewV4bodyQrvp | @MainActor var body: some View { get }
+s:14SmoothMarkdown0aB4ViewV7pluginsAA20ParserPluginRegistryCSgvp | @MainActor let plugins: ParserPluginRegistry?
+s:14SmoothMarkdown0aB4ViewV7stringsAA0B7StringsVvp | @MainActor var strings: MarkdownStrings { get }
+s:14SmoothMarkdown0aB4ViewV8markdown13renderOptions09selectionF06events10styleSheet7plugins8builders08resourceF07stringsACSS_AA0b6RenderF0VAA0b9SelectionF0VAA0B6EventsVAA0b5StyleJ0VAA20ParserPluginRegistryCSgAA0B8BuildersVAA0b8ResourceF0VSgAA0B7StringsVSgtcfc | @MainActor init(markdown: String, renderOptions: MarkdownRenderOptions, selectionOptions: MarkdownSelectionOptions = .init(), events: MarkdownEvents = .init(), styleSheet: MarkdownStyleSheet = .default(), plugins: ParserPluginRegistry? = nil, builders: MarkdownBuilders = .init(), resourceOptions: MarkdownResourceOptions? = nil, strings: MarkdownStrings? = nil)
+s:14SmoothMarkdown0aB4ViewV8markdown9onLinkTap0egF00e5ImageG00ehG12WithMetadata0egH012imageBuilder10enableHTML21useEnhancedComponents16codeBlockOptions0rL00E8CodeCopy0E13TextLongPress10styleSheet7plugins15builderRegistry0M5Cache10selectable19selectionController0m5CrossS9Selection10scrollable08resourceT07stringsACSS_y10Foundation3URLVcSgySScSgA2_ySS_SSSgA4_tcSgA5_7SwiftUI03AnyC0VSS_A4_A4_tcSgS2bAA0usT0VSgA8_SS_A4_tcSgySS_A4_tcSgyyyccSgAA0B10StyleSheetVAA20ParserPluginRegistryCSgAA0L8RegistryCSgS2bAA0A19SelectionControllerCSgS2bAA0b8ResourceT0VSgAA0B7StringsVSgtcfc | @MainActor init(markdown: String, onLinkTap: ((URL) -> Void)? = nil, onTapLink: ((String) -> Void)? = nil, onImageTap: ((URL) -> Void)? = nil, onImageTapWithMetadata: ((String, String?, String?) -> Void)? = nil, onTapImage: ((String, String?, String?) -> Void)? = nil, imageBuilder: ((String, String?, String?) -> AnyView)? = nil, enableHTML: Bool = false, useEnhancedComponents: Bool = false, codeBlockOptions: CodeBlockOptions? = nil, codeBuilder: ((String, String?) -> AnyView)? = nil, onCodeCopy: ((String, String?) -> Void)? = nil, onTextLongPress: ((@escaping () -> Void) -> Void)? = nil, styleSheet: MarkdownStyleSheet = .default(), plugins: ParserPluginRegistry? = nil, builderRegistry: BuilderRegistry? = nil, enableCache: Bool = true, selectable: Bool = false, selectionController: SmoothSelectionController? = nil, enableCrossBlockSelection: Bool = true, scrollable: Bool = true, resourceOptions: MarkdownResourceOptions? = nil, strings: MarkdownStrings? = nil)
+s:14SmoothMarkdown0aB4ViewV8markdownSSvp | @MainActor let markdown: String
+s:14SmoothMarkdown0aB4ViewV9onLinkTapy10Foundation3URLVcSgvp | @MainActor let onLinkTap: ((URL) -> Void)?
+s:14SmoothMarkdown10BlockQuoteC | final class BlockQuote
+s:14SmoothMarkdown10InlineCodeC | final class InlineCode
+s:14SmoothMarkdown10InlineCodeC4codeSSvp | let code: String
+s:14SmoothMarkdown10InlineCodeC_5range6sourceACSS_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ code: String, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown10InlineHTMLC | final class InlineHTML
+s:14SmoothMarkdown10InlineHTMLC03rawD0SSvp | let rawHTML: String
+s:14SmoothMarkdown10InlineHTMLC_5range6sourceACSS_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ rawHTML: String, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown11EmojiPluginV | struct EmojiPlugin
+s:14SmoothMarkdown11EmojiPluginV12customEmojisACSDyS2SG_tcfc | init(customEmojis: [String : String] = [:])
+s:14SmoothMarkdown11EmojiPluginV12customEmojisSDyS2SGvp | let customEmojis: [String : String]
+s:14SmoothMarkdown11EmojiPluginV13defaultEmojisSDyS2SGvpZ | static let defaultEmojis: [String : String]
+s:14SmoothMarkdown11EmojiPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown11EmojiPluginV2idSSvp | let id: String
+s:14SmoothMarkdown11EmojiPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown11EmojiPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown11EmojiPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown11EmojiPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown11EmojiPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown11MermaidEdgeV | struct MermaidEdge
+s:14SmoothMarkdown11MermaidEdgeV11sourceArrowAA0cF0Ovp | let sourceArrow: MermaidArrow
+s:14SmoothMarkdown11MermaidEdgeV11sourceLabelSSSgvp | let sourceLabel: String?
+s:14SmoothMarkdown11MermaidEdgeV11targetLabelSSSgvp | let targetLabel: String?
+s:14SmoothMarkdown11MermaidEdgeV12sourceMarkerAA0cF0OSgvp | let sourceMarker: MermaidMarker?
+s:14SmoothMarkdown11MermaidEdgeV12targetMarkerAA0cF0OSgvp | let targetMarker: MermaidMarker?
+s:14SmoothMarkdown11MermaidEdgeV2toSSvp | let to: String
+s:14SmoothMarkdown11MermaidEdgeV4from2to5label4line5arrow11sourceArrow0J6Marker06targetL00J5Label0mN0ACSS_S2SSgAA0C4LineOAA0cK0OArA0cL0OSgAu2Ntcfc | init(from: String, to: String, label: String? = nil, line: MermaidLine = .solid, arrow: MermaidArrow = .arrow, sourceArrow: MermaidArrow = .none, sourceMarker: MermaidMarker? = nil, targetMarker: MermaidMarker? = nil, sourceLabel: String? = nil, targetLabel: String? = nil)
+s:14SmoothMarkdown11MermaidEdgeV4fromSSvp | let from: String
+s:14SmoothMarkdown11MermaidEdgeV4lineAA0C4LineOvp | let line: MermaidLine
+s:14SmoothMarkdown11MermaidEdgeV5arrowAA0C5ArrowOvp | let arrow: MermaidArrow
+s:14SmoothMarkdown11MermaidEdgeV5labelSSSgvp | let label: String?
+s:14SmoothMarkdown11MermaidKindO | enum MermaidKind
+s:14SmoothMarkdown11MermaidKindO12classDiagramyA2CmF | case classDiagram
+s:14SmoothMarkdown11MermaidKindO12stateDiagramyA2CmF | case stateDiagram
+s:14SmoothMarkdown11MermaidKindO3pieyA2CmF | case pie
+s:14SmoothMarkdown11MermaidKindO5ganttyA2CmF | case gantt
+s:14SmoothMarkdown11MermaidKindO5radaryA2CmF | case radar
+s:14SmoothMarkdown11MermaidKindO6kanbanyA2CmF | case kanban
+s:14SmoothMarkdown11MermaidKindO7xyChartyA2CmF | case xyChart
+s:14SmoothMarkdown11MermaidKindO8sequenceyA2CmF | case sequence
+s:14SmoothMarkdown11MermaidKindO8timelineyA2CmF | case timeline
+s:14SmoothMarkdown11MermaidKindO9erDiagramyA2CmF | case erDiagram
+s:14SmoothMarkdown11MermaidKindO9flowchartyA2CmF | case flowchart
+s:14SmoothMarkdown11MermaidLineO | enum MermaidLine
+s:14SmoothMarkdown11MermaidLineO5solidyA2CmF | case solid
+s:14SmoothMarkdown11MermaidLineO5thickyA2CmF | case thick
+s:14SmoothMarkdown11MermaidLineO6dottedyA2CmF | case dotted
+s:14SmoothMarkdown11MermaidNodeV | struct MermaidNode
+s:14SmoothMarkdown11MermaidNodeV12compartmentsSaySaySSGGvp | let compartments: [[String]]
+s:14SmoothMarkdown11MermaidNodeV15participantTypeAA0c11ParticipantF0Ovp | let participantType: MermaidParticipantType
+s:14SmoothMarkdown11MermaidNodeV2id5label5shape15participantType12compartmentsACSS_SSAA0C5ShapeOAA0c11ParticipantI0OSaySaySSGGtcfc | init(id: String, label: String, shape: MermaidShape = .rectangle, participantType: MermaidParticipantType = .participant, compartments: [[String]] = [])
+s:14SmoothMarkdown11MermaidNodeV2idSSvp | let id: String
+s:14SmoothMarkdown11MermaidNodeV5labelSSvp | let label: String
+s:14SmoothMarkdown11MermaidNodeV5shapeAA0C5ShapeOvp | let shape: MermaidShape
+s:14SmoothMarkdown11OrderedListC | final class OrderedList
+s:14SmoothMarkdown11OrderedListC10startIndex8children5range6sourceACSu_SayAA6MarkupCGSnyAA14SourceLocationVGSgSSSgtcfc | init(startIndex: UInt = 1, children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown11OrderedListC10startIndexSuvp | let startIndex: UInt
+s:14SmoothMarkdown12ArtifactTypeO | enum ArtifactType
+s:14SmoothMarkdown12ArtifactTypeO3svgyA2CmF | case svg
+s:14SmoothMarkdown12ArtifactTypeO4codeyA2CmF | case code
+s:14SmoothMarkdown12ArtifactTypeO4htmlyA2CmF | case html
+s:14SmoothMarkdown12ArtifactTypeO6customyA2CmF | case custom
+s:14SmoothMarkdown12ArtifactTypeO7mermaidyA2CmF | case mermaid
+s:14SmoothMarkdown12ArtifactTypeO8documentyA2CmF | case document
+s:14SmoothMarkdown12ArtifactTypeO8rawValueACSgSS_tcfc | init?(rawValue: String)
+s:14SmoothMarkdown12ArtifactTypeO9componentyA2CmF | case component
+s:14SmoothMarkdown12MermaidArrowO | enum MermaidArrow
+s:14SmoothMarkdown12MermaidArrowO4noneyA2CmF | case none
+s:14SmoothMarkdown12MermaidArrowO5arrowyA2CmF | case arrow
+s:14SmoothMarkdown12MermaidArrowO5crossyA2CmF | case cross
+s:14SmoothMarkdown12MermaidShapeO | enum MermaidShape
+s:14SmoothMarkdown12MermaidShapeO10asymmetricyA2CmF | case asymmetric
+s:14SmoothMarkdown12MermaidShapeO10stateStartyA2CmF | case stateStart
+s:14SmoothMarkdown12MermaidShapeO10subroutineyA2CmF | case subroutine
+s:14SmoothMarkdown12MermaidShapeO12trapezoidAltyA2CmF | case trapezoidAlt
+s:14SmoothMarkdown12MermaidShapeO13parallelogramyA2CmF | case parallelogram
+s:14SmoothMarkdown12MermaidShapeO16parallelogramAltyA2CmF | case parallelogramAlt
+s:14SmoothMarkdown12MermaidShapeO6circleyA2CmF | case circle
+s:14SmoothMarkdown12MermaidShapeO7diamondyA2CmF | case diamond
+s:14SmoothMarkdown12MermaidShapeO7hexagonyA2CmF | case hexagon
+s:14SmoothMarkdown12MermaidShapeO7roundedyA2CmF | case rounded
+s:14SmoothMarkdown12MermaidShapeO7stadiumyA2CmF | case stadium
+s:14SmoothMarkdown12MermaidShapeO8cylinderyA2CmF | case cylinder
+s:14SmoothMarkdown12MermaidShapeO8stateEndyA2CmF | case stateEnd
+s:14SmoothMarkdown12MermaidShapeO9rectangleyA2CmF | case rectangle
+s:14SmoothMarkdown12MermaidShapeO9trapezoidyA2CmF | case trapezoid
+s:14SmoothMarkdown12MermaidThemeO | enum MermaidTheme
+s:14SmoothMarkdown12MermaidThemeO4darkyA2CmF | case dark
+s:14SmoothMarkdown12MermaidThemeO5lightyA2CmF | case light
+s:14SmoothMarkdown12MermaidThemeO6forestyA2CmF | case forest
+s:14SmoothMarkdown12MermaidThemeO7neutralyA2CmF | case neutral
+s:14SmoothMarkdown12MermaidThemeO7paletteAA0C7PaletteVvp | var palette: MermaidPalette { get }
+s:14SmoothMarkdown12MermaidThemeO8rawValueACSgSS_tcfc | init?(rawValue: String)
+s:14SmoothMarkdown12ParserPluginP | protocol ParserPlugin
+s:14SmoothMarkdown12ParserPluginP2idSSvp | var id: String { get }
+s:14SmoothMarkdown12ParserPluginP4nameSSvp | var name: String { get }
+s:14SmoothMarkdown12ParserPluginP8prioritySivp | var priority: Int { get }
+s:14SmoothMarkdown12ParserPluginPAAE8prioritySivp | var priority: Int { get }
+s:14SmoothMarkdown13ArtifactBlockV | struct ArtifactBlock
+s:14SmoothMarkdown13ArtifactBlockV10customTypeSSSgvp | let customType: String?
+s:14SmoothMarkdown13ArtifactBlockV10identifierSSvp | let identifier: String
+s:14SmoothMarkdown13ArtifactBlockV4typeAA0C4TypeOvp | let type: ArtifactType
+s:14SmoothMarkdown13ArtifactBlockV5titleSSSgvp | let title: String?
+s:14SmoothMarkdown13ArtifactBlockV7contentSSvp | let content: String
+s:14SmoothMarkdown13ArtifactBlockV8languageSSSgvp | let language: String?
+s:14SmoothMarkdown13HashtagPluginV | struct HashtagPlugin
+s:14SmoothMarkdown13HashtagPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown13HashtagPluginV2idSSvp | let id: String
+s:14SmoothMarkdown13HashtagPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown13HashtagPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown13HashtagPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown13HashtagPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown13HashtagPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown13HashtagPluginVACycfc | init()
+s:14SmoothMarkdown13MentionPluginV | struct MentionPlugin
+s:14SmoothMarkdown13MentionPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown13MentionPluginV2idSSvp | let id: String
+s:14SmoothMarkdown13MentionPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown13MentionPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown13MentionPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown13MentionPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown13MentionPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown13MentionPluginVACycfc | init()
+s:14SmoothMarkdown13MermaidMarkerO | enum MermaidMarker
+s:14SmoothMarkdown13MermaidMarkerO10exactlyOneyA2CmF | case exactlyOne
+s:14SmoothMarkdown13MermaidMarkerO10zeroOrMoreyA2CmF | case zeroOrMore
+s:14SmoothMarkdown13MermaidMarkerO11aggregationyA2CmF | case aggregation
+s:14SmoothMarkdown13MermaidMarkerO11compositionyA2CmF | case composition
+s:14SmoothMarkdown13MermaidMarkerO11inheritanceyA2CmF | case inheritance
+s:14SmoothMarkdown13MermaidMarkerO9oneOrMoreyA2CmF | case oneOrMore
+s:14SmoothMarkdown13MermaidMarkerO9zeroOrOneyA2CmF | case zeroOrOne
+s:14SmoothMarkdown13MermaidParserO | enum MermaidParser
+s:14SmoothMarkdown13MermaidParserO5parseyAA0C7DiagramVSgSSFZ | static func parse(_ source: String) -> MermaidDiagram?
+s:14SmoothMarkdown13MermaidPluginV | struct MermaidPlugin
+s:14SmoothMarkdown13MermaidPluginV2idSSvp | let id: String
+s:14SmoothMarkdown13MermaidPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown13MermaidPluginV5parse_2atAA05BlockD5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown13MermaidPluginV6rendery7SwiftUI7AnyViewVAA05BlockD5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown13MermaidPluginV8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown13MermaidPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown13MermaidPluginV9onNodeTapACySScSg_tcfc | init(onNodeTap: ((String) -> Void)? = nil)
+s:14SmoothMarkdown13MermaidPluginV9onNodeTapySScSgvp | let onNodeTap: ((String) -> Void)?
+s:14SmoothMarkdown13StrikethroughC | final class Strikethrough
+s:14SmoothMarkdown13ThematicBreakC | final class ThematicBreak
+s:14SmoothMarkdown13ThinkingBlockV | struct ThinkingBlock
+s:14SmoothMarkdown13ThinkingBlockV11isCollapsedSbvp | let isCollapsed: Bool
+s:14SmoothMarkdown13ThinkingBlockV7contentSSvp | let content: String
+s:14SmoothMarkdown13ToolCallBlockV | struct ToolCallBlock
+s:14SmoothMarkdown13ToolCallBlockV10parametersSSSgvp | let parameters: String?
+s:14SmoothMarkdown13ToolCallBlockV12errorMessageSSSgvp | let errorMessage: String?
+s:14SmoothMarkdown13ToolCallBlockV6resultSSSgvp | let result: String?
+s:14SmoothMarkdown13ToolCallBlockV6statusAA0cD6StatusOvp | let status: ToolCallStatus
+s:14SmoothMarkdown13ToolCallBlockV6toolIdSSSgvp | let toolId: String?
+s:14SmoothMarkdown13ToolCallBlockV8toolNameSSvp | let toolName: String
+s:14SmoothMarkdown13UnorderedListC | final class UnorderedList
+s:14SmoothMarkdown14ArtifactPluginV | struct ArtifactPlugin
+s:14SmoothMarkdown14ArtifactPluginV02onC3TapyAA0C5BlockVcSgvp | let onArtifactTap: ((ArtifactBlock) -> Void)?
+s:14SmoothMarkdown14ArtifactPluginV14showCopyButton02onC3TapACSb_yAA0C5BlockVcSgtcfc | init(showCopyButton: Bool = true, onArtifactTap: ((ArtifactBlock) -> Void)? = nil)
+s:14SmoothMarkdown14ArtifactPluginV14showCopyButtonSbvp | let showCopyButton: Bool
+s:14SmoothMarkdown14ArtifactPluginV2idSSvp | let id: String
+s:14SmoothMarkdown14ArtifactPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown14ArtifactPluginV5blockyAA0C5BlockVAA0fD5MatchVFZ | static func block(_ match: BlockPluginMatch) -> ArtifactBlock
+s:14SmoothMarkdown14ArtifactPluginV5parse_2atAA05BlockD5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown14ArtifactPluginV6rendery7SwiftUI7AnyViewVAA05BlockD5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown14ArtifactPluginV8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown14ArtifactPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown14MermaidDiagramV | struct MermaidDiagram
+s:14SmoothMarkdown14MermaidDiagramV10ganttTasksSayAA0C9GanttTaskVGvp | let ganttTasks: [MermaidGanttTask]
+s:14SmoothMarkdown14MermaidDiagramV10radarTicksSivp | let radarTicks: Int
+s:14SmoothMarkdown14MermaidDiagramV11radarCurvesSayAA0C10RadarCurveVGvp | let radarCurves: [MermaidRadarCurve]
+s:14SmoothMarkdown14MermaidDiagramV12radarMaximumSdSgvp | let radarMaximum: Double?
+s:14SmoothMarkdown14MermaidDiagramV12radarMinimumSdSgvp | let radarMinimum: Double?
+s:14SmoothMarkdown14MermaidDiagramV12xyCategoriesSaySSGvp | let xyCategories: [String]
+s:14SmoothMarkdown14MermaidDiagramV12xyXAxisTitleSSSgvp | let xyXAxisTitle: String?
+s:14SmoothMarkdown14MermaidDiagramV12xyYAxisTitleSSSgvp | let xyYAxisTitle: String?
+s:14SmoothMarkdown14MermaidDiagramV13ganttExcludesSSSgvp | let ganttExcludes: String?
+s:14SmoothMarkdown14MermaidDiagramV13kanbanColumnsSayAA0C12KanbanColumnVGvp | let kanbanColumns: [MermaidKanbanColumn]
+s:14SmoothMarkdown14MermaidDiagramV13xyOrientationAA0C13XYOrientationOvp | let xyOrientation: MermaidXYOrientation
+s:14SmoothMarkdown14MermaidDiagramV14radarGraticuleAA0c5RadarF0Ovp | let radarGraticule: MermaidRadarGraticule
+s:14SmoothMarkdown14MermaidDiagramV14xyXAxisMaximumSdSgvp | let xyXAxisMaximum: Double?
+s:14SmoothMarkdown14MermaidDiagramV14xyXAxisMinimumSdSgvp | let xyXAxisMinimum: Double?
+s:14SmoothMarkdown14MermaidDiagramV14xyYAxisMaximumSdSgvp | let xyYAxisMaximum: Double?
+s:14SmoothMarkdown14MermaidDiagramV14xyYAxisMinimumSdSgvp | let xyYAxisMinimum: Double?
+s:14SmoothMarkdown14MermaidDiagramV15ganttAxisFormatSSSgvp | let ganttAxisFormat: String?
+s:14SmoothMarkdown14MermaidDiagramV15ganttDateFormatSSvp | let ganttDateFormat: String
+s:14SmoothMarkdown14MermaidDiagramV15radarShowLegendSbvp | let radarShowLegend: Bool
+s:14SmoothMarkdown14MermaidDiagramV16ganttTodayMarkerSbvp | let ganttTodayMarker: Bool
+s:14SmoothMarkdown14MermaidDiagramV16timelineSectionsSayAA0C15TimelineSectionVGvp | let timelineSections: [MermaidTimelineSection]
+s:14SmoothMarkdown14MermaidDiagramV19kanbanTicketBaseURLSSSgvp | let kanbanTicketBaseURL: String?
+s:14SmoothMarkdown14MermaidDiagramV4kind9direction5nodes5edges9subgraphs5title8showData9pieSlices16timelineSections10ganttTasks0Q10DateFormat0q4AxisT00Q8Excludes0Q11TodayMarker13kanbanColumns0Y13TicketBaseURL9radarAxes11radarCurves15radarShowLegend12radarMinimum12radarMaximum14radarGraticule10radarTicks8xySeries13xyOrientation12xyCategories12xyXAxisTitle12xyYAxisTitle14xyXAxisMinimum14xyXAxisMaximum14xyYAxisMinimum14xyYAxisMaximumAcA0C4KindO_AA0C9DirectionOSayAA0C4NodeVGSayAA0C4EdgeVGSayAA0C8SubgraphVGSSSgSbSayAA0C8PieSliceVGSayAA0C15TimelineSectionVGSayAA0C9GanttTaskVGSSA21_A21_SbSayAA0C12KanbanColumnVGA21_SayAA0c5RadarU0VGSayAA0C10RadarCurveVGSbSdSgA40_AA0C14RadarGraticuleOSiSayAA0C8XYSeriesVGAA0C13XYOrientationOSaySSGA21_A21_A40_A40_A40_A40_tcfc | init(kind: MermaidKind, direction: MermaidDirection, nodes: [MermaidNode] = [], edges: [MermaidEdge] = [], subgraphs: [MermaidSubgraph] = [], title: String? = nil, showData: Bool = false, pieSlices: [MermaidPieSlice] = [], timelineSections: [MermaidTimelineSection] = [], ganttTasks: [MermaidGanttTask] = [], ganttDateFormat: String = "YYYY-MM-DD", ganttAxisFormat: String? = nil, ganttExcludes: String? = nil, ganttTodayMarker: Bool = true, kanbanColumns: [MermaidKanbanColumn] = [], kanbanTicketBaseURL: String? = nil, radarAxes: [MermaidRadarAxis] = [], radarCurves: [MermaidRadarCurve] = [], radarShowLegend: Bool = true, radarMinimum: Double? = nil, radarMaximum: Double? = nil, radarGraticule: MermaidRadarGraticule = .polygon, radarTicks: Int = 5, xySeries: [MermaidXYSeries] = [], xyOrientation: MermaidXYOrientation = .vertical, xyCategories: [String] = [], xyXAxisTitle: String? = nil, xyYAxisTitle: String? = nil, xyXAxisMinimum: Double? = nil, xyXAxisMaximum: Double? = nil, xyYAxisMinimum: Double? = nil, xyYAxisMaximum: Double? = nil)
+s:14SmoothMarkdown14MermaidDiagramV4kindAA0C4KindOvp | let kind: MermaidKind
+s:14SmoothMarkdown14MermaidDiagramV4nodeyAA0C4NodeVSgSSF | func node(_ id: String) -> MermaidNode?
+s:14SmoothMarkdown14MermaidDiagramV5edgesSayAA0C4EdgeVGvp | let edges: [MermaidEdge]
+s:14SmoothMarkdown14MermaidDiagramV5nodesSayAA0C4NodeVGvp | let nodes: [MermaidNode]
+s:14SmoothMarkdown14MermaidDiagramV5titleSSSgvp | let title: String?
+s:14SmoothMarkdown14MermaidDiagramV8showDataSbvp | let showData: Bool
+s:14SmoothMarkdown14MermaidDiagramV8xySeriesSayAA0C8XYSeriesVGvp | let xySeries: [MermaidXYSeries]
+s:14SmoothMarkdown14MermaidDiagramV9directionAA0C9DirectionOvp | let direction: MermaidDirection
+s:14SmoothMarkdown14MermaidDiagramV9pieSlicesSayAA0C8PieSliceVGvp | let pieSlices: [MermaidPieSlice]
+s:14SmoothMarkdown14MermaidDiagramV9radarAxesSayAA0C9RadarAxisVGvp | let radarAxes: [MermaidRadarAxis]
+s:14SmoothMarkdown14MermaidDiagramV9subgraphsSayAA0C8SubgraphVGvp | let subgraphs: [MermaidSubgraph]
+s:14SmoothMarkdown14MermaidPaletteV | struct MermaidPalette
+s:14SmoothMarkdown14MermaidPaletteV10background4text8nodeFill0G6Stroke4edgeACs6UInt32V_A4Jtcfc | init(background: UInt32, text: UInt32, nodeFill: UInt32, nodeStroke: UInt32, edge: UInt32)
+s:14SmoothMarkdown14MermaidPaletteV10backgrounds6UInt32Vvp | var background: UInt32
+s:14SmoothMarkdown14MermaidPaletteV10nodeStrokes6UInt32Vvp | var nodeStroke: UInt32
+s:14SmoothMarkdown14MermaidPaletteV13nodeFillColor7SwiftUI0G0Vvp | var nodeFillColor: Color { get }
+s:14SmoothMarkdown14MermaidPaletteV15backgroundColor7SwiftUI0F0Vvp | var backgroundColor: Color { get }
+s:14SmoothMarkdown14MermaidPaletteV15nodeStrokeColor7SwiftUI0G0Vvp | var nodeStrokeColor: Color { get }
+s:14SmoothMarkdown14MermaidPaletteV4edges6UInt32Vvp | var edge: UInt32
+s:14SmoothMarkdown14MermaidPaletteV4texts6UInt32Vvp | var text: UInt32
+s:14SmoothMarkdown14MermaidPaletteV8nodeFills6UInt32Vvp | var nodeFill: UInt32
+s:14SmoothMarkdown14MermaidPaletteV9edgeColor7SwiftUI0F0Vvp | var edgeColor: Color { get }
+s:14SmoothMarkdown14MermaidPaletteV9textColor7SwiftUI0F0Vvp | var textColor: Color { get }
+s:14SmoothMarkdown14SourceLocationV | struct SourceLocation
+s:14SmoothMarkdown14SourceLocationV1loiySbAC_ACtFZ | static func < (lhs: SourceLocation, rhs: SourceLocation) -> Bool
+s:14SmoothMarkdown14SourceLocationV4line6columnACSi_Sitcfc | init(line: Int, column: Int)
+s:14SmoothMarkdown14SourceLocationV4lineSivp | let line: Int
+s:14SmoothMarkdown14SourceLocationV6columnSivp | let column: Int
+s:14SmoothMarkdown14ThinkingPluginV | struct ThinkingPlugin
+s:14SmoothMarkdown14ThinkingPluginV10headerText014expandedHeaderF0ACSS_SStcfc | init(headerText: String = "Thinking...", expandedHeaderText: String = "Thinking")
+s:14SmoothMarkdown14ThinkingPluginV10headerTextSSvp | let headerText: String
+s:14SmoothMarkdown14ThinkingPluginV18expandedHeaderTextSSvp | let expandedHeaderText: String
+s:14SmoothMarkdown14ThinkingPluginV2idSSvp | let id: String
+s:14SmoothMarkdown14ThinkingPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown14ThinkingPluginV5parse_2atAA05BlockD5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown14ThinkingPluginV6rendery7SwiftUI7AnyViewVAA05BlockD5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown14ThinkingPluginV8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown14ThinkingPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown14ToolCallPluginV | struct ToolCallPlugin
+s:14SmoothMarkdown14ToolCallPluginV02oncD3TapyAA0cD5BlockVcSgvp | let onToolCallTap: ((ToolCallBlock) -> Void)?
+s:14SmoothMarkdown14ToolCallPluginV10showResultSbvp | let showResult: Bool
+s:14SmoothMarkdown14ToolCallPluginV14showParameters0F6Result02oncD3TapACSb_SbyAA0cD5BlockVcSgtcfc | init(showParameters: Bool = true, showResult: Bool = true, onToolCallTap: ((ToolCallBlock) -> Void)? = nil)
+s:14SmoothMarkdown14ToolCallPluginV14showParametersSbvp | let showParameters: Bool
+s:14SmoothMarkdown14ToolCallPluginV2idSSvp | let id: String
+s:14SmoothMarkdown14ToolCallPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown14ToolCallPluginV5blockyAA0cD5BlockVAA0gE5MatchVFZ | static func block(_ match: BlockPluginMatch) -> ToolCallBlock
+s:14SmoothMarkdown14ToolCallPluginV5parse_2atAA05BlockE5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown14ToolCallPluginV6rendery7SwiftUI7AnyViewVAA05BlockE5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown14ToolCallPluginV8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown14ToolCallPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown14ToolCallStatusO | enum ToolCallStatus
+s:14SmoothMarkdown14ToolCallStatusO6failedyA2CmF | case failed
+s:14SmoothMarkdown14ToolCallStatusO7pendingyA2CmF | case pending
+s:14SmoothMarkdown14ToolCallStatusO7runningyA2CmF | case running
+s:14SmoothMarkdown14ToolCallStatusO8rawValueACSgSS_tcfc | init?(rawValue: String)
+s:14SmoothMarkdown14ToolCallStatusO9cancelledyA2CmF | case cancelled
+s:14SmoothMarkdown14ToolCallStatusO9completedyA2CmF | case completed
+s:14SmoothMarkdown14WikilinkPluginV | struct WikilinkPlugin
+s:14SmoothMarkdown14WikilinkPluginV05onTapC0ACySScSg_tcfc | init(onTapWikilink: ((String) -> Void)? = nil)
+s:14SmoothMarkdown14WikilinkPluginV05onTapC0ySScSgvp | let onTapWikilink: ((String) -> Void)?
+s:14SmoothMarkdown14WikilinkPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown14WikilinkPluginV2idSSvp | let id: String
+s:14SmoothMarkdown14WikilinkPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown14WikilinkPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown14WikilinkPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown14WikilinkPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown14WikilinkPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown15BuilderRegistryC | final class BuilderRegistry
+s:14SmoothMarkdown15BuilderRegistryC03getC0yAA0b6WidgetC0_pSgSSF | func getBuilder(_ nodeType: String) -> (any MarkdownWidgetBuilder)?
+s:14SmoothMarkdown15BuilderRegistryC03hasC0ySbSSF | func hasBuilder(_ nodeType: String) -> Bool
+s:14SmoothMarkdown15BuilderRegistryC04findC0yAA0b6WidgetC0_pSgAA0B10PluginNodeVF | func findBuilder(_ node: MarkdownPluginNode) -> (any MarkdownWidgetBuilder)?
+s:14SmoothMarkdown15BuilderRegistryC04findC0yAA0b6WidgetC0_pSgAA0B13ExtensionNodeVF | func findBuilder(_ node: MarkdownExtensionNode) -> (any MarkdownWidgetBuilder)?
+s:14SmoothMarkdown15BuilderRegistryC04findC0yAA0b6WidgetC0_pSgAA6MarkupCF | func findBuilder(_ node: Markup) -> (any MarkdownWidgetBuilder)?
+s:14SmoothMarkdown15BuilderRegistryC10unregisteryySSF | func unregister(_ nodeType: String)
+s:14SmoothMarkdown15BuilderRegistryC5clearyyF | func clear()
+s:14SmoothMarkdown15BuilderRegistryC8nodeType3forSSAA6MarkupC_tFZ | static func nodeType(for node: Markup) -> String
+s:14SmoothMarkdown15BuilderRegistryC8register_7builderySS_AA0b6WidgetC0_ptF | func register(_ nodeType: String, builder: any MarkdownWidgetBuilder)
+s:14SmoothMarkdown15BuilderRegistryC8revisions6UInt64Vvp | @Published var revision: UInt64 { get set }
+s:14SmoothMarkdown15BuilderRegistryCACycfc | init()
+s:14SmoothMarkdown15MermaidPieSliceV | struct MermaidPieSlice
+s:14SmoothMarkdown15MermaidPieSliceV5label5valueACSS_Sdtcfc | init(label: String, value: Double)
+s:14SmoothMarkdown15MermaidPieSliceV5labelSSvp | let label: String
+s:14SmoothMarkdown15MermaidPieSliceV5valueSdvp | let value: Double
+s:14SmoothMarkdown15MermaidSubgraphV | struct MermaidSubgraph
+s:14SmoothMarkdown15MermaidSubgraphV2id5label7nodeIDs8parentIDACSS_SSSaySSGSSSgtcfc | init(id: String, label: String, nodeIDs: [String], parentID: String? = nil)
+s:14SmoothMarkdown15MermaidSubgraphV2idSSvp | let id: String
+s:14SmoothMarkdown15MermaidSubgraphV5labelSSvp | let label: String
+s:14SmoothMarkdown15MermaidSubgraphV7nodeIDsSaySSGvp | let nodeIDs: [String]
+s:14SmoothMarkdown15MermaidSubgraphV8parentIDSSSgvp | let parentID: String?
+s:14SmoothMarkdown15MermaidXYSeriesV | struct MermaidXYSeries
+s:14SmoothMarkdown15MermaidXYSeriesV4type6valuesAcA0cD4TypeO_SaySdGtcfc | init(type: MermaidXYSeriesType, values: [Double])
+s:14SmoothMarkdown15MermaidXYSeriesV4typeAA0cD4TypeOvp | let type: MermaidXYSeriesType
+s:14SmoothMarkdown15MermaidXYSeriesV6valuesSaySdGvp | let values: [Double]
+s:14SmoothMarkdown15NativeCodeBlocka | typealias NativeCodeBlock = CodeBlock
+s:14SmoothMarkdown16AdmonitionPluginV | struct AdmonitionPlugin
+s:14SmoothMarkdown16AdmonitionPluginV2idSSvp | let id: String
+s:14SmoothMarkdown16AdmonitionPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown16AdmonitionPluginV5parse_2atAA05BlockD5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown16AdmonitionPluginV6rendery7SwiftUI7AnyViewVAA05BlockD5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown16AdmonitionPluginV8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown16AdmonitionPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown16AdmonitionPluginVACycfc | init()
+s:14SmoothMarkdown16BlockPluginMatchV | struct BlockPluginMatch
+s:14SmoothMarkdown16BlockPluginMatchV10attributesSDyS2SGvp | let attributes: [String : String]
+s:14SmoothMarkdown16BlockPluginMatchV13linesConsumed6source7content10attributesACSi_S2SSDyS2SGtcfc | init(linesConsumed: Int, source: String, content: String, attributes: [String : String] = [:])
+s:14SmoothMarkdown16BlockPluginMatchV13linesConsumedSivp | let linesConsumed: Int
+s:14SmoothMarkdown16BlockPluginMatchV6sourceSSvp | let source: String
+s:14SmoothMarkdown16BlockPluginMatchV7contentSSvp | let content: String
+s:14SmoothMarkdown16CodeBlockOptionsV | struct CodeBlockOptions
+s:14SmoothMarkdown16CodeBlockOptionsV14showCopyButton0F11LanguageTag24enableSyntaxHighlightingACSb_S2btcfc | init(showCopyButton: Bool = true, showLanguageTag: Bool = true, enableSyntaxHighlighting: Bool = true)
+s:14SmoothMarkdown16CodeBlockOptionsV14showCopyButtonSbvp | var showCopyButton: Bool
+s:14SmoothMarkdown16CodeBlockOptionsV15showLanguageTagSbvp | var showLanguageTag: Bool
+s:14SmoothMarkdown16CodeBlockOptionsV24enableSyntaxHighlightingSbvp | var enableSyntaxHighlighting: Bool
+s:14SmoothMarkdown16MermaidDirectionO | enum MermaidDirection
+s:14SmoothMarkdown16MermaidDirectionO11bottomToTopyA2CmF | case bottomToTop
+s:14SmoothMarkdown16MermaidDirectionO11leftToRightyA2CmF | case leftToRight
+s:14SmoothMarkdown16MermaidDirectionO11rightToLeftyA2CmF | case rightToLeft
+s:14SmoothMarkdown16MermaidDirectionO11topToBottomyA2CmF | case topToBottom
+s:14SmoothMarkdown16MermaidGanttTaskV | struct MermaidGanttTask
+s:14SmoothMarkdown16MermaidGanttTaskV12dependenciesSaySSGvp | let dependencies: [String]
+s:14SmoothMarkdown16MermaidGanttTaskV2id4name7section9startDate03endJ06status12dependenciesACSS_S2SSg10Foundation0J0VAnA0cD6StatusOSaySSGtcfc | init(id: String, name: String, section: String?, startDate: Date, endDate: Date, status: MermaidGanttStatus, dependencies: [String])
+s:14SmoothMarkdown16MermaidGanttTaskV2idSSvp | let id: String
+s:14SmoothMarkdown16MermaidGanttTaskV4nameSSvp | let name: String
+s:14SmoothMarkdown16MermaidGanttTaskV6statusAA0cD6StatusOvp | let status: MermaidGanttStatus
+s:14SmoothMarkdown16MermaidGanttTaskV7endDate10Foundation0G0Vvp | let endDate: Date
+s:14SmoothMarkdown16MermaidGanttTaskV7sectionSSSgvp | let section: String?
+s:14SmoothMarkdown16MermaidGanttTaskV9startDate10Foundation0G0Vvp | let startDate: Date
+s:14SmoothMarkdown16MermaidRadarAxisV | struct MermaidRadarAxis
+s:14SmoothMarkdown16MermaidRadarAxisV2id5labelACSS_SStcfc | init(id: String, label: String)
+s:14SmoothMarkdown16MermaidRadarAxisV2idSSvp | let id: String
+s:14SmoothMarkdown16MermaidRadarAxisV5labelSSvp | let label: String
+s:14SmoothMarkdown17BlockParserPluginP | protocol BlockParserPlugin : ParserPlugin
+s:14SmoothMarkdown17BlockParserPluginP5parse_2atAA0cE5MatchVSgSaySSG_SitF | func parse(_ lines: [String], at index: Int) -> BlockPluginMatch?
+s:14SmoothMarkdown17BlockParserPluginP6rendery7SwiftUI7AnyViewVAA0cE5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown17BlockParserPluginP8canParse_5lines2atSbSS_SaySSGSitF | func canParse(_ line: String, lines: [String], at index: Int) -> Bool
+s:14SmoothMarkdown17BlockParserPluginPAAE6rendery7SwiftUI7AnyViewVAA0cE5MatchVF | func render(_ match: BlockPluginMatch) -> AnyView
+s:14SmoothMarkdown17InlinePluginMatchV | struct InlinePluginMatch
+s:14SmoothMarkdown17InlinePluginMatchV10attributesSDyS2SGvp | let attributes: [String : String]
+s:14SmoothMarkdown17InlinePluginMatchV4textSSvp | let text: String
+s:14SmoothMarkdown17InlinePluginMatchV8consumed4text10attributesACSi_SSSDyS2SGtcfc | init(consumed: Int, text: String, attributes: [String : String] = [:])
+s:14SmoothMarkdown17InlinePluginMatchV8consumedSivp | let consumed: Int
+s:14SmoothMarkdown17MermaidKanbanTaskV | struct MermaidKanbanTask
+s:14SmoothMarkdown17MermaidKanbanTaskV11descriptionSSvp | let description: String
+s:14SmoothMarkdown17MermaidKanbanTaskV2id11description8assigned6ticket8priorityACSS_S2SSgAiA0cD8PriorityOtcfc | init(id: String, description: String, assigned: String?, ticket: String?, priority: MermaidKanbanPriority)
+s:14SmoothMarkdown17MermaidKanbanTaskV2idSSvp | let id: String
+s:14SmoothMarkdown17MermaidKanbanTaskV6ticketSSSgvp | let ticket: String?
+s:14SmoothMarkdown17MermaidKanbanTaskV8assignedSSSgvp | let assigned: String?
+s:14SmoothMarkdown17MermaidKanbanTaskV8priorityAA0cD8PriorityOvp | let priority: MermaidKanbanPriority
+s:14SmoothMarkdown17MermaidRadarCurveV | struct MermaidRadarCurve
+s:14SmoothMarkdown17MermaidRadarCurveV2id5label6valuesACSS_SSSaySdGtcfc | init(id: String, label: String, values: [Double])
+s:14SmoothMarkdown17MermaidRadarCurveV2idSSvp | let id: String
+s:14SmoothMarkdown17MermaidRadarCurveV5labelSSvp | let label: String
+s:14SmoothMarkdown17MermaidRadarCurveV6valuesSaySdGvp | let values: [Double]
+s:14SmoothMarkdown18InlineParserPluginP | protocol InlineParserPlugin : ParserPlugin
+s:14SmoothMarkdown18InlineParserPluginP16triggerCharacterSJvp | var triggerCharacter: Character { get }
+s:14SmoothMarkdown18InlineParserPluginP5parse_2atAA0cE5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown18InlineParserPluginP6rendery7SwiftUI7AnyViewVAA0cE5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown18InlineParserPluginP8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown18InlineParserPluginPAAE6rendery7SwiftUI7AnyViewVAA0cE5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown18MermaidDiagramViewV | @MainActor struct MermaidDiagramView
+s:14SmoothMarkdown18MermaidDiagramViewV10scrollableSbvp | @MainActor let scrollable: Bool
+s:14SmoothMarkdown18MermaidDiagramViewV4bodyQrvp | @MainActor var body: some View { get }
+s:14SmoothMarkdown18MermaidDiagramViewV5styleAA0bC6TokensVSgvp | @MainActor let style: MarkdownMermaidTokens?
+s:14SmoothMarkdown18MermaidDiagramViewV5themeAA0C5ThemeOSgvp | @MainActor let theme: MermaidTheme?
+s:14SmoothMarkdown18MermaidDiagramViewV7diagram5theme9onNodeTap10scrollable5styleAcA0cD0V_AA0C5ThemeOSgySScSgSbAA0bC6TokensVSgtcfc | @MainActor init(diagram: MermaidDiagram, theme: MermaidTheme? = nil, onNodeTap: ((String) -> Void)? = nil, scrollable: Bool = true, style: MarkdownMermaidTokens? = nil)
+s:14SmoothMarkdown18MermaidDiagramViewV7diagramAA0cD0Vvp | @MainActor let diagram: MermaidDiagram
+s:14SmoothMarkdown18MermaidDiagramViewV9onNodeTapySScSgvp | @MainActor let onNodeTap: ((String) -> Void)?
+s:14SmoothMarkdown18MermaidGanttStatusO | enum MermaidGanttStatus
+s:14SmoothMarkdown18MermaidGanttStatusO4doneyA2CmF | case done
+s:14SmoothMarkdown18MermaidGanttStatusO6activeyA2CmF | case active
+s:14SmoothMarkdown18MermaidGanttStatusO6normalyA2CmF | case normal
+s:14SmoothMarkdown18MermaidGanttStatusO8criticalyA2CmF | case critical
+s:14SmoothMarkdown18MermaidGanttStatusO9milestoneyA2CmF | case milestone
+s:14SmoothMarkdown19MermaidKanbanColumnV | struct MermaidKanbanColumn
+s:14SmoothMarkdown19MermaidKanbanColumnV11isOverLimitSbvp | var isOverLimit: Bool { get }
+s:14SmoothMarkdown19MermaidKanbanColumnV2id5title8wipLimit5tasksACSS_SSSiSgSayAA0cD4TaskVGtcfc | init(id: String, title: String, wipLimit: Int?, tasks: [MermaidKanbanTask])
+s:14SmoothMarkdown19MermaidKanbanColumnV2idSSvp | let id: String
+s:14SmoothMarkdown19MermaidKanbanColumnV5tasksSayAA0cD4TaskVGvp | let tasks: [MermaidKanbanTask]
+s:14SmoothMarkdown19MermaidKanbanColumnV5titleSSvp | let title: String
+s:14SmoothMarkdown19MermaidKanbanColumnV8wipLimitSiSgvp | let wipLimit: Int?
+s:14SmoothMarkdown19MermaidXYSeriesTypeO | enum MermaidXYSeriesType
+s:14SmoothMarkdown19MermaidXYSeriesTypeO3baryA2CmF | case bar
+s:14SmoothMarkdown19MermaidXYSeriesTypeO4lineyA2CmF | case line
+s:14SmoothMarkdown20MermaidTimelineEventV | struct MermaidTimelineEvent
+s:14SmoothMarkdown20MermaidTimelineEventV11descriptionSSSgvp | let description: String?
+s:14SmoothMarkdown20MermaidTimelineEventV5title11descriptionACSS_SSSgtcfc | init(title: String, description: String? = nil)
+s:14SmoothMarkdown20MermaidTimelineEventV5titleSSvp | let title: String
+s:14SmoothMarkdown20MermaidXYOrientationO | enum MermaidXYOrientation
+s:14SmoothMarkdown20MermaidXYOrientationO10horizontalyA2CmF | case horizontal
+s:14SmoothMarkdown20MermaidXYOrientationO8verticalyA2CmF | case vertical
+s:14SmoothMarkdown20ParserPluginRegistryC | final class ParserPluginRegistry
+s:14SmoothMarkdown20ParserPluginRegistryC08getBlockD0yAA0gcD0_pSgSSF | func getBlockPlugin(_ id: String) -> (any BlockParserPlugin)?
+s:14SmoothMarkdown20ParserPluginRegistryC09getInlineD0yAA0gcD0_pSgSSF | func getInlinePlugin(_ id: String) -> (any InlineParserPlugin)?
+s:14SmoothMarkdown20ParserPluginRegistryC09getInlineD9ByTriggeryAA0gcD0_pSgSJF | func getInlinePluginByTrigger(_ character: Character) -> (any InlineParserPlugin)?
+s:14SmoothMarkdown20ParserPluginRegistryC11registerAllyySayAA0cD0_pGKF | func registerAll(_ plugins: [any ParserPlugin]) throws
+s:14SmoothMarkdown20ParserPluginRegistryC12blockPluginsSayAA05BlockcD0_pGvp | var blockPlugins: [any BlockParserPlugin] { get }
+s:14SmoothMarkdown20ParserPluginRegistryC13inlinePluginsSayAA06InlinecD0_pGvp | var inlinePlugins: [any InlineParserPlugin] { get }
+s:14SmoothMarkdown20ParserPluginRegistryC15isInlineTriggerySbSJF | func isInlineTrigger(_ character: Character) -> Bool
+s:14SmoothMarkdown20ParserPluginRegistryC15unregisterBlockySbSSF | @discardableResult func unregisterBlock(_ id: String) -> Bool
+s:14SmoothMarkdown20ParserPluginRegistryC16findBlockPlugins_5lines2atSayAA0gcD0_pGSS_SaySSGSitF | func findBlockPlugins(_ line: String, lines: [String], at index: Int) -> [any BlockParserPlugin]
+s:14SmoothMarkdown20ParserPluginRegistryC16unregisterInlineySbSSF | @discardableResult func unregisterInline(_ id: String) -> Bool
+s:14SmoothMarkdown20ParserPluginRegistryC17findInlinePlugins_2atSayAA0gcD0_pGSS_SS5IndexVtF | func findInlinePlugins(_ text: String, at index: String.Index) -> [any InlineParserPlugin]
+s:14SmoothMarkdown20ParserPluginRegistryC23inlineTriggerCharactersShySJGvp | var inlineTriggerCharacters: Set<Character> { get }
+s:14SmoothMarkdown20ParserPluginRegistryC4copyACyF | func copy() -> ParserPluginRegistry
+s:14SmoothMarkdown20ParserPluginRegistryC5clearyyF | func clear()
+s:14SmoothMarkdown20ParserPluginRegistryC8builtInsACyFZ | static func builtIns() -> ParserPluginRegistry
+s:14SmoothMarkdown20ParserPluginRegistryC8registeryyAA05BlockcD0_pKF | func register(_ plugin: any BlockParserPlugin) throws
+s:14SmoothMarkdown20ParserPluginRegistryC8registeryyAA06InlinecD0_pKF | func register(_ plugin: any InlineParserPlugin) throws
+s:14SmoothMarkdown20ParserPluginRegistryC8registeryyAA0cD0_pKF | func register(_ plugin: any ParserPlugin) throws
+s:14SmoothMarkdown20ParserPluginRegistryC8revisions6UInt64Vvp | @Published var revision: UInt64 { get set }
+s:14SmoothMarkdown20ParserPluginRegistryCACycfc | init()
+s:14SmoothMarkdown21MermaidKanbanPriorityO | enum MermaidKanbanPriority
+s:14SmoothMarkdown21MermaidKanbanPriorityO3lowyA2CmF | case low
+s:14SmoothMarkdown21MermaidKanbanPriorityO4highyA2CmF | case high
+s:14SmoothMarkdown21MermaidKanbanPriorityO6normalyA2CmF | case normal
+s:14SmoothMarkdown21MermaidKanbanPriorityO7veryLowyA2CmF | case veryLow
+s:14SmoothMarkdown21MermaidKanbanPriorityO8veryHighyA2CmF | case veryHigh
+s:14SmoothMarkdown21MermaidRadarGraticuleO | enum MermaidRadarGraticule
+s:14SmoothMarkdown21MermaidRadarGraticuleO6circleyA2CmF | case circle
+s:14SmoothMarkdown21MermaidRadarGraticuleO7polygonyA2CmF | case polygon
+s:14SmoothMarkdown22MermaidParticipantTypeO | enum MermaidParticipantType
+s:14SmoothMarkdown22MermaidParticipantTypeO11participantyA2CmF | case participant
+s:14SmoothMarkdown22MermaidParticipantTypeO5actoryA2CmF | case actor
+s:14SmoothMarkdown22MermaidTimelineSectionV | struct MermaidTimelineSection
+s:14SmoothMarkdown22MermaidTimelineSectionV5title6eventsACSS_SayAA0cD5EventVGtcfc | init(title: String, events: [MermaidTimelineEvent])
+s:14SmoothMarkdown22MermaidTimelineSectionV5titleSSvp | let title: String
+s:14SmoothMarkdown22MermaidTimelineSectionV6eventsSayAA0cD5EventVGvp | let events: [MermaidTimelineEvent]
+s:14SmoothMarkdown25ParserPluginRegistryErrorO | enum ParserPluginRegistryError
+s:14SmoothMarkdown25ParserPluginRegistryErrorO11duplicateIDyACSScACmF | case duplicateID(String)
+s:14SmoothMarkdown25ParserPluginRegistryErrorO15unsupportedTypeyACSScACmF | case unsupportedType(String)
+s:14SmoothMarkdown6MarkupC | class Markup
+s:14SmoothMarkdown6MarkupC10childCountSivp | var childCount: Int { get }
+s:14SmoothMarkdown6MarkupC11isIdentical2toSbAC_tF | func isIdentical(to other: Markup) -> Bool
+s:14SmoothMarkdown6MarkupC21withUncheckedChildrenyACSayACGF | func withUncheckedChildren(_ children: [Markup]) -> Markup
+s:14SmoothMarkdown6MarkupC5child2atACSgSi_tF | func child(at index: Int) -> Markup?
+s:14SmoothMarkdown6MarkupC5rangeSnyAA14SourceLocationVGSgvp | let range: Range<SourceLocation>?
+s:14SmoothMarkdown6MarkupC6formatSSyF | func format() -> String
+s:14SmoothMarkdown6MarkupC8childrenSayACGvp | let children: [Markup]
+s:14SmoothMarkdown6MarkupC_5range6sourceACSayACG_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown6StrongC | final class Strong
+s:14SmoothMarkdown7HeadingC | final class Heading
+s:14SmoothMarkdown7HeadingC5level8children5range6sourceACSi_SayAA6MarkupCGSnyAA14SourceLocationVGSgSSSgtcfc | init(level: Int, children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown7HeadingC5levelSivp | let level: Int
+s:14SmoothMarkdown8DocumentC | final class Document
+s:14SmoothMarkdown8DocumentC7parsingACSS_tcfc | convenience init(parsing source: String)
+s:14SmoothMarkdown8EmphasisC | final class Emphasis
+s:14SmoothMarkdown8ListItema | typealias ListItem = Markdown.ListItem
+s:14SmoothMarkdown8SafeHTMLO | enum SafeHTML
+s:14SmoothMarkdown8SafeHTMLO02isC11ImageSourceySbSSFZ | static func isSafeImageSource(_ url: String) -> Bool
+s:14SmoothMarkdown8SafeHTMLO02isC4LinkySbSSFZ | static func isSafeLink(_ url: String) -> Bool
+s:14SmoothMarkdown8SafeHTMLO10parseBlockyAC0F0OSgSSFZ | static func parseBlock(_ source: String) -> SafeHTML.Block?
+s:14SmoothMarkdown8SafeHTMLO12maxTagLengthSivpZ | static let maxTagLength: Int
+s:14SmoothMarkdown8SafeHTMLO14legacyFontSizeySdSgSSFZ | static func legacyFontSize(_ value: String) -> Double?
+s:14SmoothMarkdown8SafeHTMLO15cssDeclarationsySDyS2SGSSFZ | static func cssDeclarations(_ style: String) -> [String : String]
+s:14SmoothMarkdown8SafeHTMLO16safeRenderPrefixyS2SFZ | static func safeRenderPrefix(_ full: String) -> String
+s:14SmoothMarkdown8SafeHTMLO3TagV | struct Tag
+s:14SmoothMarkdown8SafeHTMLO3TagV10attributesSDyS2SGvp | let attributes: [String : String]
+s:14SmoothMarkdown8SafeHTMLO3TagV13isSelfClosingSbvp | let isSelfClosing: Bool
+s:14SmoothMarkdown8SafeHTMLO3TagV3endSivp | let end: Int
+s:14SmoothMarkdown8SafeHTMLO3TagV4nameSSvp | let name: String
+s:14SmoothMarkdown8SafeHTMLO3TagV9isClosingSbvp | let isClosing: Bool
+s:14SmoothMarkdown8SafeHTMLO5BlockO | enum Block
+s:14SmoothMarkdown8SafeHTMLO5BlockO4ruleyA2EmF | case rule
+s:14SmoothMarkdown8SafeHTMLO5BlockO9containeryAESS_S2SSgSStcAEmF | case container(name: String, content: String, alignment: String?, trailing: String)
+s:14SmoothMarkdown8SafeHTMLO5colorys6UInt32VSgSSFZ | static func color(_ value: String) -> UInt32?
+s:14SmoothMarkdown8SafeHTMLO6lexTag_2atAC0F0VSgSS_SitFZ | static func lexTag(_ text: String, at start: Int = 0) -> SafeHTML.Tag?
+s:14SmoothMarkdown8SafeHTMLO8fontSizeySdSgSSFZ | static func fontSize(_ value: String) -> Double?
+s:14SmoothMarkdown8SafeHTMLO8imageAltySSSgSSFZ | static func imageAlt(_ source: String) -> String?
+s:14SmoothMarkdown8SafeHTMLO8imageTagyAC9ImageSpecVSgSSFZ | static func imageTag(_ source: String) -> SafeHTML.ImageSpec?
+s:14SmoothMarkdown8SafeHTMLO8voidTagsShySSGvpZ | static let voidTags: Set<String>
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV | struct ImageSpec
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV3altSSvp | let alt: String
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV5titleSSSgvp | let title: String?
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV5widthSdSgvp | let width: Double?
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV6heightSdSgvp | let height: Double?
+s:14SmoothMarkdown8SafeHTMLO9ImageSpecV6sourceSSvp | let source: String
+s:14SmoothMarkdown8SafeHTMLO9dimensionySdSgSSFZ | static func dimension(_ value: String) -> Double?
+s:14SmoothMarkdown9CodeBlockC | final class CodeBlock
+s:14SmoothMarkdown9CodeBlockC4code8language5range6sourceACSS_SSSgSnyAA14SourceLocationVGSgAHtcfc | init(code: String, language: String? = nil, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown9CodeBlockC4codeSSvp | let code: String
+s:14SmoothMarkdown9CodeBlockC8languageSSSgvp | let language: String?
+s:14SmoothMarkdown9HTMLBlockC | final class HTMLBlock
+s:14SmoothMarkdown9HTMLBlockC7rawHTMLSSvp | let rawHTML: String
+s:14SmoothMarkdown9HTMLBlockC_5range6sourceACSS_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ rawHTML: String, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown9LineBreakC | final class LineBreak
+s:14SmoothMarkdown9ParagraphC | final class Paragraph
+s:14SmoothMarkdown9SoftBreakC | final class SoftBreak
+s:18SmoothMarkdownCore06NativeB10InlineHTMLO | enum NativeMarkdownInlineHTML
+s:18SmoothMarkdownCore06NativeB10InlineHTMLO6length2in2atSiSgSaySJG_SitFZ | static func length(in characters: [Character], at start: Int) -> Int?
+s:18SmoothMarkdownCore06NativeB11TextDecoderO | enum NativeMarkdownTextDecoder
+s:18SmoothMarkdownCore06NativeB11TextDecoderO6decodeyS2SFZ | static func decode(_ source: String) -> String
+s:18SmoothMarkdownCore06NativeB11TextDecoderO8codeSpanyS2SFZ | static func codeSpan(_ source: String) -> String
+s:18SmoothMarkdownCore06NativeB13CodeSemanticsO | enum NativeMarkdownCodeSemantics
+s:18SmoothMarkdownCore06NativeB13CodeSemanticsO4text6source6fencedS2S_SbtFZ | static func text(source: String, fenced: Bool) -> String
+s:18SmoothMarkdownCore06NativeB13HTMLTagFilterO | enum NativeMarkdownHTMLTagFilter
+s:18SmoothMarkdownCore06NativeB13HTMLTagFilterO6filteryS2SFZ | static func filter(_ html: String) -> String
+s:18SmoothMarkdownCore06NativeB14EmphasisParserO | enum NativeMarkdownEmphasisParser
+s:18SmoothMarkdownCore06NativeB14EmphasisParserO7resolve_6source6offsetSayAA0dB4NodeVGAI_SSSitFZ | static func resolve(_ nodes: [NativeMarkdownNode], source: String, offset: Int) -> [NativeMarkdownNode]
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO | enum NativeMarkdownHTMLSerializer
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO11destinationyS2SFZ | static func destination(_ value: String) -> String
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO6escapeyS2SFZ | static func escape(_ value: String) -> String
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO6format_9enableGFMS2S_SbtFZ | static func format(_ source: String, enableGFM: Bool = true) -> String
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO6renderySSAA0dB4NodeVFZ | static func render(_ node: NativeMarkdownNode) -> String
+s:18SmoothMarkdownCore06NativeB14HTMLSerializerO9plainTextySSAA0dB4NodeVFZ | static func plainText(_ node: NativeMarkdownNode) -> String
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO | enum NativeMarkdownReferenceParser
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO10DefinitionV | struct Definition
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO10DefinitionV11destinationSSvp | let destination: String
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO10DefinitionV5labelSSvp | let label: String
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO10DefinitionV5titleSSSgvp | let title: String?
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO10DefinitionV9lineCountSivp | let lineCount: Int
+s:18SmoothMarkdownCore06NativeB15ReferenceParserO5parseyAC10DefinitionVSgSSFZ | static func parse(_ source: String) -> NativeMarkdownReferenceParser.Definition?
+s:18SmoothMarkdownCore06NativeB4NodeV | struct NativeMarkdownNode
+s:18SmoothMarkdownCore06NativeB4NodeV11literalTextSSSgvp | let literalText: String?
+s:18SmoothMarkdownCore06NativeB4NodeV11sourceRangeSo8_NSRangeVvp | let sourceRange: NSRange
+s:18SmoothMarkdownCore06NativeB4NodeV12semanticTextSSSgvp | var semanticText: String? { get }
+s:18SmoothMarkdownCore06NativeB4NodeV15tableAlignmentsSaySSSgGvp | let tableAlignments: [String?]
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO | enum Kind
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO10blockQuoteyA2EmF | case blockQuote
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO10fencedCodeyAESScAEmF | case fencedCode(String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO10inlineCodeyA2EmF | case inlineCode
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO10inlineHTMLyA2EmF | case inlineHTML
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO10inlineMathyA2EmF | case inlineMath
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO12indentedCodeyA2EmF | case indentedCode
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO13strikethroughyA2EmF | case strikethrough
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO13thematicBreakyA2EmF | case thematicBreak
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO17footnoteReferenceyAESScAEmF | case footnoteReference(String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO18footnoteDefinitionyAESScAEmF | case footnoteDefinition(String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO19referenceDefinitionyAESS_SStcAEmF | case referenceDefinition(String, String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO3rawyA2EmF | case raw
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO4linkyAESScAEmF | case link(String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO4listyAESb_tcAEmF | case list(ordered: Bool)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO4textyA2EmF | case text
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO5imageyAESScAEmF | case image(String)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO5tableyA2EmF | case table
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO6strongyA2EmF | case strong
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO7headingyAESicAEmF | case heading(Int)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO8documentyA2EmF | case document
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO8emphasisyA2EmF | case emphasis
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO8listItemyAESbSg_tcAEmF | case listItem(checked: Bool?)
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO8tableRowyA2EmF | case tableRow
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9blockMathyA2EmF | case blockMath
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9hardBreakyA2EmF | case hardBreak
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9htmlBlockyA2EmF | case htmlBlock
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9paragraphyA2EmF | case paragraph
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9softBreakyA2EmF | case softBreak
+s:18SmoothMarkdownCore06NativeB4NodeV4KindO9tableCellyA2EmF | case tableCell
+s:18SmoothMarkdownCore06NativeB4NodeV4kind6source0G5Range8children5title7isTight9listStart11literalText15tableAlignmentsA2C4KindO_SSSo8_NSRangeVSayACGSSSgSbSgSiSgARSayARGtcfc | init(kind: NativeMarkdownNode.Kind, source: String, sourceRange: NSRange, children: [NativeMarkdownNode] = [], title: String? = nil, isTight: Bool? = nil, listStart: Int? = nil, literalText: String? = nil, tableAlignments: [String?] = [])
+s:18SmoothMarkdownCore06NativeB4NodeV4kindAC4KindOvp | let kind: NativeMarkdownNode.Kind
+s:18SmoothMarkdownCore06NativeB4NodeV5titleSSSgvp | let title: String?
+s:18SmoothMarkdownCore06NativeB4NodeV6sourceSSvp | let source: String
+s:18SmoothMarkdownCore06NativeB4NodeV7isTightSbSgvp | let isTight: Bool?
+s:18SmoothMarkdownCore06NativeB4NodeV8childrenSayACGvp | let children: [NativeMarkdownNode]
+s:18SmoothMarkdownCore06NativeB4NodeV9listStartSiSgvp | let listStart: Int?
+s:18SmoothMarkdownCore06NativeB9ASTParserV | struct NativeMarkdownASTParser
+s:18SmoothMarkdownCore06NativeB9ASTParserV5parseyAA0dB4NodeVSSF | func parse(_ source: String) -> NativeMarkdownNode
+s:18SmoothMarkdownCore06NativeB9ASTParserV9enableGFMACSb_tcfc | init(enableGFM: Bool = true)
+s:18SmoothMarkdownCore06NativeB9HTMLBlockO | enum NativeMarkdownHTMLBlock
+s:18SmoothMarkdownCore06NativeB9HTMLBlockO3EndO | enum End
+s:18SmoothMarkdownCore06NativeB9HTMLBlockO3EndO5blankyA2EmF | case blank
+s:18SmoothMarkdownCore06NativeB9HTMLBlockO3EndO6markeryAESS_SbtcAEmF | case marker(String, insensitive: Bool)
+s:18SmoothMarkdownCore06NativeB9HTMLBlockO3end3for21interruptingParagraphAC3EndOSgSS_SbtFZ | static func end(for line: String, interruptingParagraph: Bool = false) -> NativeMarkdownHTMLBlock.End?
+s:18SmoothMarkdownCore0bC6ParserV | struct MarkdownCoreParser
+s:18SmoothMarkdownCore0bC6ParserV10renderHTMLyS2SF | func renderHTML(_ source: String) -> String
+s:18SmoothMarkdownCore0bC6ParserV5parseyAA06NativeB4NodeVSSF | func parse(_ source: String) -> NativeMarkdownNode
+s:18SmoothMarkdownCore0bC6ParserV9enableGFMACSb_tcfc | init(enableGFM: Bool = true)
+s:18SmoothMarkdownCore0bC6ParserV9enableGFMSbvp | var enableGFM: Bool
+s:18SmoothMarkdownCore21NativeHTMLEntityTableO | enum NativeHTMLEntityTable
+s:18SmoothMarkdownCore21NativeHTMLEntityTableO6valuesSDyS2SGvpZ | static let values: [String : String]
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE15markdownStringsAD0fH0Vvp | var markdownStrings: MarkdownStrings { get set }
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE17markdownResourcesAD0F15ResourceOptionsVvp | var markdownResources: MarkdownResourceOptions { get set }
+s:7SwiftUI17EnvironmentValuesV14SmoothMarkdownE19markdownEditorThemeAD0fhI0Vvp | var markdownEditorTheme: MarkdownEditorTheme { get set }
+s:7SwiftUI4ViewP14SmoothMarkdownE19markdownEditorThemeyQrAD0egH0VF | @MainActor func markdownEditorTheme(_ theme: MarkdownEditorTheme) -> some View
+

@@ -40,8 +40,7 @@ public struct MermaidPlugin: BlockParserPlugin {
 
     public func render(_ match: BlockPluginMatch) -> AnyView {
         if let diagram = MermaidParser.parse(match.content) {
-            return AnyView(MermaidDiagramView(diagram: diagram, theme: theme(for: match), onNodeTap: onNodeTap)
-                .padding(.vertical, 8))
+            return AnyView(MarkdownMermaidFence(diagram: diagram, theme: theme(for: match), onNodeTap: onNodeTap))
         }
         return AnyView(VStack(alignment: .leading, spacing: 6) {
             SwiftUI.Text("Unsupported Mermaid diagram").font(.caption).foregroundColor(.secondary)
@@ -67,5 +66,17 @@ public struct MermaidPlugin: BlockParserPlugin {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         let run = trimmed.prefix(while: { String($0) == marker }).count
         return run >= count && trimmed.dropFirst(run).trimmingCharacters(in: .whitespaces).isEmpty
+    }
+}
+
+private struct MarkdownMermaidFence: View {
+    let diagram: MermaidDiagram
+    let theme: MermaidTheme?
+    let onNodeTap: ((String) -> Void)?
+    @Environment(\.markdownDesignTokens) private var tokens
+    var body: some View {
+        MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap, style: tokens.mermaid)
+            .frame(maxHeight: tokens.mermaid.maxHeight)
+            .padding(tokens.mermaid.outerPadding)
     }
 }

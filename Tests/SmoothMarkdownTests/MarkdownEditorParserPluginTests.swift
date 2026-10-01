@@ -10,8 +10,6 @@ final class MarkdownEditorParserPluginTests: XCTestCase {
         try registry.register(CustomContainerPlugin())
         let source = "Intro 😀\r\n:::custom id=42\r\nbody 😀\r\n:::\r\nAfter"
         let controller = MarkdownEditorController(text: source, plugins: registry)
-        XCTAssertTrue(registry.unregisterBlock("custom-container"))
-
         let document = controller.semanticDocument
         XCTAssertEqual(document.toMarkdown(), source)
         XCTAssertEqual(document.blocks.count, 3)
@@ -38,6 +36,21 @@ final class MarkdownEditorParserPluginTests: XCTestCase {
                 AnyView(Button("Finish", action: context.finishEditing))
             })
         _ = editor
+    }
+
+    func testRegistryChangesRefreshControllerSemanticsAndPreviewSnapshot() throws {
+        let registry = ParserPluginRegistry()
+        let source = ":::custom\nbody\n:::"
+        let controller = MarkdownEditorController(text: source, plugins: registry)
+        XCTAssertFalse(controller.semanticDocument.blocks.contains { if case .plugin = $0.kind { return true }; return false })
+        try registry.register(CustomContainerPlugin())
+        XCTAssertTrue(controller.semanticDocument.blocks.contains { if case .plugin = $0.kind { return true }; return false })
+        let previewSnapshot = controller.parserPlugins
+        XCTAssertTrue(registry.unregisterBlock("custom-container"))
+        XCTAssertFalse(controller.semanticDocument.blocks.contains { if case .plugin = $0.kind { return true }; return false })
+        XCTAssertNotNil(previewSnapshot?.getBlockPlugin("custom-container"), "Returned parserPlugins remains an independent snapshot")
+        XCTAssertNil(controller.parserPlugins?.getBlockPlugin("custom-container"))
+        XCTAssertEqual(controller.text, source)
     }
 
     func testPluginIsIsolatedFromDefaultMarkdownAndFencedCode() throws {

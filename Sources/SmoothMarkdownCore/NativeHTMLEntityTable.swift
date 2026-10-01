@@ -2,8 +2,8 @@
 /// Source: https://html.spec.whatwg.org/entities.json
 /// Source SHA-256: d741d877ac77c4194c4ad526b5b4a19aef8dfe411ab840a466891cdbb9f362e6
 /// Embedded data only; no external code or runtime dependency.
-enum NativeHTMLEntityTable {
-    static let values: [String: String] = [
+public enum NativeHTMLEntityTable {
+    public static let values: [String: String] = [
         "AElig": "Æ",
         "AMP": "&",
         "Aacute": "Á",

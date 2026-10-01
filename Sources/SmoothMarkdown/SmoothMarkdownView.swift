@@ -29,6 +29,15 @@ public struct SmoothMarkdownView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var inlineFontScale: CGFloat = 1
+    @ObservedObject private var observedPlugins: ParserPluginRegistry
+    @ObservedObject private var observedBuilders: BuilderRegistry
+    @Environment(\.markdownResources) private var inheritedResources
+    @Environment(\.markdownStrings) private var inheritedStrings
+    private let configuredResources: MarkdownResourceOptions?
+    private let configuredStrings: MarkdownStrings?
+    /// Effective values inherit the host environment unless an explicit override was supplied.
+    public var resourceOptions: MarkdownResourceOptions { configuredResources ?? inheritedResources }
+    public var strings: MarkdownStrings { configuredStrings ?? inheritedStrings }
     public let markdown: String
     public let onLinkTap: ((URL) -> Void)?
     public let onImageTap: ((URL) -> Void)?
@@ -40,6 +49,7 @@ public struct SmoothMarkdownView: View {
     /// Flutter-compatible visual variants for code, headings, blockquotes, and links.
     /// Standard components are used unless this is explicitly enabled.
     public let useEnhancedComponents: Bool
+    /// Effective code controls; nil initializer options inherit the enhanced-component default.
     public let codeBlockOptions: CodeBlockOptions
     public let codeBuilder: ((String, String?) -> AnyView)?
     public let onCodeCopy: ((String, String?) -> Void)?
@@ -73,7 +83,7 @@ public struct SmoothMarkdownView: View {
         imageBuilder: ((String, String?, String?) -> AnyView)? = nil,
         enableHTML: Bool = false,
         useEnhancedComponents: Bool = false,
-        codeBlockOptions: CodeBlockOptions = CodeBlockOptions(),
+        codeBlockOptions: CodeBlockOptions? = nil,
         codeBuilder: ((String, String?) -> AnyView)? = nil,
         onCodeCopy: ((String, String?) -> Void)? = nil,
         onTextLongPress: ((@escaping () -> Void) -> Void)? = nil,
@@ -84,8 +94,14 @@ public struct SmoothMarkdownView: View {
         selectable: Bool = false,
         selectionController: SmoothSelectionController? = nil,
         enableCrossBlockSelection: Bool = true,
-        scrollable: Bool = true
+        scrollable: Bool = true,
+        resourceOptions: MarkdownResourceOptions? = nil,
+        strings: MarkdownStrings? = nil
     ) {
+        self._observedPlugins = ObservedObject(wrappedValue: plugins ?? ParserPluginRegistry())
+        self._observedBuilders = ObservedObject(wrappedValue: builderRegistry ?? BuilderRegistry())
+        self.configuredResources = resourceOptions
+        self.configuredStrings = strings
         self.markdown = markdown
         self.onLinkTap = onLinkTap == nil && onTapLink == nil ? nil : { url in
             onLinkTap?(url)
@@ -99,11 +115,11 @@ public struct SmoothMarkdownView: View {
         self.imageBuilder = imageBuilder
         self.enableHTML = enableHTML
         self.useEnhancedComponents = useEnhancedComponents
-        self.codeBlockOptions = codeBlockOptions
+        self.codeBlockOptions = codeBlockOptions ?? CodeBlockOptions(showCopyButton: useEnhancedComponents, showLanguageTag: useEnhancedComponents, enableSyntaxHighlighting: useEnhancedComponents)
         self.codeBuilder = codeBuilder
         self.onCodeCopy = onCodeCopy
         self.onTextLongPress = onTextLongPress
-        self.styleSheet = styleSheet
+        self.styleSheet = styleSheet.resolved()
         self.plugins = plugins
         self.builderRegistry = builderRegistry
         self.enableCache = enableCache
@@ -114,13 +130,18 @@ public struct SmoothMarkdownView: View {
     }
 
     public var body: some View {
-        Group {
+        let _ = observedPlugins.revision
+        let _ = observedBuilders.revision
+        return Group {
             if scrollable {
                 ScrollView { renderedBlocks }
             } else {
                 renderedBlocks
             }
         }
+        .environment(\.markdownDesignTokens, styleSheet.designTokens)
+        .environment(\.markdownResources, resourceOptions)
+        .environment(\.markdownStrings, strings)
         .foregroundColor(styleSheet.textColor)
         .background(styleSheet.backgroundColor ?? Color.clear)
         .environment(\.openURL, OpenURLAction { url in
@@ -314,7 +335,7 @@ public struct SmoothMarkdownView: View {
             }
             return imageView(image)
         case let .code(code, language):
-            if useEnhancedComponents {
+            if usesEnhancedCodeBlocks {
                 return AnyView(EnhancedCodeBlockView(code: code, language: language,
                                                      options: codeBlockOptions, onCopy: onCodeCopy,
                                                      styleSheet: styleSheet, selectable: false,
@@ -340,6 +361,10 @@ public struct SmoothMarkdownView: View {
         }
     }
     #endif
+
+    var usesEnhancedCodeBlocks: Bool {
+        useEnhancedComponents || codeBlockOptions.showCopyButton || codeBlockOptions.showLanguageTag || codeBlockOptions.enableSyntaxHighlighting
+    }
 
     var usesParseCache: Bool { enableCache && plugins == nil }
 
@@ -440,7 +465,7 @@ public struct SmoothMarkdownView: View {
                                            builderRegistry: builderRegistry, enableCache: enableCache,
                                            selectable: selectable,
                                            enableCrossBlockSelection: enableCrossBlockSelection,
-                                           scrollable: false))
+                                           scrollable: false, resourceOptions: resourceOptions, strings: strings))
             },
             inlineStyle: inlineStyle.map {
                 MarkdownInlineStyle(bold: $0.bold, italic: $0.italic,
@@ -647,9 +672,9 @@ public struct SmoothMarkdownView: View {
         VStack(alignment: .trailing, spacing: 0) {
             blockMath(latex)
                 .contextMenu {
-                    Button("Copy formula") { UIPasteboard.general.string = latex }
+                    Button(strings.copyFormula) { UIPasteboard.general.string = latex }
                 }
-                .accessibilityAction(named: Text("Copy formula")) {
+                .accessibilityAction(named: Text(strings.copyFormula)) {
                     UIPasteboard.general.string = latex
                 }
             if selectable, let textSelectionMenuBuilder, !latex.isEmpty {
@@ -681,8 +706,7 @@ public struct SmoothMarkdownView: View {
                 inlineView(content).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.leading, 16)
-        .padding(.vertical, 8)
+        .padding(styleSheet.designTokens.footnotePadding)
     }
 
     @ViewBuilder
@@ -691,33 +715,33 @@ public struct SmoothMarkdownView: View {
         if let builder = builderRegistry?.findBuilder(node) {
             builder.build(node, context: renderContext(alignment: alignment))
         } else if let heading = node as? Heading {
-            let decorated = useEnhancedComponents && heading.level <= 2
-            let primary = Color.accentColor
+            let tokens = styleSheet.designTokens.heading
+            let decorated = useEnhancedComponents && heading.level <= tokens.decoratedThroughLevel
+            let primary = tokens.accentColor ?? Color.accentColor
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .center, spacing: decorated ? 12 : 0) {
+                HStack(alignment: .center, spacing: decorated ? tokens.barSpacing : 0) {
                     if decorated {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(LinearGradient(colors: [primary, primary.opacity(0.3)],
+                        RoundedRectangle(cornerRadius: tokens.barRadius)
+                            .fill(LinearGradient(colors: [primary, primary.opacity(tokens.barEndAlpha)],
                                                  startPoint: .top, endPoint: .bottom))
-                            .frame(width: 4, height: headingBarHeight(heading.level))
+                            .frame(width: tokens.barWidth, height: headingBarHeight(heading.level))
                             .accessibilityHidden(true)
                     }
                     inlineView(heading)
-                        .font(styleSheet.headingFonts?.indices.contains(heading.level - 1) == true
-                              ? styleSheet.headingFonts![heading.level - 1]
-                              : headingFont(heading.level))
+                        .font(resolvedHeadingFont(heading.level))
+                        .lineSpacing(tokenLineSpacing(headingLevel: heading.level))
                         .foregroundColor(styleSheet.headingColor ?? styleSheet.textColor)
                         .multilineTextAlignment(alignment ?? .leading)
                         .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                         .markdownTextSelection(selectable)
                         .accessibilityAddTraits(.isHeader)
                 }
-                .padding(.vertical, useEnhancedComponents ? 8 : 0)
+                .padding(useEnhancedComponents ? tokens.padding : EdgeInsets())
                 if decorated {
                     Rectangle()
-                        .fill(LinearGradient(colors: [primary.opacity(0.3), primary.opacity(0)],
+                        .fill(LinearGradient(colors: [primary.opacity(tokens.ruleStartAlpha), primary.opacity(tokens.ruleEndAlpha)],
                                              startPoint: .leading, endPoint: .trailing))
-                        .frame(height: 2)
+                        .frame(height: tokens.ruleThickness)
                         .accessibilityHidden(true)
                 }
             }
@@ -744,13 +768,13 @@ public struct SmoothMarkdownView: View {
                                             useEnhancedComponents: useEnhancedComponents)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    inlineView(paragraph).font(styleSheet.paragraphFont ?? .body)
+                    inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph?.font(relativeTo: styleSheet.readerParagraphTextStyle) ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing())
                         .multilineTextAlignment(alignment ?? .leading)
                         .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                         .markdownTextSelection(selectable)
                 }
                 #else
-                inlineView(paragraph).font(styleSheet.paragraphFont ?? .body).multilineTextAlignment(alignment ?? .leading)
+                inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph?.font(relativeTo: styleSheet.readerParagraphTextStyle) ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing()).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                     .markdownTextSelection(selectable)
                 #endif
@@ -758,7 +782,7 @@ public struct SmoothMarkdownView: View {
         } else if let code = node as? CodeBlock {
             if let codeBuilder {
                 codeBuilder(code.code, code.language)
-            } else if useEnhancedComponents {
+            } else if usesEnhancedCodeBlocks {
                 EnhancedCodeBlockView(code: code.code, language: code.language,
                                       options: codeBlockOptions, onCopy: onCodeCopy,
                                       styleSheet: styleSheet, selectable: selectable,
@@ -793,12 +817,60 @@ public struct SmoothMarkdownView: View {
         MarkdownTypography.heading(level)
     }
 
+    /// SwiftUI lineSpacing is additive; derive it from the same semantic font metrics as TextKit.
+    /// Explicit typography tokens override the legacy opaque font metrics.
+    private func tokenLineSpacing(headingLevel: Int? = nil) -> CGFloat {
+        let typography = styleSheet.designTokens.typography
+        let token: MarkdownFontToken?
+        let role: Font.TextStyle
+        let ratio: CGFloat
+        if let level = headingLevel {
+            let index = level - 1
+            token = typography.headings.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+            role = styleSheet.readerHeadingTextStyles.indices.contains(index)
+                ? styleSheet.readerHeadingTextStyles[index] : .headline
+            ratio = typography.headingLineHeights.indices.contains(index) ? typography.headingLineHeights[index] : 1.4
+        } else {
+            token = typography.paragraph
+            role = styleSheet.readerParagraphTextStyle
+            ratio = typography.paragraphLineHeight
+        }
+        #if os(iOS)
+        let traits = MarkdownTypography.traits(for: dynamicTypeSize)
+        let font = token?.uiFont(textStyle: role, traits: traits)
+            ?? MarkdownTypography.font(textStyle: MarkdownTypography.uiTextStyle(role),
+                                       weight: headingLevel == nil ? .regular : .semibold,
+                                       customSize: nil, traits: traits)
+        return max(0, font.pointSize * ratio - font.lineHeight)
+        #else
+        let size = token?.size ?? headingLevel.map { [CGFloat]([28, 22, 20, 17, 15, 13])[min(5, max(0, $0 - 1))] } ?? 17
+        return max(0, size * (ratio - 1.2))
+        #endif
+    }
+
+    private func resolvedHeadingFont(_ level: Int) -> Font {
+        let index = level - 1
+        let semantic = styleSheet.readerHeadingTextStyles.indices.contains(index)
+            ? styleSheet.readerHeadingTextStyles[index] : .headline
+        if let tokens = styleSheet.designTokens.typography.headings, tokens.indices.contains(index) {
+            return tokens[index].font(relativeTo: semantic)
+        }
+        if let fonts = styleSheet.headingFonts, fonts.indices.contains(index) { return fonts[index] }
+        return headingFont(level)
+    }
+
     private func headingBarHeight(_ level: Int) -> CGFloat {
         #if os(iOS)
-        UIFont.preferredFont(forTextStyle: MarkdownTypography.textStyle(forHeading: level),
+        if let tokens = styleSheet.designTokens.typography.headings, tokens.indices.contains(level - 1) {
+            let semantic = styleSheet.readerHeadingTextStyles.indices.contains(level - 1)
+                ? styleSheet.readerHeadingTextStyles[level - 1] : .headline
+            return tokens[level - 1].uiFont(textStyle: semantic,
+                traits: MarkdownTypography.traits(for: dynamicTypeSize)).pointSize
+        }
+        return UIFont.preferredFont(forTextStyle: MarkdownTypography.textStyle(forHeading: level),
                              compatibleWith: MarkdownTypography.traits(for: dynamicTypeSize)).pointSize
         #else
-        level == 1 ? 28 : 22
+        return styleSheet.designTokens.typography.headings.flatMap { $0.indices.contains(level - 1) ? $0[level - 1].size : nil } ?? (level == 1 ? 28 : 22)
         #endif
     }
 
@@ -846,28 +918,41 @@ public struct SmoothMarkdownView: View {
     private func blockquote<Content: View>(enhanced: Bool = false,
                                            @ViewBuilder content: () -> Content) -> some View {
         let decoration = styleSheet.resolvedBlockquoteDecoration
+        let tokens = styleSheet.designTokens.quote
+        let explicitBackground = styleSheet.blockquoteDecoration?.backgroundColor ?? styleSheet.quoteBackground
+        let explicitBorder = styleSheet.blockquoteDecoration?.borderColor ?? styleSheet.quoteBarColor
         return Group {
             if enhanced {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "text.quote")
-                        .font(.system(size: 24))
-                        .foregroundStyle(Color.accentColor.opacity(0.4))
-                        .accessibilityHidden(true)
+                HStack(alignment: .top, spacing: tokens.showIcon ? tokens.iconSpacing : 0) {
+                    if tokens.showIcon {
+                        Image(systemName: "text.quote")
+                            .font(tokens.iconTypography?.font(relativeTo: .body) ?? tokens.iconFont ?? .system(size: tokens.iconSize))
+                            .foregroundStyle(tokens.iconColor ?? Color.accentColor.opacity(tokens.iconAlpha))
+                            .accessibilityHidden(true)
+                    }
                     VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(styleSheet.blockquotePadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(LinearGradient(colors: colorScheme == .dark
-                    ? [Color(white: 0.10), Color(white: 0.15)]
-                    : [Color(white: 0.98), Color(white: 0.95)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
+                .background {
+                    if let explicitBackground { explicitBackground }
+                    else {
+                        LinearGradient(colors: [
+                            tokens.gradientStartColor ?? (colorScheme == .dark ? Color(white: 0.10) : Color(white: 0.98)),
+                            tokens.gradientEndColor ?? (colorScheme == .dark ? Color(white: 0.15) : Color(white: 0.95))],
+                            startPoint: .topLeading, endPoint: .bottomTrailing)
+                    }
+                }
                 .overlay(alignment: .leading) {
-                    Rectangle().fill(Color.accentColor.opacity(0.6)).frame(width: 4)
+                    if decoration.borderWidth > 0 {
+                        Rectangle().fill(explicitBorder ?? Color.accentColor.opacity(tokens.borderAlpha))
+                            .frame(width: decoration.borderWidth)
+                    }
                 }
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0,
-                                                   bottomTrailingRadius: 4, topTrailingRadius: 4))
-                .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
+                    bottomTrailingRadius: tokens.cornerRadius, topTrailingRadius: tokens.cornerRadius))
+                .shadow(color: tokens.shadowColor, radius: tokens.shadowRadius, x: tokens.shadowX, y: tokens.shadowY)
             } else {
                 VStack(alignment: .leading, spacing: styleSheet.quoteSpacing, content: content)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1049,12 +1134,14 @@ public struct SmoothMarkdownView: View {
                 SwiftUI.Image(uiImage: bitmap).resizable().scaledToFit()
             })
         case .failure, .rejected:
-            if source.remoteFailurePresentation == .svgAltText {
+            if let custom = resourceOptions.error {
+                content = custom(url, label)
+            } else if source.remoteFailurePresentation == .svgAltText {
                 content = AnyView(SwiftUI.Text(label))
             } else {
                 content = AnyView(RemoteBitmapFailureView(label: label))
             }
-        case nil: content = AnyView(ProgressView())
+        case nil: content = resourceOptions.placeholder?(url, label) ?? AnyView(ProgressView().frame(minWidth: styleSheet.designTokens.imagePlaceholderMinSize, minHeight: styleSheet.designTokens.imagePlaceholderMinSize))
         }
         return accessibleImage(content, url: url, image: image, label: label, inline: false)
     }
@@ -1124,11 +1211,17 @@ public struct SmoothMarkdownView: View {
                 let rendered = output + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
                 if useEnhancedComponents, !selectable, let link = sourceStyle.link,
                    MarkdownEnhancedComponents.isExternalLink(link),
+                   styleSheet.designTokens.link.showExternalIcon, styleSheet.designTokens.link.iconSize > 0,
                    (index + 1 == runs.count || !runs[index + 1].hasLink(link)) {
                     // A nonselectable SwiftUI text run can add the external-link cue
                     // directly. Native selectable text draws it without changing Copy.
-                    return rendered + segment(" ↗", style: inlineStyle(sourceStyle), tags: tags, code: false)
-                        .font(.system(size: 12))
+                    let gap = styleSheet.designTokens.link.iconGap > 0
+                        ? SwiftUI.Text(" ").font(.system(size: styleSheet.designTokens.link.iconGap * 3)) : SwiftUI.Text("")
+                    return rendered + gap
+                        + segment("↗", style: inlineStyle(sourceStyle), tags: tags, code: false)
+                        .font(.system(size: styleSheet.designTokens.link.iconSize))
+                        .baselineOffset(-styleSheet.designTokens.link.iconTopOffset)
+                        .foregroundColor(styleSheet.designTokens.link.iconColor ?? styleSheet.linkColor)
                 }
                 return rendered
             }
@@ -1267,7 +1360,7 @@ public struct SmoothMarkdownView: View {
         if let builder = extensionBuilder(node) {
             builder.build(node, context: renderContext()).fixedSize()
         } else {
-            NativeMathWebView(latex: latex, size: 16, display: false, color: styleSheet.textColor)
+            NativeMathWebView(latex: latex, size: styleSheet.designTokens.math.inlineFontSize, display: false, color: styleSheet.designTokens.math.color ?? styleSheet.textColor, fontFamily: styleSheet.designTokens.math.fontFamily)
                 .accessibilityLabel(latex)
         }
     }
@@ -1285,13 +1378,13 @@ public struct SmoothMarkdownView: View {
 
     private func nativeBlockMath(_ latex: String) -> some View {
         ScrollView(.horizontal) {
-            NativeMathWebView(latex: latex, size: 20, display: true, color: styleSheet.textColor)
+            NativeMathWebView(latex: latex, size: styleSheet.designTokens.math.inlineFontSize * styleSheet.designTokens.math.displayScale, display: true, color: styleSheet.designTokens.math.color ?? styleSheet.textColor, fontFamily: styleSheet.designTokens.math.fontFamily)
                 .fixedSize()
                 .accessibilityLabel(latex.isEmpty ? "Empty formula" : latex)
         }
         .defaultScrollAnchor(.center)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+        .padding(styleSheet.designTokens.math.blockPadding)
     }
 
     private func segment(_ value: String, style: InlineStyle, tags: [SafeHTML.Tag], code: Bool = false) -> SwiftUI.Text {
@@ -1380,6 +1473,7 @@ public struct SmoothMarkdownView: View {
 }
 
 private struct DetailsBlockView: View {
+    @Environment(\.markdownStrings) private var strings
     let details: DetailsSyntax.Block
     let summaryLabel: String
     let styleSheet: MarkdownStyleSheet
@@ -1398,27 +1492,32 @@ private struct DetailsBlockView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let tokens = styleSheet.designTokens.details
+        return VStack(alignment: .leading, spacing: 0) {
             Button { isExpanded.toggle() } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: tokens.iconSpacing) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .frame(width: 20)
+                        .frame(width: tokens.iconWidth)
+                        .font(tokens.iconFont)
+                        .foregroundColor(tokens.iconColor)
                     summary.frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(12)
+                .padding(tokens.summaryPadding)
                 .frame(minHeight: 44)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(summaryLabel)
-            .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-            .accessibilityHint(isExpanded ? "Double tap to collapse" : "Double tap to expand")
+            .accessibilityValue(isExpanded ? strings.expanded : strings.collapsed)
+            .accessibilityHint(strings.detailsToggleHint)
             if isExpanded && !details.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Divider().overlay(styleSheet.ruleColor ?? Color.clear)
-                content.padding(.horizontal, 12).padding(.bottom, 12)
+                Rectangle().fill(styleSheet.ruleColor ?? Color.secondary.opacity(0.35)).frame(height: tokens.dividerThickness)
+                content.padding(tokens.bodyPadding)
             }
         }
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(styleSheet.tableBorderColor ?? Color.gray.opacity(0.35)))
-        .padding(.vertical, 8)
+        .background(tokens.backgroundColor ?? Color.clear)
+        .clipShape(RoundedRectangle(cornerRadius: tokens.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: tokens.cornerRadius).stroke(tokens.borderColor ?? styleSheet.tableBorderColor ?? Color.gray.opacity(0.35), lineWidth: tokens.borderWidth))
+        .padding(tokens.outerPadding)
     }
 }

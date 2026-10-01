@@ -17,7 +17,7 @@ public enum MermaidTheme: String, Sendable {
         return Self(rawValue: value.lowercased()) ?? .light
     }
 
-    var palette: MermaidPalette {
+    public var palette: MermaidPalette {
         switch self {
         case .light:
             return .init(background: 0xFFFFFF, text: 0x212121, nodeFill: 0xE3F2FD,
@@ -35,18 +35,27 @@ public enum MermaidTheme: String, Sendable {
     }
 }
 
-struct MermaidPalette {
-    let background: UInt32
-    let text: UInt32
-    let nodeFill: UInt32
-    let nodeStroke: UInt32
-    let edge: UInt32
+/// Public RGB palette for Mermaid diagrams. Values are 0xRRGGBB.
+public struct MermaidPalette {
+    public var background: UInt32
+    public var text: UInt32
+    public var nodeFill: UInt32
+    public var nodeStroke: UInt32
+    public var edge: UInt32
 
-    var backgroundColor: Color { Self.color(background) }
-    var textColor: Color { Self.color(text) }
-    var nodeFillColor: Color { Self.color(nodeFill) }
-    var nodeStrokeColor: Color { Self.color(nodeStroke) }
-    var edgeColor: Color { Self.color(edge) }
+    public init(background: UInt32, text: UInt32, nodeFill: UInt32, nodeStroke: UInt32, edge: UInt32) {
+        self.background = background
+        self.text = text
+        self.nodeFill = nodeFill
+        self.nodeStroke = nodeStroke
+        self.edge = edge
+    }
+
+    public var backgroundColor: Color { Self.color(background) }
+    public var textColor: Color { Self.color(text) }
+    public var nodeFillColor: Color { Self.color(nodeFill) }
+    public var nodeStrokeColor: Color { Self.color(nodeStroke) }
+    public var edgeColor: Color { Self.color(edge) }
 
     private static func color(_ hex: UInt32) -> Color {
         Color(red: Double((hex >> 16) & 0xFF) / 255,

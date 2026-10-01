@@ -29,6 +29,8 @@ pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.g
 
 `SmoothMarkdown` is not yet published to the CocoaPods Trunk registry. The `Demo` app is for exploration and is not required by the package.
 
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product. CocoaPods source consumers can choose `SmoothMarkdown/Core`; the default subspec includes UI and depends on Core. Both contain library-owned source and have no third-party dependencies.
+
 ### SVG and math
 
 The native SVG path uses SwiftUI Canvas/CoreGraphics for common shapes and paints. Complex SVGs, including embedded fonts, use Apple's `WKWebView` with JavaScript disabled; referenced resources may be fetched. External raster images in the Canvas path use a bounded `URLSession` download and a 32 MiB in-memory cache. The implementation rendered all 96 valid SVGs in SwiftDraw 0.29's 97-sample fixture set and rejected its intentionally malformed sample. Browser SVG output can differ from the old renderer's pixels.
@@ -38,6 +40,8 @@ Math uses a native TeX-subset parser and Apple's WebKit MathML renderer for layo
 ## Syntax coverage
 
 The native parser passes all **652 CommonMark 0.31.2** official examples with exact HTML output and source-range checks, plus **24 official GFM extension examples** for tables, strikethrough, autolinks, task lists, and tag filtering. Additional extensions include footnotes, math, HTML rendering, and custom parser plugins. Rendering and editing limits are listed in the [reference](docs/reference.md).
+
+The current source adds grouped options, resource loading, localized labels, and an independent parsing core. These additions are not included in the published `0.2.0` release. See the [public library contract](docs/public-library-contract.md) and [migration guide](docs/public-api-migration.md).
 
 ## Quick start
 
@@ -105,6 +109,7 @@ The editor supports Source, Preview, Split, and Blocks modes. Its controller sta
 | Need | Entry point |
 | --- | --- |
 | Style colors, fonts, and spacing | `MarkdownStyleSheet`, passed as `styleSheet:` |
+| Customize enhanced components and plugins | `styleSheet.designTokens` |
 | Handle link and image taps | `onTapLink`, `onTapImage` on reader or stream |
 | Enable native text selection | `selectable: true`; optional `SmoothSelectionController` |
 | Render supported HTML | `enableHTML: true` (off by default) |
@@ -118,14 +123,21 @@ For example:
 ```swift
 var style = MarkdownStyleSheet.github(dark: true)
 style.linkColor = .cyan
+style.designTokens.typography.paragraph = MarkdownFontToken(size: 16)
+style.designTokens.typography.paragraphLineHeight = 1.5
+style.designTokens.heading.accentColor = .cyan
+style.designTokens.code.copyLabel = "Copy code"
 
 SmoothMarkdownView(
     markdown: source,
     onTapLink: { url in openLink(url) },
+    useEnhancedComponents: true,
     styleSheet: style,
     scrollable: false
 )
 ```
+
+For font metrics shared by SwiftUI and native selectable text, use `designTokens.typography` with explicit `MarkdownFontToken` values. Component styles are scoped to each reader. Mermaid palettes and editor appearance have dedicated configuration; see the [styling guide](docs/styling.md) for complete examples and supported customization boundaries.
 
 The string-based tap callbacks are convenient when the host app stores URLs as strings. Existing URL-based `onLinkTap` and `onImageTap` callbacks remain available.
 

@@ -64,7 +64,10 @@ public enum ParserPluginRegistryError: Error, Equatable {
 }
 
 /// An opt-in, ordered parser and renderer extension point. Create one registry per reader configuration.
-public final class ParserPluginRegistry {
+public final class ParserPluginRegistry: ObservableObject {
+    /// Advances after an effective mutation. UI-bound registries must be mutated on the main thread.
+    @Published public private(set) var revision: UInt64 = 0
+    private func changed() { revision &+= 1 }
     public private(set) var blockPlugins: [any BlockParserPlugin] = []
     public private(set) var inlinePlugins: [any InlineParserPlugin] = []
 
@@ -87,12 +90,14 @@ public final class ParserPluginRegistry {
         guard !blockPlugins.contains(where: { $0.id == plugin.id }) else { throw ParserPluginRegistryError.duplicateID(plugin.id) }
         blockPlugins.append(plugin)
         blockPlugins.sort { $0.priority > $1.priority }
+        changed()
     }
 
     public func register(_ plugin: any InlineParserPlugin) throws {
         guard !inlinePlugins.contains(where: { $0.id == plugin.id }) else { throw ParserPluginRegistryError.duplicateID(plugin.id) }
         inlinePlugins.append(plugin)
         inlinePlugins.sort { $0.priority > $1.priority }
+        changed()
     }
 
     public func register(_ plugin: any ParserPlugin) throws {
@@ -101,23 +106,33 @@ public final class ParserPluginRegistry {
         else { throw ParserPluginRegistryError.unsupportedType(plugin.id) }
     }
 
+    /// Atomically installs a batch. A duplicate or unsupported plugin leaves this registry unchanged.
     public func registerAll(_ plugins: [any ParserPlugin]) throws {
-        for plugin in plugins { try register(plugin) }
+        guard !plugins.isEmpty else { return }
+        let candidate = copy()
+        for plugin in plugins { try candidate.register(plugin) }
+        blockPlugins = candidate.blockPlugins
+        inlinePlugins = candidate.inlinePlugins
+        changed()
     }
 
     @discardableResult public func unregisterBlock(_ id: String) -> Bool {
         guard let index = blockPlugins.firstIndex(where: { $0.id == id }) else { return false }
         blockPlugins.remove(at: index)
+        changed()
         return true
     }
 
     @discardableResult public func unregisterInline(_ id: String) -> Bool {
         guard let index = inlinePlugins.firstIndex(where: { $0.id == id }) else { return false }
         inlinePlugins.remove(at: index)
+        changed()
         return true
     }
 
     public func clear() {
+        guard !blockPlugins.isEmpty || !inlinePlugins.isEmpty else { return }
+        changed()
         blockPlugins.removeAll()
         inlinePlugins.removeAll()
     }
@@ -126,6 +141,7 @@ public final class ParserPluginRegistry {
         let result = ParserPluginRegistry()
         result.blockPlugins = blockPlugins
         result.inlinePlugins = inlinePlugins
+        result.revision = revision
         return result
     }
 
