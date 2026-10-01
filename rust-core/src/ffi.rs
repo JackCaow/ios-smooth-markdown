@@ -25,6 +25,50 @@ pub extern "C" fn smr_abi_version() -> u32 {
     1
 }
 
+#[no_mangle]
+pub extern "C" fn smr_stream_new(options: u32) -> *mut c_void {
+    if options & !3 != 0 { return std::ptr::null_mut(); }
+    catch_unwind(|| Box::into_raw(Box::new(crate::stream::Session::new(Options {
+        gfm: options & 1 != 0, extensions: options & 2 != 0,
+    }))).cast()).unwrap_or(std::ptr::null_mut())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smr_stream_free(session: *mut c_void) {
+    if !session.is_null() { drop(Box::from_raw(session.cast::<crate::stream::Session>())); }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn smr_stream_update_utf16(
+    session: *mut c_void, source: *const u16, length: usize,
+    result: *mut SmrBuffer, retained_blocks: *mut u32,
+) -> i32 {
+    if !result.is_null() { *result = SmrBuffer::default(); }
+    if !retained_blocks.is_null() { *retained_blocks = 0; }
+    if session.is_null() { return 1; }
+    let session = &mut *session.cast::<crate::stream::Session>();
+    if result.is_null() || retained_blocks.is_null() || (length != 0 && source.is_null()) {
+        session.reset(); return 1;
+    }
+    if length > MAX_UNITS { session.reset(); return 2; }
+    let attempt = catch_unwind(AssertUnwindSafe(|| {
+        let units = if length == 0 { &[][..] } else { std::slice::from_raw_parts(source, length) };
+        let delta = session.update(units);
+        if delta.total_nodes > MAX_NODES || delta.total_wire_bytes > MAX_WIRE_BYTES { return Err(2); }
+        let retained = delta.retained_blocks as u32;
+        let bytes = encode(&delta.into_wire_root(), units)?;
+        let owner = Box::new(bytes);
+        Ok::<_, i32>((SmrBuffer {
+            data: owner.as_ptr(), len: owner.len(), owner: Box::into_raw(owner).cast(),
+        }, retained))
+    }));
+    match attempt {
+        Ok(Ok((buffer, retained))) => { *result = buffer; *retained_blocks = retained; 0 }
+        Ok(Err(status)) => { session.reset(); status }
+        Err(_) => { session.reset(); 3 }
+    }
+}
+
 /// Caller supplies a readable UTF-16 allocation and a writable, empty result.
 /// Input is copied before parsing. Original UTF-16 is retained for source strings,
 /// including temporary isolated surrogates from an editor/streaming prefix.
@@ -94,18 +138,19 @@ pub unsafe extern "C" fn smr_buffer_free(buffer: *mut SmrBuffer) {
 fn word(out: &mut Vec<u8>, n: u32) {
     out.extend_from_slice(&n.to_le_bytes());
 }
-fn units(out: &mut Vec<u8>, value: &[u16]) {
-    word(out, value.len() as u32);
-    for unit in value {
-        out.extend_from_slice(&unit.to_le_bytes());
-    }
-}
 fn string(out: &mut Vec<u8>, value: Option<&str>) {
     if let Some(value) = value {
-        units(out, &value.encode_utf16().collect::<Vec<_>>());
+        word(out, value.encode_utf16().count() as u32);
+        for unit in value.encode_utf16() { out.extend_from_slice(&unit.to_le_bytes()); }
     } else {
         word(out, u32::MAX);
     }
+}
+pub(crate) fn encoded_node_size(node: &Node) -> usize {
+    let values = [Some(node.info.as_str()), Some(node.destination.as_str()),
+                  node.title.as_deref(), node.literal.as_deref(), Some(node.label.as_str())];
+    56 + values.into_iter().flatten().map(|v| v.encode_utf16().count() * 2).sum::<usize>()
+        + node.alignments.iter().map(|v| 4 + v.as_ref().map_or(0, |v| v.encode_utf16().count() * 2)).sum::<usize>()
 }
 fn encode(root: &Node, original: &[u16]) -> Result<Vec<u8>, i32> {
     let mut count = 0usize;
@@ -119,25 +164,7 @@ fn encode(root: &Node, original: &[u16]) -> Result<Vec<u8>, i32> {
         }
         // Every parser node uses the original source span. Literal/semantic text
         // is encoded separately; never duplicate the source across the boundary.
-        let values = [
-            None,
-            Some(node.info.as_str()),
-            Some(node.destination.as_str()),
-            node.title.as_deref(),
-            node.literal.as_deref(),
-            Some(node.label.as_str()),
-        ];
-        wire_bytes += 56
-            + values
-                .into_iter()
-                .flatten()
-                .map(|v| v.encode_utf16().count() * 2)
-                .sum::<usize>();
-        wire_bytes += node
-            .alignments
-            .iter()
-            .map(|v| 4 + v.as_ref().map_or(0, |v| v.encode_utf16().count() * 2))
-            .sum::<usize>();
+        wire_bytes += encoded_node_size(node);
         if wire_bytes > MAX_WIRE_BYTES {
             return Err(2);
         }
@@ -182,6 +209,51 @@ fn encode(root: &Node, original: &[u16]) -> Result<Vec<u8>, i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cumulative_stream_wire_budget_matches_full_encoding() {
+        let source = "# Heading🙂\n\nText **bold** [link](https://example.test).\n\n| a | b |\n| :- | -: |\n| x | y |\n\n```rust\nlet x = 1;\n```\n\n".repeat(8);
+        let units: Vec<_> = source.encode_utf16().collect();
+        let mut session = crate::stream::Session::new(Options::default());
+        for end in (31..units.len()).step_by(31).chain(std::iter::once(units.len())) {
+            let delta = session.update(&units[..end]);
+            let full = crate::parse(&String::from_utf16_lossy(&units[..end]), Options::default());
+            assert_eq!(delta.total_wire_bytes, encode(&full, &units[..end]).unwrap().len());
+            let mut nodes = 0; let mut stack = vec![&full];
+            while let Some(n) = stack.pop() { nodes += 1; stack.extend(&n.children); }
+            assert_eq!(delta.total_nodes, nodes);
+        }
+    }
+    #[test]
+    fn stream_delta_retention_failure_reset_and_isolated_surrogates() {
+        let handle = smr_stream_new(3);
+        assert!(!handle.is_null());
+        assert!(smr_stream_new(8).is_null());
+        let initial: Vec<u16> = "one\n\ntwo\n\nthree\n\nfour\n".encode_utf16().collect();
+        let mut result = SmrBuffer::default(); let mut retained = 99;
+        unsafe {
+            assert_eq!(smr_stream_update_utf16(handle, initial.as_ptr(), initial.len(), &mut result, &mut retained), 0);
+            assert_eq!(retained, 0); smr_buffer_free(&mut result);
+            let mut next = initial.clone(); next.extend("\nfive".encode_utf16());
+            assert_eq!(smr_stream_update_utf16(handle, next.as_ptr(), next.len(), &mut result, &mut retained), 0);
+            assert_eq!(retained, 2); smr_buffer_free(&mut result);
+            assert_eq!(smr_stream_update_utf16(handle, next.as_ptr(), next.len(), &mut result, &mut retained), 0);
+            assert_eq!(retained, 5); smr_buffer_free(&mut result);
+            assert_eq!(smr_stream_update_utf16(handle, std::ptr::null(), 1, &mut result, &mut retained), 1);
+            assert_eq!(retained, 0); assert!(result.owner.is_null());
+            assert_eq!(smr_stream_update_utf16(handle, next.as_ptr(), next.len(), &mut result, &mut retained), 0);
+            assert_eq!(retained, 0); smr_buffer_free(&mut result);
+            let prefix = [0x61u16, 0xd83d];
+            assert_eq!(smr_stream_update_utf16(handle, prefix.as_ptr(), 2, &mut result, &mut retained), 0);
+            smr_buffer_free(&mut result);
+            let completed = [0x61u16, 0xd83d, 0xde42];
+            assert_eq!(smr_stream_update_utf16(handle, completed.as_ptr(), 3, &mut result, &mut retained), 0);
+            let incremental = std::slice::from_raw_parts(result.data, result.len).to_vec();
+            smr_buffer_free(&mut result);
+            assert_eq!(smr_parse_utf16(completed.as_ptr(), 3, 3, &mut result), 0);
+            assert_eq!(incremental, std::slice::from_raw_parts(result.data, result.len));
+            smr_buffer_free(&mut result); smr_stream_free(handle); smr_stream_free(std::ptr::null_mut());
+        }
+    }
     #[test]
     fn invalid_inputs_do_not_allocate() {
         let mut result = SmrBuffer::default();

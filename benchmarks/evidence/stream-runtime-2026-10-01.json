@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-01",
+  "runtime": "iOS 26 iPhone Simulator",
+  "suites": [
+    "PublicLibraryRuntimeTests",
+    "DemoStreamingUITests"
+  ],
+  "tests": 17,
+  "failed": 0,
+  "coverage": [
+    "packaged incremental stream AST and ordinary/selectable rendering",
+    "latest tail visible via OCR",
+    "finite stream completion and reset",
+    "registry/resources/builders/callbacks"
+  ],
+  "packaging": "owned XCFramework rebuilt for iOS device/simulator and macOS; checksums verified",
+  "swift_tests": 595,
+  "public_api": "reviewed baseline unchanged",
+  "boundaries": [
+    "no physical device timing",
+    "no SwiftUI frame-time claim",
+    "background parsing not implemented"
+  ]
+}

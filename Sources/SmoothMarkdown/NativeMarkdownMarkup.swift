@@ -214,10 +214,11 @@ struct NativeMarkdownMarkupAdapter {
     private let locations: [SourceLocation]
     private let resolveCustom: ((NativeMarkdownNode) -> Markup?)?
     private let projectFootnote: ((String) -> Markup?)?
-    init(source: String, resolveCustom: ((NativeMarkdownNode) -> Markup?)? = nil,
+    init(source: String, sourceLocations: [SourceLocation]? = nil, resolveCustom: ((NativeMarkdownNode) -> Markup?)? = nil,
          projectFootnote: ((String) -> Markup?)? = nil) {
         self.resolveCustom = resolveCustom; self.projectFootnote = projectFootnote
         self.source = source
+        if let sourceLocations { locations = sourceLocations; return }
         var positions = [SourceLocation(line: 1, column: 1)]
         var line = 1
         var column = 1

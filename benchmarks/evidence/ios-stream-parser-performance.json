@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-01",
+  "base_revision": "6d82185",
+  "configuration": "SwiftPM Debug macOS XCTest host",
+  "host": {
+    "architecture": "arm64",
+    "macOS": "15.6.1",
+    "swift": "6.2"
+  },
+  "scope": "Synchronous parser, C FFI decoding and native Markup projection; excludes SwiftUI layout/drawing/frame timing, images, and device measurements.",
+  "method": {
+    "chunk_characters": 32,
+    "synthetic_publish_interval_ms": 50,
+    "runs_per_mode": 3,
+    "statistic": "median",
+    "threshold_assertion": false
+  },
+  "results": [
+    {
+      "fixture": "prose/headings/code/lists/inline links",
+      "utf8_bytes": 30340,
+      "publishes": 19,
+      "whole_shared_ms": 331.62,
+      "stream_session_ms": 55.37,
+      "reused_block_total": 5851,
+      "zero_retained_publishes": 1
+    },
+    {
+      "fixture": "FlutterREADME repeated four times (math/footnotes/details conservative path)",
+      "utf8_bytes": 68282,
+      "publishes": 43,
+      "whole_shared_ms": 853.2,
+      "stream_session_ms": 814.49,
+      "reused_block_total": 3,
+      "zero_retained_publishes": 42
+    }
+  ],
+  "baseline_context": {
+    "cached_legacy_benchmark_stream_ms": 16.38,
+    "uncached_readme_single_run_ms": 806.6,
+    "note": "Cached timings do not represent live stream parsing; compare only paired same-input measurements."
+  },
+  "correctness": "11 stream-session contracts + 7 buffer contracts passed; host AST equality at every representative prefix, exact UTF16 source identity, registry replacement, reference invalidation, extension batch parity and buffer-free ownership. Reviewed public API baseline unchanged.",
+  "limits": "Plugins, math, footnotes and references use conservative full parsing; HTML/details retain original postprocessors. Performance gain is workload dependent and is not a UI frame-rate claim."
+}

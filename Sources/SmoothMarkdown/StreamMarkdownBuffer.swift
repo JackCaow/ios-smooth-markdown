@@ -60,6 +60,8 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     private var pending: Task<Void, Never>?
     private var throttleMillis: Int64
     private var enableHTML: Bool
+    private var renderSession: StreamMarkdownRenderSession?
+    var renderSnapshot: StreamMarkdownRenderSession.Snapshot?
     /// Invalidates callbacks from a previous stream when a view starts another one.
     var generation: UInt64 = 0
 
@@ -76,23 +78,40 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         if let throttleMillis { self.throttleMillis = max(0, throttleMillis) }
         if let enableHTML { self.enableHTML = enableHTML }
         buffer = StreamMarkdownBuffer(intervalMillis: self.throttleMillis, startMillis: Self.nowMillis(), enableHTML: self.enableHTML)
+        renderSession?.reset()
+        renderSnapshot = nil
         visibleText = ""
+    }
+
+    func prepareRenderer(plugins: ParserPluginRegistry?, enableHTML: Bool) {
+        if renderSession == nil { renderSession = StreamMarkdownRenderSession() }
+        renderSession?.configure(plugins: plugins, enableHTML: enableHTML)
+        if buffer.visibleText.isEmpty { renderSnapshot = nil }
+        else { publish() }
+    }
+
+    private func publish() {
+        renderSnapshot = renderSession?.update(buffer.visibleText)
+        visibleText = buffer.visibleText
     }
 
     public func append(_ chunk: String) {
         let wait = buffer.append(chunk, nowMillis: Self.nowMillis())
-        pending?.cancel()
-        pending = nil
         if let wait {
+            // The deadline is anchored to the last publish. Reuse its timer
+            // rather than cancelling and allocating a task for every chunk.
+            guard pending == nil else { return }
             pending = Task { @MainActor in
                 try? await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000)
                 guard !Task.isCancelled else { return }
                 self.buffer.flush(nowMillis: Self.nowMillis())
-                self.visibleText = self.buffer.visibleText
+                self.publish()
                 self.pending = nil
             }
         } else {
-            visibleText = buffer.visibleText
+            pending?.cancel()
+            pending = nil
+            publish()
         }
     }
 
@@ -105,7 +124,7 @@ public final class StreamMarkdownAccumulator: ObservableObject {
         pending?.cancel()
         pending = nil
         buffer.finish(nowMillis: Self.nowMillis())
-        visibleText = buffer.visibleText
+        publish()
     }
 
     func finish(for generation: UInt64) {
@@ -116,7 +135,8 @@ public final class StreamMarkdownAccumulator: ObservableObject {
     public func setHTML(_ enabled: Bool) {
         enableHTML = enabled
         buffer.setHTML(enabled)
-        visibleText = buffer.visibleText
+        renderSession?.setHTML(enabled)
+        publish()
     }
 
     public func cancel() {

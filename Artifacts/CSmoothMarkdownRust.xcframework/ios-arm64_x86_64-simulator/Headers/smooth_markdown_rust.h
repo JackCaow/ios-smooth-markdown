@@ -15,6 +15,17 @@ enum { SMR_OK = 0, SMR_INVALID_INPUT = 1, SMR_LIMIT_EXCEEDED = 2, SMR_INTERNAL_E
 enum { SMR_GFM = 1, SMR_NATIVE_EXTENSIONS = 2, SMR_ESCAPE_HTML = 4, SMR_TRANSPARENT_TABLE_PARTS = 8, SMR_HOST_FENCED_BLOCKS = 16 };
 uint32_t smr_abi_version(void);
 int32_t smr_parse_utf16(const uint16_t *source, size_t length, uint32_t options, SmrBuffer *result);
+/* Single-owner, non-concurrent stream session. Options are SMR_GFM/extensions.
+   update accepts the complete current prefix; non-append edits replace all blocks.
+   Output is SMR1 with a full-source root span and replacement tail children.
+   Retain exactly retained_blocks old top-level children, then append output children.
+   Reference definitions conservatively invalidate the entire tree. No host hooks.
+   Failure invalidates the session; the next successful update replaces all blocks.
+   Decode output against the supplied source before freeing it; free session once. */
+void *smr_stream_new(uint32_t options);
+int32_t smr_stream_update_utf16(void *session, const uint16_t *source, size_t length,
+                               SmrBuffer *result, uint32_t *retained_blocks);
+void smr_stream_free(void *session);
 typedef struct SmrMatch { uint32_t consumed; uint32_t id; } SmrMatch;
 typedef int32_t (*SmrInlineCallback)(void *,const uint16_t *,size_t,uint32_t,uint32_t,SmrMatch *);
 typedef int32_t (*SmrBlockCallback)(void *,const uint16_t *const *,const size_t *,size_t,uint32_t,uint32_t,SmrMatch *);

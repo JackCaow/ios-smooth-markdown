@@ -223,3 +223,7 @@ SmoothMarkdownView(markdown: content, styleSheet: style)
 ```
 
 The demo's Theme menu switches among all presets. `horizontalRuleThickness`, `tableHeaderBackgroundColor`, `listBulletFont`, and `listBulletColor` customize rules, table headers, and list markers. With `enableHTML: true`, `<sub>` and `<sup>` use 75% of the native body size and separate `subscriptStyle` and `superscriptStyle` overrides. The light and dark presets include Flutter's table header colors. Flutter's stylesheet also offers more specialized text styles; its odd and even table row decoration fields are currently declared but unused by the Flutter renderer.
+
+## Streaming parser reuse
+
+`StreamMarkdownView` retains committed AST/Markup blocks and reparses a mutable tail for eligible Markdown. It reuses the same published document for the ordinary and selection readers. The shared global parse cache remains bypassed. Custom plugins, dollar-sign math syntax, footnotes, enabled HTML and details preserve whole-document parsing; potential reference definitions cause full invalidation. Exact UTF-16 source replacement resets the session, even for canonically equivalent Swift strings. Background parsing and a layout cache are not implemented. See [measurements and limits](../benchmarks/README.md).

@@ -33,7 +33,9 @@ enum RustMarkdownBridge {
         }
         defer { smr_buffer_free(&output) }
         guard status == 0, let pointer = output.data, output.len <= 64 * 1024 * 1024 else { return nil }
-        let data = Data(bytes: pointer, count: output.len)
+        // Decode synchronously while the Rust buffer remains alive. Nodes retain
+        // owned Swift values; no borrowed Data escapes this call.
+        let data = Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: pointer), count: output.len, deallocator: .none)
         guard let root = try? RustMarkdownWire.decode(data, source: source) else { return nil }
         lock.lock(); successfulParses += 1; lock.unlock()
         return root
@@ -71,7 +73,7 @@ enum RustMarkdownBridge {
         }
         defer { smr_buffer_free(&output) }
         guard status == 0, let pointer = output.data, output.len <= 64 * 1024 * 1024,
-              let result = try? RustMarkdownWire.decodeHooked(Data(bytes: pointer, count: output.len), source: source) else { return nil }
+              let result = try? RustMarkdownWire.decodeHooked(Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: pointer), count: output.len, deallocator: .none), source: source) else { return nil }
         lock.lock(); successfulParses += 1; lock.unlock()
         return result
         #else
