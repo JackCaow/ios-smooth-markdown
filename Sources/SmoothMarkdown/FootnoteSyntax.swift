@@ -8,6 +8,11 @@ enum FootnoteSyntax {
     struct Definition: Equatable {
         let label: String
         let content: String
+        let parsedContent: Markup?
+        init(label: String, content: String, parsedContent: Markup? = nil) {
+            self.label = label; self.content = content; self.parsedContent = parsedContent
+        }
+        static func == (lhs: Self, rhs: Self) -> Bool { lhs.label == rhs.label && lhs.content == rhs.content }
     }
 
     enum Section: Equatable {

@@ -629,11 +629,30 @@ fn quote_paragraph(body: &str) -> bool {
     )
 }
 
-struct Scanner {
+struct Scanner<'a> {
     utf16: Vec<u16>,
     options: Options,
+    hooks: Option<&'a dyn crate::hooks::Hooks>,
+    hooks_before_fences: bool,
+    block_contexts: std::cell::RefCell<Vec<(usize,usize,Vec<Vec<u16>>)>>,
 }
-impl Scanner {
+impl Scanner<'_> {
+    fn custom_block(&self, lines: &[Line], index: usize) -> Option<crate::hooks::Match> {
+        if indent(&lines[index].text) >= 4 { return None; }
+        let hooks = self.hooks?;
+        let contexts = self.block_contexts.borrow();
+        let context = contexts.iter().rev().find(|c| c.0 == lines.as_ptr() as usize && c.1 == lines.len())?;
+        let found = hooks.block(&context.2,index,lines[index].start.saturating_sub(lines[index].virtual_indent))?;
+        (found.id > 0 && found.consumed > 0 && found.consumed as usize <= lines.len()-index).then_some(found)
+    }
+    fn custom_node(&self,lines: &[Line],index: usize) -> Option<(Node,usize)> {
+        let matched=self.custom_block(lines,index)?;let end=index+matched.consumed as usize;
+        let mut node=self.node(Kind::Custom,lines,index,end);node.label=matched.id.to_string();
+        node.literal=Some(lines[index..end].iter().map(|l|l.raw.as_str()).collect());Some((node,end))
+    }
+    fn interrupt(&self, lines: &[Line], index: usize) -> bool {
+        interrupt(lines,index) || self.custom_block(lines,index).is_some()
+    }
     fn spelling(&self, start: u32, end: u32) -> String {
         let start = (start as usize).min(self.utf16.len());
         let end = (end as usize).min(self.utf16.len()).max(start);
@@ -653,9 +672,18 @@ impl Scanner {
         if lines.is_empty() {
             return Vec::new();
         }
-        if depth >= 128 {
+        // Keep room for host callback/context frames on small native worker stacks.
+        if depth >= 64 {
             return vec![self.node(Kind::Raw, lines, 0, lines.len())];
         }
+        if self.hooks.is_some() {
+            self.block_contexts.borrow_mut().push((lines.as_ptr() as usize,lines.len(),lines.iter().map(|l|l.text.encode_utf16().collect()).collect()));
+        }
+        if let Some(h)=self.hooks {
+            let contexts=self.block_contexts.borrow();
+            h.begin_block(&contexts.last().unwrap().2);
+        }
+        let _scope=crate::hooks::BlockScope(self.hooks);
         let mut result = Vec::new();
         let mut index = 0;
         while index < lines.len() {
@@ -676,24 +704,9 @@ impl Scanner {
                     continue;
                 }
             }
-            if self.options.extensions {
-                if let Some(label) = footnote(text) {
-                    index += 1;
-                    while index < lines.len() {
-                        if !lines[index].blank() && indent(&lines[index].text) >= 4 {
-                            index += 1;
-                        } else if lines[index].blank() {
-                            let mut continuation = index;
-                            while continuation < lines.len() && lines[continuation].blank() { continuation += 1; }
-                            if continuation < lines.len() && indent(&lines[continuation].text) >= 4 {
-                                index = continuation;
-                            } else { break; }
-                        } else { break; }
-                    }
-                    let mut node = self.node(Kind::FootnoteDefinition, lines, first, index);
-                    node.label = label.into();
-                    result.push(node);
-                    continue;
+            if self.hooks_before_fences {
+                if let Some((node,end)) = self.custom_node(lines,index) {
+                    result.push(node);index=end;continue;
                 }
             }
             if let Some(fence) = fence_open(text) {
@@ -719,6 +732,57 @@ impl Scanner {
                 result.push(node);
                 continue;
             }
+            if !self.hooks_before_fences {
+                if let Some((node,end)) = self.custom_node(lines,index) {
+                    result.push(node);index=end;continue;
+                }
+            }
+            if self.options.extensions {
+                if let Some(label) = footnote(text) {
+                    index += 1;
+                    while index < lines.len() {
+                        if !lines[index].blank() && indent(&lines[index].text) >= 4 {
+                            index += 1;
+                        } else if lines[index].blank() {
+                            let mut continuation = index;
+                            while continuation < lines.len() && lines[continuation].blank() { continuation += 1; }
+                            if continuation < lines.len() && indent(&lines[continuation].text) >= 4 {
+                                index = continuation;
+                            } else { break; }
+                        } else { break; }
+                    }
+                    let mut node = self.node(Kind::FootnoteDefinition, lines, first, index);
+                    node.label = label.into();
+                    let opening = lines[first].text.trim_start();
+                    let body_start = opening.find("]:").unwrap() + 2;
+                    let mut body = opening[body_start..].trim_start_matches([' ', '\t']).to_owned();
+                    for line in &lines[first+1..index] {
+                        body.push('\n');
+                        body.push_str(&remove_code_indent(&line.text,4));
+                    }
+                    node.literal = Some(body.trim().to_owned());
+                    // Project only the definition prefix/continuation indentation. Children
+                    // keep positions in the original document and share its reference pass.
+                    let first_line = &lines[first];
+                    let content = opening[body_start..].trim_start_matches([' ', '\t']);
+                    let prefix_bytes = first_line.text.len() - content.len();
+                    let body_line = Line {
+                        text: content.to_owned(),
+                        raw: format!("{}{}", content, if first_line.raw.ends_with(['\r','\n']) { "\n" } else { "" }),
+                        start: (first_line.start + utf16_len(&first_line.text[..prefix_bytes]))
+                            .saturating_sub(first_line.virtual_indent),
+                        end: first_line.end,
+                        projected: true,
+                        lazy: false,
+                        virtual_indent: 0,
+                    };
+                    let mut contents = vec![body_line];
+                    contents.extend(lines[first+1..index].iter().map(|line| project(line,4)));
+                    node.children = self.scan(&contents, references, depth+1);
+                    result.push(node);
+                    continue;
+                }
+            }
             if self.options.extensions && text.trim_start().starts_with("$$") {
                 index += 1;
                 if !text.trim_start()[2..].contains("$$") {
@@ -729,18 +793,24 @@ impl Scanner {
                         index += 1
                     }
                 }
-                result.push(self.node(Kind::BlockMath, lines, first, index));
+                let mut node = self.node(Kind::BlockMath, lines, first, index);
+                let mut body = lines[first].text.trim_start()[2..].to_owned();
+                for line in &lines[first+1..index] { body.push('\n'); body.push_str(&line.text); }
+                if let Some(closing) = body.find("$$") { body.truncate(closing); }
+                node.literal = Some(body.trim().to_owned());
+                result.push(node);
                 continue;
             }
             if let (Some((level, prefix, body)), _) = (heading(text), ()) {
                 let mut node = self.node(Kind::Heading, lines, first, first + 1);
                 node.level = level;
-                node.children = inline::parse(
+                node.children = inline::parse_with_hooks(
                     body,
                     (lines[first].start + utf16_len(&text[..prefix]))
                         .saturating_sub(lines[first].virtual_indent),
                     references,
                     self.options,
+                    self.hooks,
                 );
                 result.push(node);
                 index += 1;
@@ -754,7 +824,7 @@ impl Scanner {
             if self.options.gfm {
                 if let Some(alignments) = table_alignments(lines, index) {
                     index += 2;
-                    while index < lines.len() && !lines[index].blank() && !interrupt(lines, index) {
+                    while index < lines.len() && !lines[index].blank() && !self.interrupt(lines, index) {
                         index += 1
                     }
                     let mut node = self.node(Kind::Table, lines, first, index);
@@ -770,7 +840,7 @@ impl Scanner {
                             let body = &row.text[start..end];
                             let mut cell =
                                 Node::new(Kind::TableCell, body, offset, utf16_len(body));
-                            cell.children = inline::parse(body, offset, references, self.options);
+                            cell.children = inline::parse_with_hooks(body, offset, references, self.options, self.hooks);
                             normalize_table_code(&mut cell);
                             row_node.children.push(cell);
                         }
@@ -804,7 +874,7 @@ impl Scanner {
                     if let Some(prefix) = quote_prefix(&lines[index].text) {
                         continuing = quote_paragraph(&lines[index].text[prefix..]);
                         index += 1
-                    } else if continuing && !lines[index].blank() && !interrupt(lines, index) {
+                    } else if continuing && !lines[index].blank() && !self.interrupt(lines, index) {
                         index += 1
                     } else {
                         break;
@@ -868,7 +938,7 @@ impl Scanner {
                 && !(self.options.extensions &&
                     (lines[index].text.trim_start().starts_with("$$") || footnote(&lines[index].text).is_some()))
                 && (lines[index].lazy
-                    || (setext(&lines[index].text).is_none() && !interrupt(lines, index)))
+                    || (setext(&lines[index].text).is_none() && !self.interrupt(lines, index)))
             {
                 index += 1
             }
@@ -886,6 +956,7 @@ impl Scanner {
             node.children = self.paragraph(&lines[first..index], references, false);
             result.push(node);
         }
+        if self.hooks.is_some() { self.block_contexts.borrow_mut().pop(); }
         result
     }
     fn paragraph(&self, lines: &[Line], refs: &References, setext: bool) -> Vec<Node> {
@@ -908,11 +979,12 @@ impl Scanner {
             let content = content.trim_end_matches([' ', '\t']);
             let trimmed = content.trim_start_matches([' ', '\t']);
             let skipped = content.len() - trimmed.len();
-            return inline::parse(
+            return inline::parse_with_hooks(
                 trimmed,
                 first.start + utf16_len(&content[..skipped]),
                 refs,
                 self.options,
+                self.hooks,
             );
         }
         // Parse a whole logical paragraph so emphasis, code spans and links may
@@ -944,7 +1016,9 @@ impl Scanner {
                 positions.push((line.end.saturating_sub(ending), line.end));
             }
         }
-        let mut children = inline::parse(&content, 0, refs, self.options);
+        let mapped = self.hooks.map(|hooks| crate::hooks::Mapped { hooks, positions: &positions, fallback: first.start });
+        let hooks = mapped.as_ref().map(|h| h as &dyn crate::hooks::Hooks);
+        let mut children = inline::parse_with_hooks(&content, 0, refs, self.options, hooks);
         for child in &mut children {
             self.remap_inline(child, &positions, first.start);
         }
@@ -1105,7 +1179,7 @@ impl Scanner {
                     index += 1;
                     continue;
                 }
-                if !interrupt(lines, index) && !body.is_empty() {
+                if !self.interrupt(lines, index) && !body.is_empty() {
                     let mut continuation = project(current, indentation.min(content_indent));
                     continuation.lazy = true;
                     contents.push(continuation);
@@ -1374,10 +1448,15 @@ fn collect_references(nodes: &[Node], references: &mut References) {
         collect_references(&node.children, references);
     }
 }
-pub fn parse(source: &str, options: Options) -> Node {
+pub fn parse(source: &str, options: Options) -> Node { parse_with_hooks(source,options,None) }
+pub fn parse_with_hooks(source: &str, options: Options, hooks: Option<&dyn crate::hooks::Hooks>) -> Node { parse_with_hook_policy(source,options,hooks,false) }
+pub fn parse_with_hook_policy(source: &str, options: Options, hooks: Option<&dyn crate::hooks::Hooks>, hooks_before_fences: bool) -> Node {
     let scanner = Scanner {
         utf16: source.encode_utf16().collect(),
         options,
+        hooks,
+        hooks_before_fences,
+        block_contexts: std::cell::RefCell::new(Vec::new()),
     };
     let lines = lines(source);
     let first = scanner.scan(&lines, &References::new(), 0);

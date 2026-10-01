@@ -2,26 +2,28 @@
   "artifact": {
     "Info.plist": "78b5327ac53ce991da4825bc330663bd6a7453fedde6f2d66ce8e0d8acc4e552",
     "ios-arm64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
-    "ios-arm64/Headers/smooth_markdown_rust.h": "ed829a83e95dbf883fa867f8acfdee19d9af7b2e470b4af07dae940c5f20940c",
-    "ios-arm64/libsmooth_markdown_rust.a": "6dbea4501a3a20e2ff6de7e2dac615b8e7af07148b654ab578b8f8477e56f3eb",
+    "ios-arm64/Headers/smooth_markdown_rust.h": "434bec9f1ea40b9cb69b28acee0f9362d102dfedbe380549742a7bfc09b27b43",
+    "ios-arm64/libsmooth_markdown_rust.a": "964b1a93ddeb6d66a752d8e47d663741688ee318f9972102fdede986937ef9d7",
     "ios-arm64_x86_64-simulator/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
-    "ios-arm64_x86_64-simulator/Headers/smooth_markdown_rust.h": "ed829a83e95dbf883fa867f8acfdee19d9af7b2e470b4af07dae940c5f20940c",
-    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "e23be078717fbfb1194c746d409fb9a5c5b8b19f0005b6360daa0024ebf781fa",
+    "ios-arm64_x86_64-simulator/Headers/smooth_markdown_rust.h": "434bec9f1ea40b9cb69b28acee0f9362d102dfedbe380549742a7bfc09b27b43",
+    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "39d5a261e6fa07ab7b5cde1ee0a9afa8b648054fbd3366e10bf2ea6c4c4fa9c5",
     "macos-arm64_x86_64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
-    "macos-arm64_x86_64/Headers/smooth_markdown_rust.h": "ed829a83e95dbf883fa867f8acfdee19d9af7b2e470b4af07dae940c5f20940c",
-    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "8afed4d4c4792b38065a4416776288535013e6c241a6231a85c9e6740a397189"
+    "macos-arm64_x86_64/Headers/smooth_markdown_rust.h": "434bec9f1ea40b9cb69b28acee0f9362d102dfedbe380549742a7bfc09b27b43",
+    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "335f4b7c9f7e77381966910632f60d97d777a84ac809eedf33ac73467d1bddf8"
   },
   "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
   "sources": {
     "Cargo.lock": "a43918342a9eb4e711862f2573de4a00d8c72145dd524e660ae72e2e962f3120",
     "Cargo.toml": "7230e943869d3ddf8f88f142a30bfc4eb8ccc9350efd12253161a6b6900b6dc5",
-    "include/smooth_markdown_rust.h": "ed829a83e95dbf883fa867f8acfdee19d9af7b2e470b4af07dae940c5f20940c",
-    "src/ast.rs": "d788d57de984e518878d1d5d8000ed0ac914e3794900b71129580cd98065ab05",
-    "src/block.rs": "3c28fd116c119b650efd0743e8d0cbb2c21ef3883c326717d26d9bf30177fd55",
+    "include/smooth_markdown_rust.h": "434bec9f1ea40b9cb69b28acee0f9362d102dfedbe380549742a7bfc09b27b43",
+    "src/ast.rs": "41e80ed071e971a2b00e3a5686fc7ef8ce40a7334a6101c504dd530708fbdb3a",
+    "src/block.rs": "d44717693cb0ca2460cee27a942d8c8c5637017c809582cee0cd7a5d66be7dc2",
     "src/entities.rs": "5365ef243f0dcf51d4a05e0915d73547e247be51129f5edc77b19c1c9d94d36c",
-    "src/ffi.rs": "a2c70961889d0e7410d33b5064ef5e1ed25ee57c00ac73d2f772d0a28d14bc30",
-    "src/html.rs": "9d3746891b601bc161eb8fdfd1a7443d725fb245824adcf42277ca59c4ad037c",
-    "src/inline.rs": "b4a4fd29bfd0a027a0da3060c361d58b9f8c8ef5eb0c7f9998de1047274ac3e9",
-    "src/lib.rs": "8b402089aed26e6c424195255ef33694c7aa9ba5a2b1805ff5445c7694eba9bd"
+    "src/ffi.rs": "e05d45564ad4b9d7d03ae971a41971e2f2c442b6adce5a3eafbec6b848b59ac3",
+    "src/hooks.rs": "a19341a9b600f80ee2fcb71441ebeb7ec31b03883e28dadd1a8af59b027ce193",
+    "src/html.rs": "3d54221900ccaa7ec5df9f9bda78411f85ba8c332b5e3205acfa3ec8ecbfa2f6",
+    "src/inline.rs": "df1f254b16cf24fd17044ce72c443711d6c8e9991bfacecaa7667378a1a13de5",
+    "src/lib.rs": "4c1988c3bbc2ffa21fbb007e11696877afe4cce5086655534d01e799764555dd",
+    "src/wire.rs": "403d5f8218fce4b0f82483cbbe931b8c949137f5aa9824844ac49fa4ce5ebf44"
   }
 }

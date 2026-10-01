@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// Editable GFM table source. Structural edits preserve the cells' inline Markdown.
 public struct MarkdownSourceTable: Equatable {
@@ -78,43 +81,30 @@ public struct MarkdownSourceTable: Equatable {
     }
 
     public static func parse(_ source: String) -> Self? {
-        let lines = source.components(separatedBy: "\n")
-        guard lines.count >= 2 else { return nil }
-        let headers = splitCells(lines[0])
-        let markers = splitCells(lines[1])
-        guard !headers.isEmpty, headers.count == markers.count else { return nil }
-        guard markers.allSatisfy({ $0.range(of: "^:?-{3,}:?$", options: .regularExpression) != nil }) else { return nil }
-        let alignments: [MarkdownTableAlignment?] = markers.map { marker in
-            if marker.hasPrefix(":"), marker.hasSuffix(":") { return .center }
-            if marker.hasPrefix(":") { return .left }
-            if marker.hasSuffix(":") { return .right }
-            return nil
+        guard let tree = NativeMarkdownExtensionProjection.parse(source),
+              tree.children.count == 1, let table = tree.children.first, table.kind == .table else { return nil }
+        return fromAST(table)
+    }
+
+    /// Cell source is supplied by the shared grammar. Only editable source
+    /// formatting is projected here; no table delimiter or pipe grammar is scanned.
+    static func fromAST(_ table: NativeMarkdownNode) -> Self {
+        let headers = table.children.first?.children.map(\.source) ?? []
+        let rows = table.children.dropFirst().map { row in
+            headers.indices.map { column in column < row.children.count ? row.children[column].source : "" }
         }
-        let rows = lines.dropFirst(2).map { line -> [String] in
-            let cells = splitCells(line)
-            return headers.indices.map { $0 < cells.count ? cells[$0] : "" }
+        let alignments = headers.indices.map { column -> MarkdownTableAlignment? in
+            guard column < table.tableAlignments.count else { return nil }
+            switch table.tableAlignments[column] {
+            case "left": return .left
+            case "center": return .center
+            case "right": return .right
+            default: return nil
+            }
         }
         return Self(headers: headers, rows: rows, alignments: alignments)
     }
 
-    private static func splitCells(_ line: String) -> [String] {
-        let characters = Array(line)
-        var parts: [String] = []
-        var start = 0
-        var slashCount = 0
-        for index in characters.indices {
-            let character = characters[index]
-            if character == "|", slashCount.isMultiple(of: 2) {
-                parts.append(String(characters[start..<index]).trimmingCharacters(in: .whitespaces))
-                start = index + 1
-            }
-            slashCount = character == "\\" ? slashCount + 1 : 0
-        }
-        parts.append(String(characters[start...]).trimmingCharacters(in: .whitespaces))
-        if line.trimmingCharacters(in: .whitespaces).hasPrefix("|"), parts.first == "" { parts.removeFirst() }
-        if line.trimmingCharacters(in: .whitespaces).hasSuffix("|"), parts.last == "" { parts.removeLast() }
-        return parts
-    }
 }
 
 public enum MarkdownTableAlignment: Equatable { case left, center, right }
@@ -126,51 +116,17 @@ struct MarkdownSourceTableAtRange {
 
 /// Locates a GFM table containing a UTF-16 source offset, excluding fenced code blocks.
 func findSourceTable(_ source: String, offset: Int) -> MarkdownSourceTableAtRange? {
-    let lines = source.components(separatedBy: "\n")
-    var starts: [Int] = []
-    var position = 0
-    for line in lines {
-        starts.append(position)
-        position += (line as NSString).length + 1
-    }
-    var fence: Character?
-    var fenceLength = 0
-    var index = 0
-    while index + 1 < lines.count {
-        let indentation = lines[index].prefix(while: { $0 == " " }).count
-        let trimmed = lines[index].dropFirst(indentation)
-        let marker = trimmed.first
-        let run = (marker == "`" || marker == "~") ? trimmed.prefix(while: { $0 == marker }) : Substring()
-        if let activeFence = fence {
-            if indentation <= 3, marker == activeFence, run.count >= fenceLength,
-               trimmed.dropFirst(run.count).allSatisfy({ $0 == " " || $0 == "\t" }) {
-                fence = nil
-                fenceLength = 0
-            }
-            index += 1
-            continue
-        }
-        if indentation <= 3, run.count >= 3 {
-            fence = marker
-            fenceLength = run.count
-            index += 1
-            continue
-        }
-        guard MarkdownSourceTable.parse(lines[index...index + 1].joined(separator: "\n")) != nil else {
-            index += 1
-            continue
-        }
-        var endLine = index + 1
-        while endLine + 1 < lines.count, lines[endLine + 1].contains("|"), !lines[endLine + 1].isEmpty {
-            endLine += 1
-        }
-        let end = starts[endLine] + (lines[endLine] as NSString).length
-        let range = NSRange(location: starts[index], length: end - starts[index])
-        if offset >= range.location, offset <= NSMaxRange(range),
-           let table = MarkdownSourceTable.parse(lines[index...endLine].joined(separator: "\n")) {
-            return MarkdownSourceTableAtRange(range: range, table: table)
-        }
-        index = endLine + 1
+    guard let tree = NativeMarkdownExtensionProjection.parse(source) else { return nil }
+    let text = source as NSString
+    for node in tree.children where node.kind == .table {
+        var range = node.sourceRange
+        // The controller leaves the original physical row terminator untouched.
+        if node.source.hasSuffix("\r\n") { range.length -= 2 }
+        else if node.source.hasSuffix("\n") || node.source.hasSuffix("\r") { range.length -= 1 }
+        guard range.location >= 0, range.length >= 0,
+              NSMaxRange(range) <= text.length, offset >= range.location,
+              offset <= NSMaxRange(range) else { continue }
+        return .init(range: range, table: .fromAST(node))
     }
     return nil
 }

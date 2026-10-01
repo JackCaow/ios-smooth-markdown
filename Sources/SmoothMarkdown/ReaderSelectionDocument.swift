@@ -122,8 +122,8 @@ struct ReaderSelectionDocument {
             }
             if case let .footnoteDefinition(definition) = item {
                 guard visualBlockAnchors else { return nil }
-                let parsed = MarkdownSyntax.parse(definition.content, enableHTML: enableHTML)
-                guard let content = parsed.child(at: 0) as? Paragraph,
+                let contentNode = definition.parsedContent ?? MarkdownSyntax.parse(definition.content, enableHTML: enableHTML).child(at: 0)
+                guard let content = contentNode as? Paragraph,
                       let contentRuns = inlineRuns(content, enableHTML: enableHTML,
                                                    plugins: plugins) else { return nil }
                 let label = Run(text: "[\(definition.label)]: ", style: .init(), code: false,

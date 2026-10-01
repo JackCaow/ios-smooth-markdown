@@ -13,6 +13,56 @@ final class PublicLibraryRuntimeTests: XCTestCase {
     func testBuilderReplacementRefreshesOrdinaryReader() { builderRefresh(selectable: false) }
     func testBuilderReplacementRefreshesDocumentReader() { builderRefresh(selectable: true) }
 
+    func testSharedCallbacksPreserveReferencesInOrdinaryReader() throws { try sharedCallbacks(selectable: false) }
+    func testSharedCallbacksPreserveReferencesInDocumentReader() throws { try sharedCallbacks(selectable: true) }
+
+    func testInlineOnlyPluginPreservesOrdinaryReaderParagraph() throws { try inlineOnlyPlugin(selectable: false) }
+    func testInlineOnlyPluginPreservesDocumentReaderParagraph() throws { try inlineOnlyPlugin(selectable: true) }
+
+    private func inlineOnlyPlugin(selectable: Bool) throws {
+        let registry = ParserPluginRegistry(); try registry.register(RuntimeSharedInlinePlugin())
+        let reader = SmoothMarkdownView(markdown: "@runtime",
+            renderOptions: .init(scrollable: false),
+            selectionOptions: .init(mode: selectable ? .document : .disabled), plugins: registry)
+        let host = RuntimeHost(reader); defer { host.close() }
+        XCTAssertTrue(try host.recognizedText().contains("RUST INLINE"),
+                      "An inline custom range equal to the paragraph/document range must not replace its ancestors")
+    }
+
+    func testSharedBuiltinPayloadsRenderCorrectlyInOrdinaryReader() throws { try sharedBuiltins(selectable: false) }
+    func testSharedBuiltinPayloadsRenderCorrectlyInDocumentReader() throws { try sharedBuiltins(selectable: true) }
+
+    private func sharedBuiltins(selectable: Bool) throws {
+        let capture = RuntimeExtensionCapture()
+        let builders = BuilderRegistry(); builders.register("runtime-extensions", builder: RuntimeExtensionBuilder(capture: capture))
+        let source = #"\$x$ \[^a]"# + "\n\n> $$\n> x\n> $$\n>\n> [^a:b]: first\n>     second\n"
+        let reader = SmoothMarkdownView(markdown: source, renderOptions: .init(scrollable: false),
+            selectionOptions: .init(mode: selectable ? .document : .disabled), builders: .init(nodes: builders))
+        let host = RuntimeHost(reader); defer { host.close() }
+        XCTAssertGreaterThan(host.greenPixels(), 1000, "Typed nested extensions did not reach their builder")
+        XCTAssertFalse(capture.nodes.contains { $0.type == "inline_math" || $0.type == "footnote_reference" },
+                       "Decoded escaped text was scanned again as Markdown syntax")
+        XCTAssertTrue(capture.nodes.contains { $0.type == "block_math" && $0.content == "x" })
+        XCTAssertTrue(capture.nodes.contains { $0.type == "footnote_definition" && $0.content == "first\nsecond" && $0.attributes["label"] == "a:b" })
+    }
+
+    private func sharedCallbacks(selectable: Bool) throws {
+        let plugins = ParserPluginRegistry()
+        try plugins.register(AdmonitionPlugin()); try plugins.register(RuntimeSharedInlinePlugin())
+        let builders = BuilderRegistry()
+        builders.register("resolved-link", builder: RuntimeResolvedLinkBuilder())
+        let reader = SmoothMarkdownView(
+            markdown: "**@runtime [resolved][id]**\n\n::: note Shared block\nBlock payload\n:::\n\n[id]: https://runtime.invalid/resolved\n",
+            renderOptions: .init(scrollable: false),
+            selectionOptions: .init(mode: selectable ? .document : .disabled),
+            plugins: plugins, builders: .init(nodes: builders))
+        let host = RuntimeHost(reader); defer { host.close() }
+        XCTAssertGreaterThan(host.greenPixels(), 1000, "Reference defined beyond the plugin did not resolve into the link builder")
+        let text = try host.recognizedText()
+        XCTAssertTrue(text.contains("RUST INLINE"), "Shared inline callback payload was not rendered")
+        XCTAssertTrue(text.contains("BLOCK PAYLOAD"), "Shared block callback payload was not rendered")
+    }
+
     private func parserRefresh(selectable: Bool) throws {
         let registry = ParserPluginRegistry()
         var style = MarkdownStyleSheet.light()
@@ -220,5 +270,33 @@ private final class RuntimeHost {
         request.recognitionLevel = .accurate; request.recognitionLanguages = ["en-US"]
         try VNImageRequestHandler(cgImage: image().cgImage!, options: [:]).perform([request])
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n").uppercased()
+    }
+}
+
+private struct RuntimeSharedInlinePlugin: InlineParserPlugin {
+    let id = "runtime-shared-inline"; let name = "Runtime shared inline"; let triggerCharacter: Character = "@"
+    func canParse(_ text: String, at index: String.Index) -> Bool { text[index...].hasPrefix("@runtime") }
+    func parse(_ text: String, at index: String.Index) -> InlinePluginMatch? {
+        canParse(text, at: index) ? .init(consumed: 8, text: "RUST INLINE") : nil
+    }
+}
+private struct RuntimeResolvedLinkBuilder: MarkdownWidgetBuilder {
+    func canBuild(_ node: Markup) -> Bool { (node as? Markdown.Link)?.destination == "https://runtime.invalid/resolved" }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView {
+        AnyView(Text("RESOLVED LINK").padding(12).background(Color(red: 0, green: 1, blue: 0)))
+    }
+}
+
+private final class RuntimeExtensionCapture { var nodes: [MarkdownExtensionNode] = [] }
+private struct RuntimeExtensionBuilder: MarkdownWidgetBuilder {
+    let capture: RuntimeExtensionCapture
+    func canBuild(_ node: Markup) -> Bool { false }
+    func build(_ node: Markup, context: MarkdownRenderContext) -> AnyView { AnyView(EmptyView()) }
+    func canBuild(_ node: MarkdownExtensionNode) -> Bool {
+        ["inline_math", "block_math", "footnote_reference", "footnote_definition"].contains(node.type)
+    }
+    func build(_ node: MarkdownExtensionNode, context: MarkdownRenderContext) -> AnyView {
+        capture.nodes.append(node)
+        return AnyView(Text(node.content).padding(16).frame(width: 180).background(Color(red: 0, green: 1, blue: 0)))
     }
 }

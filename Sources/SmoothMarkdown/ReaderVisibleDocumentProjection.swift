@@ -179,9 +179,24 @@ struct ReaderVisibleDocumentProjection {
         }
 
         private mutating func appendPluginSections(_ source: String) {
-            for section in PluginBlockSyntax.sections(source, registry: plugins) {
+            for section in PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML) {
                 switch section {
                 case let .markdown(markdown): appendFootnoteSections(markdown)
+                case let .parsed(document):
+                    for node in document.children {
+                        if let math = node as? SharedBlockMathMarkup {
+                            if builderRegistry?.findBuilder(.blockMath(math.latex)) != nil { append(.opaque, [.attachment], identity: math.latex) }
+                            else { append(.displayMath, [.formula(math.latex)], identity: math.latex) }
+                        } else if let footnote = node as? SharedFootnoteMarkup {
+                            let definition = footnote.definition
+                            if builderRegistry?.findBuilder(.footnoteDefinition(label: definition.label, content: definition.content)) != nil {
+                                append(.opaque, [.attachment], identity: definition.label + ":" + definition.content)
+                            } else {
+                                let atoms = [Atom.text("[\(definition.label)]: ")] + (definition.parsedContent.map(inlineAtoms) ?? [])
+                                append(.footnote, atoms, identity: definition.label + ":" + definition.content)
+                            }
+                        } else { appendMarkup(node) }
+                    }
                 case let .plugin(plugin, match): appendPlugin(plugin, match)
                 }
             }
@@ -253,6 +268,11 @@ struct ReaderVisibleDocumentProjection {
         /// Handles the list/quote cases that the old native prose renderer
         /// rejects when an inline image, formula, or plugin is present.
         private func fallbackAtoms(_ node: Markup) -> [Atom]? {
+            if let math = node as? SharedBlockMathMarkup { return [.formula(math.latex)] }
+            if let footnote = node as? SharedFootnoteMarkup {
+                return [.text("[\(footnote.definition.label)]: ")] + (footnote.definition.parsedContent.map(inlineAtoms) ?? [])
+            }
+            if node is SharedBlockPluginMarkup { return [.attachment] }
             if node is Paragraph || node is Heading { return inlineAtoms(node) }
             if let code = node as? CodeBlock { return [.text(code.code)] }
             if node is ThematicBreak { return [.attachment] }

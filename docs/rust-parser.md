@@ -24,3 +24,14 @@ UTF-16 ranges match `NSRange`. Source is retrieved from the caller's original in
 The bridge batches the whole tree into one FFI result and releases Rust ownership after copying. A missing binary or rejected parse retains the existing owned Swift fallback; strict integration tests prove the backend was actually invoked. Source and wire limits are described in `rust-core/README.md`. This migration does not change the public backend configuration API.
 
 Both exact HTML output and source ranges are checked for 652 CommonMark examples and 24 GFM extension fixtures. Builds and package consumers are additional gates. Rust-only timing excludes Swift AST decoding and UI rendering; no mobile speed improvement is claimed from that timing.
+
+## Shared syntax and export
+
+Standard editor block and inline recognition uses the shared AST and original UTF16
+ranges. Swift remains responsible for selection, source trivia, list/table patches
+and native rendering. Public HTML formatting uses the shared source exporter;
+`render` encodes the current mutable AST rather than reparsing its original Markdown.
+
+Host plugin payloads stay in Swift. Synchronous parser callbacks preserve full-document
+reference resolution and protected code ranges. The C bridge batches nodes and exposes
+only internal extension projections; consumer API declarations remain unchanged.
