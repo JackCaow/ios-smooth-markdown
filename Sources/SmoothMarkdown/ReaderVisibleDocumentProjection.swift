@@ -179,9 +179,24 @@ struct ReaderVisibleDocumentProjection {
         }
 
         private mutating func appendPluginSections(_ source: String) {
-            for section in PluginBlockSyntax.sections(source, registry: plugins) {
+            for section in PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML) {
                 switch section {
                 case let .markdown(markdown): appendFootnoteSections(markdown)
+                case let .parsed(document):
+                    for node in document.children {
+                        if let math = node as? SharedBlockMathMarkup {
+                            if builderRegistry?.findBuilder(.blockMath(math.latex)) != nil { append(.opaque, [.attachment], identity: math.latex) }
+                            else { append(.displayMath, [.formula(math.latex)], identity: math.latex) }
+                        } else if let footnote = node as? SharedFootnoteMarkup {
+                            let definition = footnote.definition
+                            if builderRegistry?.findBuilder(.footnoteDefinition(label: definition.label, content: definition.content)) != nil {
+                                append(.opaque, [.attachment], identity: definition.label + ":" + definition.content)
+                            } else {
+                                let atoms = [Atom.text("[\(definition.label)]: ")] + (definition.parsedContent.map(inlineAtoms) ?? [])
+                                append(.footnote, atoms, identity: definition.label + ":" + definition.content)
+                            }
+                        } else { appendMarkup(node) }
+                    }
                 case let .plugin(plugin, match): appendPlugin(plugin, match)
                 }
             }

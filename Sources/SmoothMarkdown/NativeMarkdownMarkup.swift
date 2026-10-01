@@ -18,6 +18,7 @@ public class Markup {
     public let children: [Markup]
     public let range: Range<SourceLocation>?
     private var originalSource: String?
+    var sourcePluginsResolved = false
 
     public init(_ children: [Markup] = [], range: Range<SourceLocation>? = nil, source: String? = nil) {
         self.children = children
@@ -29,7 +30,16 @@ public class Markup {
     public var childCount: Int { children.count }
     public func isIdentical(to other: Markup) -> Bool { self === other }
     public func withUncheckedChildren(_ children: [Markup]) -> Markup {
+        let result = copyingChildren(children)
+        result.sourcePluginsResolved = sourcePluginsResolved
+        return result
+    }
+    private func copyingChildren(_ children: [Markup]) -> Markup {
         switch self {
+        case let node as SharedInlinePluginMarkup: return SharedInlinePluginMarkup(plugin: node.plugin, match: node.match, source: node.format())
+        case let node as SharedBlockPluginMarkup: return SharedBlockPluginMarkup(plugin: node.plugin, match: node.match, source: node.format())
+        case let node as SharedBlockMathMarkup: return SharedBlockMathMarkup(latex: node.latex, source: node.format())
+        case let node as SharedFootnoteMarkup: return SharedFootnoteMarkup(definition: node.definition, children: children, source: node.format())
         case is Document: return Document(children, range: range, source: originalSource)
         case let heading as Heading:
             return Heading(level: heading.level, children: children, range: range, source: originalSource)
@@ -190,10 +200,14 @@ public enum Markdown {
     }
 }
 
-private struct NativeMarkdownMarkupAdapter {
+struct NativeMarkdownMarkupAdapter {
     let source: String
     private let locations: [SourceLocation]
-    init(source: String) {
+    private let resolveCustom: ((NativeMarkdownNode) -> Markup?)?
+    private let projectFootnote: ((String) -> Markup?)?
+    init(source: String, resolveCustom: ((NativeMarkdownNode) -> Markup?)? = nil,
+         projectFootnote: ((String) -> Markup?)? = nil) {
+        self.resolveCustom = resolveCustom; self.projectFootnote = projectFootnote
         self.source = source
         var positions = [SourceLocation(line: 1, column: 1)]
         var line = 1
@@ -215,6 +229,12 @@ private struct NativeMarkdownMarkupAdapter {
     }
 
     func convert(_ node: NativeMarkdownNode) -> Markup {
+        let result = convertNode(node)
+        if resolveCustom != nil { result.sourcePluginsResolved = true }
+        return result
+    }
+    private func convertNode(_ node: NativeMarkdownNode) -> Markup {
+        if let custom = resolveCustom?(node) { return custom }
         let converted = coalesce(node.children.compactMap(convertVisible))
         let position = range(node.sourceRange)
         switch node.kind {
@@ -251,6 +271,23 @@ private struct NativeMarkdownMarkupAdapter {
             return Markdown.Table(head: head, body: body, alignments: alignments, range: position, source: node.source)
         case .tableRow: return Markdown.Table.Row(converted, range: position, source: node.source)
         case .tableCell: return Markdown.Table.Cell(converted, range: position, source: node.source)
+        case .blockMath where resolveCustom != nil:
+            var latex = node.source.trimmingCharacters(in: .whitespacesAndNewlines)
+            if latex.hasPrefix("$$") { latex = String(latex.dropFirst(2)) }
+            if latex.hasSuffix("$$") { latex = String(latex.dropLast(2)) }
+            return SharedBlockMathMarkup(latex: latex.trimmingCharacters(in: .whitespacesAndNewlines), source: node.source)
+        case let .footnoteDefinition(label) where resolveCustom != nil:
+            let parts = node.source.components(separatedBy: "\n")
+            var content = ""
+            if let first = parts.first, let colon = first.firstIndex(of: ":") {
+                content = first[first.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            content += parts.dropFirst().filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .map { "\n" + $0.trimmingCharacters(in: .whitespaces) }.joined()
+            let fallback = Paragraph([Markdown.Text(content)], source: content)
+            fallback.sourcePluginsResolved = true
+            return SharedFootnoteMarkup(definition: .init(label: label, content: content,
+                parsedContent: projectFootnote?(content) ?? converted.first ?? fallback), children: converted, source: node.source)
         case .footnoteDefinition, .blockMath:
             let text = Markdown.Text(node.source, range: position, source: node.source)
             return Paragraph([text], range: position, source: node.source)

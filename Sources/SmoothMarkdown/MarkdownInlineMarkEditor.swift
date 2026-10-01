@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// Inline source edits supported by paragraph and ATX heading rows in Blocks mode.
 public enum MarkdownInlineMark: Equatable {
@@ -250,34 +253,29 @@ enum MarkdownInlineMarkEditor {
     }
 
     private static func inlineMap(_ source: String, allowCode: Bool = false) -> InlineMap? {
-        let document = MarkdownSyntax.parse(source, useCache: false)
-        let blocks = Array(document.children)
-        guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
+        guard let paragraph = inlineParagraph(source),
               supportedInlineTree(paragraph, allowCode: allowCode),
               inlineSignature(source, allowCode: allowCode) != nil else { return nil }
         let nsSource = source as NSString
-        let utf8 = Array(source.utf8)
-        func offset(_ location: SourceLocation) -> Int? {
-            guard location.line == 1, location.column >= 1, location.column - 1 <= utf8.count,
-                  let prefix = String(bytes: utf8.prefix(location.column - 1), encoding: .utf8) else { return nil }
-            return prefix.utf16.count
-        }
-        func sourceRange(_ node: Markup) -> NSRange? {
-            guard let range = node.range, let start = offset(range.lowerBound),
-                  let end = offset(range.upperBound), end >= start else { return nil }
-            return NSRange(location: start, length: end - start)
+        func sourceRange(_ node: NativeMarkdownNode) -> NSRange? {
+            let range = node.sourceRange
+            guard range.location >= 0, range.length >= 0,
+                  range.location <= nsSource.length,
+                  range.length <= nsSource.length - range.location else { return nil }
+            return range
         }
         var units: [UInt16] = []
         var starts: [Int] = []
         var ends: [Int] = []
         var marks: [MappedMark] = []
-        func visit(_ node: Markup) -> Bool {
+        func visit(_ node: NativeMarkdownNode) -> Bool {
             for child in node.children {
-                if let text = child as? Markdown.Text {
-                    guard let range = sourceRange(text),
-                          range.length == (text.string as NSString).length,
-                          nsSource.substring(with: range) == text.string else { return false }
-                    for (index, unit) in text.string.utf16.enumerated() {
+                if child.kind == .text {
+                    let value = child.semanticText ?? child.source
+                    guard let range = sourceRange(child),
+                          range.length == (value as NSString).length,
+                          nsSource.substring(with: range) == value else { return false }
+                    for (index, unit) in value.utf16.enumerated() {
                         units.append(unit)
                         starts.append(range.location + index)
                         ends.append(range.location + index + 1)
@@ -285,13 +283,12 @@ enum MarkdownInlineMarkEditor {
                     continue
                 }
                 let kind: MappedKind
-                if child is Strong { kind = .bold }
-                else if child is Emphasis { kind = .italic }
-                else if child is Strikethrough { kind = .strikethrough }
-                else if allowCode, child is InlineCode { kind = .code }
-                else if let link = child as? Markdown.Link,
-                        let destination = link.destination,
-                        let url = safeDestination(destination), link.title == nil { kind = .link(url) }
+                if child.kind == .strong { kind = .bold }
+                else if child.kind == .emphasis { kind = .italic }
+                else if child.kind == .strikethrough { kind = .strikethrough }
+                else if allowCode, child.kind == .inlineCode { kind = .code }
+                else if case let .link(destination) = child.kind,
+                        let url = safeDestination(destination), child.title == nil { kind = .link(url) }
                 else { return false }
                 guard let range = sourceRange(child), range.length > 1 else { return false }
                 let raw = nsSource.substring(with: range)
@@ -310,15 +307,16 @@ enum MarkdownInlineMarkEditor {
                     guard raw.hasPrefix("~~"), raw.hasSuffix("~~") else { return false }
                     opening = "~~"; closing = "~~"
                 case .code:
-                    guard let code = child as? InlineCode, !code.code.isEmpty else { return false }
+                    let code = child.semanticText ?? child.source
+                    guard !code.isEmpty else { return false }
                     let count = raw.prefix(while: { $0 == "`" }).count
                     let delimiter = String(repeating: "`", count: count)
                     guard count > 0, raw.hasSuffix(delimiter) else { return false }
                     let inner = String(raw.dropFirst(count).dropLast(count))
-                    if inner == code.code {
+                    if inner == code {
                         opening = delimiter; closing = delimiter
                     } else if inner.hasPrefix(" "), inner.hasSuffix(" "),
-                              String(inner.dropFirst().dropLast()) == code.code {
+                              String(inner.dropFirst().dropLast()) == code {
                         opening = delimiter + " "; closing = " " + delimiter
                     } else { return false }
                 case .link:
@@ -327,11 +325,12 @@ enum MarkdownInlineMarkEditor {
                     opening = "["; closing = String(raw[suffix.lowerBound...])
                 }
                 let visibleStart = units.count
-                if let code = child as? InlineCode {
+                if child.kind == .inlineCode {
+                    let code = child.semanticText ?? child.source
                     // Map the exact code payload so later selections outside this span
                     // still resolve to source offsets after rendering the new code mark.
                     let payloadStart = range.location + (opening as NSString).length
-                    for (index, unit) in code.code.utf16.enumerated() {
+                    for (index, unit) in code.utf16.enumerated() {
                         units.append(unit)
                         starts.append(payloadStart + index)
                         ends.append(payloadStart + index + 1)
@@ -412,32 +411,42 @@ enum MarkdownInlineMarkEditor {
     }
 
     private static func inlineSignature(_ source: String, allowCode: Bool = false) -> [InlineUnit]? {
-        let document = MarkdownSyntax.parse(source, useCache: false)
-        let blocks = Array(document.children)
-        guard blocks.count == 1, let paragraph = blocks.first as? Paragraph,
+        guard let paragraph = inlineParagraph(source),
               supportedInlineTree(paragraph, allowCode: allowCode) else { return nil }
         var signature: [InlineUnit] = []
-        for run in InlineContent.runs(in: paragraph, enableHTML: false) {
-            guard case let .text(value, style, tags, code) = run, tags.isEmpty,
-                  allowCode || !code else { return nil }
-            signature += value.utf16.map {
-                InlineUnit(unit: $0, bold: style.bold, italic: style.italic,
-                           strike: style.strike, link: style.link)
+        func visit(_ node: NativeMarkdownNode, bold: Bool, italic: Bool, strike: Bool, link: URL?) {
+            if node.kind == .text || node.kind == .inlineCode {
+                signature += (node.semanticText ?? node.source).utf16.map {
+                    InlineUnit(unit: $0, bold: bold, italic: italic, strike: strike, link: link)
+                }
+                return
+            }
+            let destination: URL?
+            if case let .link(value) = node.kind { destination = URL(string: value) } else { destination = link }
+            for child in node.children {
+                visit(child, bold: bold || node.kind == .strong, italic: italic || node.kind == .emphasis,
+                      strike: strike || node.kind == .strikethrough, link: destination)
             }
         }
+        visit(paragraph, bold: false, italic: false, strike: false, link: nil)
         return signature.isEmpty ? nil : signature
     }
 
-    private static func supportedInlineTree(_ node: Markup, allowCode: Bool = false) -> Bool {
+    private static func inlineParagraph(_ source: String) -> NativeMarkdownNode? {
+        guard let document = NativeMarkdownExtensionProjection.parse(source),
+              document.children.count == 1, let paragraph = document.children.first,
+              paragraph.kind == .paragraph else { return nil }
+        return paragraph
+    }
+
+    private static func supportedInlineTree(_ node: NativeMarkdownNode, allowCode: Bool = false) -> Bool {
         for child in node.children {
-            if child is Markdown.Text || child is Strong || child is Emphasis ||
-                child is Strikethrough || (allowCode && child is InlineCode) {
-                // Accepted below after recursively checking nested children.
-            } else if let link = child as? Markdown.Link {
-                guard let destination = link.destination, let url = URL(string: destination),
-                      MarkdownSyntax.isSafeLink(url) else { return false }
-            } else {
-                return false
+            switch child.kind {
+            case .text, .strong, .emphasis, .strikethrough: break
+            case .inlineCode: if !allowCode { return false }
+            case let .link(destination):
+                guard let url = URL(string: destination), MarkdownSyntax.isSafeLink(url) else { return false }
+            default: return false
             }
             guard supportedInlineTree(child, allowCode: allowCode) else { return false }
         }

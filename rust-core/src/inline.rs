@@ -89,9 +89,11 @@ struct Parser<'a> {
     options: Options,
     positions: Vec<u32>,
     depth: usize,
+    hooks: Option<&'a dyn crate::hooks::Hooks>,
+    hook_units: Vec<u16>,
 }
 impl<'a> Parser<'a> {
-    fn new(s: &'a str, offset: u32, refs: &'a References, options: Options, depth: usize) -> Self {
+    fn new(s: &'a str, offset: u32, refs: &'a References, options: Options, depth: usize, hooks: Option<&'a dyn crate::hooks::Hooks>) -> Self {
         let mut positions = vec![0; s.len() + 1];
         let mut at = 0;
         for (i, c) in s.char_indices() {
@@ -106,6 +108,8 @@ impl<'a> Parser<'a> {
             options,
             positions,
             depth,
+            hooks,
+            hook_units: if hooks.is_some() { s.encode_utf16().collect() } else { Vec::new() },
         }
     }
     fn node(&self, kind: Kind, start: usize, end: usize) -> Node {
@@ -128,6 +132,7 @@ impl<'a> Parser<'a> {
             self.refs,
             self.options,
             self.depth + 1,
+            self.hooks,
         )
     }
     fn eol(&self, at: usize) -> usize {
@@ -326,6 +331,8 @@ impl<'a> Parser<'a> {
         }
     }
     fn parse(&self) -> Vec<Node> {
+        if let Some(h)=self.hooks {h.begin_inline(&self.hook_units)}
+        let _scope=crate::hooks::InlineScope(self.hooks);
         let b = self.s.as_bytes();
         let mut nodes = Vec::new();
         let mut i = 0;
@@ -394,6 +401,17 @@ impl<'a> Parser<'a> {
                 }
                 i = end;
                 continue;
+            }
+            if let Some(matched) = self.hooks.and_then(|h| h.inline(self.s, &self.hook_units, self.positions[i], self.offset + self.positions[i])) {
+                if matched.id > 0 && matched.consumed > 0 {
+                    let target = self.positions[i].saturating_add(matched.consumed);
+                    if let Some(end) = (i+1..=self.s.len()).find(|&at| self.s.is_char_boundary(at) && self.positions[at] == target) {
+                        flush!(i);
+                        let mut node = self.node(Kind::Custom,i,end);
+                        node.label = matched.id.to_string();
+                        nodes.push(node); i=end; plain=i; continue;
+                    }
+                }
             }
             if b[i] == b'<' {
                 if let Some(end) = self.s[i + 1..].find('>').map(|j| i + 1 + j) {
@@ -533,7 +551,10 @@ impl<'a> Parser<'a> {
     }
 }
 pub fn parse(source: &str, offset: u32, refs: &References, options: Options) -> Vec<Node> {
-    parse_depth(source, offset, refs, options, 0)
+    parse_with_hooks(source, offset, refs, options, None)
+}
+pub fn parse_with_hooks(source: &str, offset: u32, refs: &References, options: Options, hooks: Option<&dyn crate::hooks::Hooks>) -> Vec<Node> {
+    parse_depth(source,offset,refs,options,0,hooks)
 }
 fn parse_depth(
     source: &str,
@@ -541,6 +562,7 @@ fn parse_depth(
     refs: &References,
     options: Options,
     depth: usize,
+    hooks: Option<&dyn crate::hooks::Hooks>,
 ) -> Vec<Node> {
     // Bound malformed/adversarial nesting without overflowing the native call stack.
     if depth >= 128 {
@@ -548,7 +570,7 @@ fn parse_depth(
         n.literal = Some(decode_text(source));
         return vec![n];
     }
-    Parser::new(source, offset, refs, options, depth).parse()
+    Parser::new(source, offset, refs, options, depth, hooks).parse()
 }
 fn contains_link(n: &Node) -> bool {
     n.kind == Kind::Link || n.children.iter().any(contains_link)

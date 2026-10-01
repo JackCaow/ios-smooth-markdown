@@ -231,10 +231,19 @@ public struct SmoothMarkdownView: View {
             return true
         }
         func appendPlugins(_ source: String) -> Bool {
-            for section in PluginBlockSyntax.sections(source, registry: plugins) {
+            for section in PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML, useCache: usesParseCache) {
                 switch section {
                 case let .markdown(markdown):
                     if !appendFootnotes(markdown) { return false }
+                case let .parsed(document):
+                    for node in document.children {
+                        if let math = node as? SharedBlockMathMarkup { items.append(.displayMath(math.latex)) }
+                        else if let footnote = node as? SharedFootnoteMarkup {
+                            if extensionBuilder(.footnoteDefinition(label: footnote.definition.label, content: footnote.definition.content)) != nil ||
+                                !(footnote.definition.parsedContent is Paragraph) { return false }
+                            items.append(.footnoteDefinition(footnote.definition))
+                        } else { items.append(.markup(node)) }
+                    }
                 case let .plugin(plugin, match):
                     guard plugin is AdmonitionPlugin || plugin is MermaidPlugin ||
                           (useEnhancedComponents && plugin is ArtifactPlugin),
@@ -254,7 +263,7 @@ public struct SmoothMarkdownView: View {
                 guard let summary = parse(block.summary).child(at: 0) else { return false }
                 return containsCustomBlockBuilder(summary)
             case let .footnoteDefinition(definition):
-                guard let content = parse(definition.content).child(at: 0) else { return false }
+                guard let content = definition.parsedContent ?? parse(definition.content).child(at: 0) else { return false }
                 return containsCustomBlockBuilder(content)
             case .plugin: return false
             }
@@ -478,7 +487,7 @@ public struct SmoothMarkdownView: View {
     private func detailsSection(_ section: DetailsSyntax.Section) -> some View {
         switch section {
         case let .markdown(source):
-            ForEach(Array(PluginBlockSyntax.sections(source, registry: plugins).enumerated()), id: \.offset) { _, item in
+            ForEach(Array(PluginBlockSyntax.sections(source, registry: plugins, enableHTML: enableHTML, useCache: usesParseCache).enumerated()), id: \.offset) { _, item in
                 pluginSection(item)
             }
         case let .details(details):
@@ -499,6 +508,16 @@ public struct SmoothMarkdownView: View {
             ForEach(Array(FootnoteSyntax.sections(source).enumerated()), id: \.offset) { _, item in
                 footnoteSection(item)
             }
+        case let .parsed(document):
+            #if os(iOS)
+            ForEach(Array(ReaderSelectionGroup.group(document.children,
+                enableHTML: enableHTML, plugins: plugins,
+                enabled: enableCrossBlockSelection && !voiceOverEnabled && (selectable || onTextLongPress != nil),
+                allowCodeBlocks: codeBuilder == nil && codeBlockOptions.showCopyButton,
+                hasCustomBuilder: containsCustomBlockBuilder).enumerated()), id: \.offset) { _, group in readerGroup(group) }
+            #else
+            ForEach(Array(document.children.enumerated()), id: \.offset) { _, node in block(node) }
+            #endif
         case let .plugin(plugin, match): pluginView(plugin, match)
         }
     }
@@ -702,7 +721,7 @@ public struct SmoothMarkdownView: View {
     private func footnoteDefinition(_ definition: FootnoteSyntax.Definition) -> some View {
         HStack(alignment: .top, spacing: 0) {
             SwiftUI.Text("[\(definition.label)]: ").bold().foregroundColor(styleSheet.footnoteColor ?? .blue)
-            if let content = parse(definition.content).child(at: 0) {
+            if let content = definition.parsedContent ?? parse(definition.content).child(at: 0) {
                 inlineView(content).frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -714,6 +733,12 @@ public struct SmoothMarkdownView: View {
                               onSelectSurroundingContent: (() -> Void)? = nil) -> some View {
         if let builder = builderRegistry?.findBuilder(node) {
             builder.build(node, context: renderContext(alignment: alignment))
+        } else if let plugin = node as? SharedBlockPluginMarkup {
+            pluginView(plugin.plugin, plugin.match)
+        } else if let math = node as? SharedBlockMathMarkup {
+            mathSection(.block(math.latex))
+        } else if let footnote = node as? SharedFootnoteMarkup {
+            footnoteSection(.definition(footnote.definition))
         } else if let heading = node as? Heading {
             let tokens = styleSheet.designTokens.heading
             let decorated = useEnhancedComponents && heading.level <= tokens.decoratedThroughLevel

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// One physical list line. Keeping its marker, spacing, and line ending makes edits lossless.
 public struct MarkdownSourceListItem: Equatable {
@@ -509,6 +512,11 @@ public struct MarkdownSourceList: Equatable {
     }
 
     public static func parse(_ source: String) -> Self? {
+        // Shared AST controls syntax recognition; the following source-line
+        // extraction preserves editable marker and indentation spelling only.
+        guard let tree = NativeMarkdownExtensionProjection.parse(source), !tree.children.isEmpty,
+              tree.children.allSatisfy({ node in if case .list = node.kind { return true }; return false }) else { return nil }
+
         guard !source.isEmpty else { return nil }
         let components = source.components(separatedBy: "\n")
         var items: [MarkdownSourceListItem] = []
@@ -577,10 +585,6 @@ public struct MarkdownSourceList: Equatable {
         }
         let result = Self(items: items)
         return items.isEmpty || !pendingBlank.isEmpty || result.toMarkdown() != source ? nil : result
-    }
-
-    static func isListStart(_ line: String) -> Bool {
-        match(#"^[ \t]{0,3}(?:[-+*]|[0-9]+[.)])[ \t]+"#, line) != nil
     }
 
     private static func isSafeTrailingParagraph(_ content: String) -> Bool {

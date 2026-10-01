@@ -8,6 +8,6 @@ public struct MarkdownCoreParser {
         NativeMarkdownASTParser(enableGFM: enableGFM).parse(source)
     }
     public func renderHTML(_ source: String) -> String {
-        NativeMarkdownHTMLSerializer.render(parse(source))
+        NativeMarkdownHTMLSerializer.format(source, enableGFM: enableGFM)
     }
 }

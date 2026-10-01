@@ -3,7 +3,8 @@ import Foundation
 /// HTML export from the library-owned CommonMark/GFM tree.
 public enum NativeMarkdownHTMLSerializer {
     public static func format(_ source: String, enableGFM: Bool = true) -> String {
-        render(NativeMarkdownASTParser(enableGFM: enableGFM).parse(source))
+        if RustMarkdownBridge.isAvailable { return RustMarkdownBridge.exportHTML(source, enableGFM: enableGFM) ?? escape(source) }
+        return render(NativeMarkdownASTParser(enableGFM: enableGFM).parse(source))
     }
 
     public static func escape(_ value: String) -> String {
@@ -25,7 +26,8 @@ public enum NativeMarkdownHTMLSerializer {
     }
 
     public static func render(_ node: NativeMarkdownNode) -> String {
-        render(node, tightList: false)
+        if RustMarkdownBridge.isAvailable { return RustMarkdownBridge.renderHTML(node) ?? escape(node.source) }
+        return render(node, tightList: false)
     }
 
     private static func render(_ node: NativeMarkdownNode, tightList: Bool) -> String {

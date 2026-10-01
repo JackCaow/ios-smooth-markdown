@@ -27,7 +27,7 @@ enum InlineContent {
                      hasCustomBuilder: ((Markup) -> Bool)? = nil) -> [Run] {
         var result: [Run] = []
         var tags: [SafeHTML.Tag] = []
-        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: plugins,
+        append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: node.sourcePluginsResolved ? nil : plugins,
                hasCustomBuilder: hasCustomBuilder, to: &result)
         return result
     }
@@ -53,6 +53,9 @@ enum InlineContent {
                     result.append(.text(raw, style, tags, code: true))
                 }
                 continue
+            }
+            if let plugin = child as? SharedInlinePluginMarkup {
+                result.append(.plugin(plugin.plugin, plugin.match)); continue
             }
             if !(child is Markdown.Text), hasCustomBuilder?(child) == true {
                 result.append(.custom(child, style))
