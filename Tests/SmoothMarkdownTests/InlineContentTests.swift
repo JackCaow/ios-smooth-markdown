@@ -102,7 +102,7 @@ final class InlineContentTests: XCTestCase {
             case let .footnote(label): return "[^\(label)]"
             case let .math(latex): return "$\(latex)$"
             case let .plugin(_, match): return match.text
-            case .custom: return nil
+            case .custom, .details: return nil
             }
         }.joined()
         XCTAssertEqual(labels, "before [one] middle [two] after")

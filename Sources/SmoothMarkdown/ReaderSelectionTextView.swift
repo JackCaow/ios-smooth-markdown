@@ -352,8 +352,8 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 let inlineStyle = styleSheet.resolvedHTMLStyle(
                     styleSheet.resolvedInlineStyle(
                         bold: run.style.bold, italic: run.style.italic, strike: run.style.strike,
-                        link: run.style.link != nil, code: run.code),
-                    underline: run.htmlUnderline, highlight: run.highlighted)
+                        link: run.style.link != nil, code: run.code, script: run.style.script),
+                    underline: run.htmlUnderline, highlight: run.highlighted, small: run.htmlSmall)
                 let fontWeight: UIFont.Weight = inlineStyle.bold == true ? .bold : weight
                 let keycapStyle = styleSheet.kbdStyle
                 let scaledFont: UIFont
@@ -399,6 +399,11 @@ struct ReaderSelectionTextView: UIViewRepresentable {
                 }
                 if let link = run.style.link {
                     attributes[.link] = link
+                }
+                if let script = run.style.script {
+                    let scale = MarkdownTypography.font(textStyle: .body, weight: .regular,
+                        customSize: nil, traits: traits).pointSize / MarkdownHTMLScript.bodyPointSize
+                    attributes[.baselineOffset] = script.baselineOffset(scale: scale)
                 }
                 if run.keycap {
                     if let color = keycapStyle?.textColor { attributes[.foregroundColor] = UIColor(color) }

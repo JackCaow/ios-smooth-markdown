@@ -266,6 +266,7 @@ public extension MarkdownStyleSheet {
         value.inlineCodeStyle = inlineCodeStyle?.normalized(); value.subscriptStyle = subscriptStyle?.normalized()
         value.superscriptStyle = superscriptStyle?.normalized(); value.kbdStyle = kbdStyle?.normalized()
         value.underlineStyle = underlineStyle?.normalized(); value.highlightStyle = highlightStyle?.normalized()
+        value.smallStyle = smallStyle?.normalized()
         if var border = tableBorder {
             func safe(_ side: MarkdownTableBorderSide?) -> MarkdownTableBorderSide? {
                 guard var side else { return nil }

@@ -6,6 +6,8 @@ enum InlineContent {
         var bold = false
         var italic = false
         var strike = false
+        var highlighted = false
+        var script: MarkdownHTMLScript?
         var link: URL?
     }
 
@@ -16,6 +18,7 @@ enum InlineContent {
         case footnote(String)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
+        case details(DetailsSyntax.Block, source: String)
 
         func hasLink(_ url: URL) -> Bool {
             if case let .text(_, style, _, _) = self { return style.link == url }
@@ -24,20 +27,31 @@ enum InlineContent {
     }
 
     static func runs(in node: Markup, enableHTML: Bool, plugins: ParserPluginRegistry? = nil,
-                     hasCustomBuilder: ((Markup) -> Bool)? = nil) -> [Run] {
+                     hasCustomBuilder: ((Markup) -> Bool)? = nil,
+                     hasCustomPluginBuilder: ((MarkdownPluginNode) -> Bool)? = nil) -> [Run] {
         var result: [Run] = []
         var tags: [SafeHTML.Tag] = []
         append(node, style: Style(), tags: &tags, enableHTML: enableHTML, plugins: node.sourcePluginsResolved ? nil : plugins,
-               hasCustomBuilder: hasCustomBuilder, to: &result)
+               hasCustomBuilder: hasCustomBuilder, hasCustomPluginBuilder: hasCustomPluginBuilder, to: &result)
         return result
     }
 
     private static func append(
         _ node: Markup, style: Style, tags: inout [SafeHTML.Tag],
         enableHTML: Bool, plugins: ParserPluginRegistry?,
-        hasCustomBuilder: ((Markup) -> Bool)?, to result: inout [Run]
+        hasCustomBuilder: ((Markup) -> Bool)?,
+        hasCustomPluginBuilder: ((MarkdownPluginNode) -> Bool)?, to result: inout [Run]
     ) {
-        for child in node.children {
+        let children = Array(node.children)
+        var detailsEnd = -1
+        for (index, child) in children.enumerated() {
+            if index <= detailsEnd { continue }
+            if enableHTML, !tags.contains(where: { $0.name == "code" }),
+               let details = DetailsSyntax.inlineBlock(in: children, startingAt: index) {
+                result.append(.details(details.block, source: details.source))
+                detailsEnd = details.endIndex
+                continue
+            }
             // Flutter treats the body of an HTML <code> tag as one verbatim inline
             // span. The native AST has already parsed markers such as **bold**
             // into child nodes, so reconstruct their Markdown spelling here.
@@ -58,13 +72,17 @@ enum InlineContent {
                 let projected = Markup(projection)
                 projected.sourceBuiltinsResolved = true
                 append(projected, style: style, tags: &tags, enableHTML: enableHTML, plugins: plugins,
-                       hasCustomBuilder: hasCustomBuilder, to: &result)
+                       hasCustomBuilder: hasCustomBuilder, hasCustomPluginBuilder: hasCustomPluginBuilder, to: &result)
                 continue
             }
             if let math = child as? SharedInlineMathMarkup { result.append(.math(math.latex)); continue }
             if let footnote = child as? SharedFootnoteReferenceMarkup { result.append(.footnote(footnote.label)); continue }
             if let plugin = child as? SharedInlinePluginMarkup {
-                result.append(.plugin(plugin.plugin, plugin.match)); continue
+                var formatted = style
+                if hasCustomPluginBuilder?(MarkdownPluginNode(plugin: plugin.plugin, match: plugin.match)) != true,
+                   formatted.apply(plugin.plugin) { result.append(.text(plugin.match.text, formatted, tags, code: false)) }
+                else { result.append(.plugin(plugin.plugin, plugin.match)) }
+                continue
             }
             if !(child is Markdown.Text), hasCustomBuilder?(child) == true {
                 result.append(.custom(child, style))
@@ -98,7 +116,11 @@ enum InlineContent {
             if let text = child as? Markdown.Text {
                 for pluginPart in PluginInlineSyntax.parts(in: text.string, registry: plugins) {
                     switch pluginPart {
-                    case let .plugin(plugin, match): result.append(.plugin(plugin, match))
+                    case let .plugin(plugin, match):
+                        var formatted = style
+                        if hasCustomPluginBuilder?(MarkdownPluginNode(plugin: plugin, match: match)) != true,
+                           formatted.apply(plugin) { result.append(.text(match.text, formatted, tags, code: false)) }
+                        else { result.append(.plugin(plugin, match)) }
                     case let .text(source):
                         if child.sourceBuiltinsResolved || node.sourceBuiltinsResolved {
                             if let hasCustomBuilder {
@@ -149,7 +171,7 @@ enum InlineContent {
                     nested.link = url
                 }
                 append(child, style: nested, tags: &tags, enableHTML: enableHTML, plugins: plugins,
-                       hasCustomBuilder: hasCustomBuilder, to: &result)
+                       hasCustomBuilder: hasCustomBuilder, hasCustomPluginBuilder: hasCustomPluginBuilder, to: &result)
             }
         }
     }

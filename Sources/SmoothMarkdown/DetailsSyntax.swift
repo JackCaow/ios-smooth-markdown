@@ -14,7 +14,7 @@ enum DetailsSyntax {
         case details(Block)
     }
 
-    static func sections(_ markdown: String) -> [Section] {
+    static func sections(_ markdown: String, enableInlineHTML: Bool = false) -> [Section] {
         let lines = markdown.components(separatedBy: "\n")
         var sections: [Section] = []
         var ordinary: [String] = []
@@ -40,6 +40,16 @@ enum DetailsSyntax {
                 index += 1
                 continue
             }
+            if enableInlineHTML, let parsed = inlineBlock(line) {
+                if !ordinary.isEmpty {
+                    sections.append(.markdown(ordinary.joined(separator: "\n")))
+                    ordinary.removeAll()
+                }
+                sections.append(.details(parsed.block))
+                if !parsed.trailing.isEmpty { ordinary.append(parsed.trailing) }
+                index += 1
+                continue
+            }
             if trimmed == "<details>" || trimmed == "<details open>" {
                 if !ordinary.isEmpty {
                     sections.append(.markdown(ordinary.joined(separator: "\n")))
@@ -55,6 +65,87 @@ enum DetailsSyntax {
         }
         if !ordinary.isEmpty { sections.append(.markdown(ordinary.joined(separator: "\n"))) }
         return sections
+    }
+
+    /// Claims complete disclosure tokens in an existing inline AST. Code nodes
+    /// are never HTML closers, so surrounding list/paragraph structure stays intact.
+    static func inlineBlock(in children: [Markup], startingAt start: Int) -> (block: Block, source: String, endIndex: Int)? {
+        guard let html = children[start] as? InlineHTML,
+              let opener = SafeHTML.lexTag(html.rawHTML), opener.name == "details",
+              !opener.isClosing, !opener.isSelfClosing else { return nil }
+        var depth = 1
+        var htmlCode = false
+        for index in children.indices.dropFirst(start + 1) {
+            guard let html = children[index] as? InlineHTML,
+                  let tag = SafeHTML.lexTag(html.rawHTML) else { continue }
+            if tag.name == "code" { htmlCode = !tag.isClosing; continue }
+            guard !htmlCode, tag.name == "details" else { continue }
+            if tag.isClosing { depth -= 1 } else if !tag.isSelfClosing { depth += 1 }
+            if depth == 0 {
+                let source = children[start...index].map { $0.format() }.joined()
+                guard let parsed = inlineBlock(source), parsed.trailing.isEmpty else { return nil }
+                return (parsed.block, source, index)
+            }
+        }
+        return nil
+    }
+
+    /// Same-line HTML disclosure uses token offsets into the original line. The
+    /// Markdown body is never rewritten; escaped and code-literal tags stay literal.
+    private static func inlineBlock(_ line: String) -> (block: Block, trailing: String)? {
+        let source = line as NSString
+        var start = 0
+        var indentation = 0
+        while start < source.length, source.character(at: start) == 32 || source.character(at: start) == 9 {
+            indentation += source.character(at: start) == 9 ? 4 - indentation % 4 : 1
+            start += 1
+        }
+        guard indentation < 4 else { return nil }
+        guard let opener = SafeHTML.lexTag(line, at: start), opener.name == "details",
+              !opener.isClosing, !opener.isSelfClosing,
+              opener.attributes.keys.allSatisfy({ $0 == "open" }) else { return nil }
+        var depth = 1
+        var cursor = opener.end
+        var summaryStart: Int?
+        var summaryEnd: Int?
+        var contentStart = opener.end
+        var codeRun = 0
+        var htmlCode = false
+        while cursor < source.length {
+            let character = source.character(at: cursor)
+            if character == 92 { cursor += min(2, source.length - cursor); continue }
+            if character == 96, !htmlCode {
+                var end = cursor + 1
+                while end < source.length, source.character(at: end) == 96 { end += 1 }
+                let run = end - cursor
+                if codeRun == 0 { codeRun = run } else if codeRun == run { codeRun = 0 }
+                cursor = end
+                continue
+            }
+            if codeRun == 0, character == 60, let tag = SafeHTML.lexTag(line, at: cursor) {
+                if tag.name == "code" {
+                    htmlCode = !tag.isClosing
+                } else if !htmlCode, tag.name == "details" {
+                    if tag.isClosing { depth -= 1 } else if !tag.isSelfClosing { depth += 1 }
+                    if depth == 0 {
+                        let summary = summaryStart.flatMap { first in summaryEnd.map { source.substring(with: NSRange(location: first, length: $0 - first)) } } ?? ""
+                        let body = source.substring(with: NSRange(location: contentStart, length: cursor - contentStart))
+                        return (.init(summary: summary, content: body, isOpen: opener.attributes["open"] != nil), source.substring(from: tag.end))
+                    }
+                } else if !htmlCode, depth == 1, tag.name == "summary" {
+                    if !tag.isClosing, summaryStart == nil {
+                        summaryStart = tag.end
+                    } else if tag.isClosing, summaryStart != nil, summaryEnd == nil {
+                        summaryEnd = cursor
+                        contentStart = tag.end
+                    }
+                }
+                cursor = tag.end
+            } else {
+                cursor += 1
+            }
+        }
+        return nil
     }
 
     private static func block(lines: [String], startingAt start: Int, isOpen: Bool) -> (block: Block, nextIndex: Int) {

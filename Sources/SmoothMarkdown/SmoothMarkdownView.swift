@@ -192,7 +192,7 @@ public struct SmoothMarkdownView: View {
     }
 
     private var legacyBlockContent: some View {
-        ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
+        ForEach(Array(DetailsSyntax.sections(markdown, enableInlineHTML: enableHTML).enumerated()), id: \.offset) { _, section in
             detailsSection(section)
         }
     }
@@ -218,7 +218,7 @@ public struct SmoothMarkdownView: View {
             builderRegistry: builderRegistry, expansion: expansion,
             hostBuiltInPlugins: true, hostBuiltInArtifacts: useEnhancedComponents,
             preparsedDocument: streamDocument))
-        let details = DetailsSyntax.sections(markdown)
+        let details = DetailsSyntax.sections(markdown, enableInlineHTML: enableHTML)
         let summaryIDs = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
         var summaryIndex = 0
         var items: [ReaderBlockRangeDocument.Item] = []
@@ -425,6 +425,10 @@ public struct SmoothMarkdownView: View {
         return builderRegistry?.findBuilder(node) != nil
     }
 
+    private func hasCustomPluginBuilder(_ node: MarkdownPluginNode) -> Bool {
+        builderRegistry?.findBuilder(node) != nil
+    }
+
     private func extensionBuilder(_ node: MarkdownExtensionNode) -> (any MarkdownWidgetBuilder)? {
         builderRegistry?.findBuilder(node)
     }
@@ -455,7 +459,8 @@ public struct SmoothMarkdownView: View {
     }
 
     private func hasCustomExtension(in node: Markup) -> Bool {
-        InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins).contains { run in
+        InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
+                           hasCustomPluginBuilder: hasCustomPluginBuilder).contains { run in
             switch run {
             case let .math(latex): return extensionBuilder(.inlineMath(latex)) != nil
             case let .footnote(label): return extensionBuilder(.footnoteReference(label)) != nil
@@ -757,7 +762,7 @@ public struct SmoothMarkdownView: View {
         return AnyView(DetailsBlockView(details: details, summaryLabel: summaryLabel, styleSheet: styleSheet, summary: AnyView(Group {
             if let summaryNode { inlineView(summaryNode) }
         }), content: AnyView(VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-            ForEach(Array(DetailsSyntax.sections(details.content).enumerated()), id: \.offset) { _, section in
+            ForEach(Array(DetailsSyntax.sections(details.content, enableInlineHTML: enableHTML).enumerated()), id: \.offset) { _, section in
                 detailsSection(section)
             }
         })))
@@ -1280,6 +1285,8 @@ public struct SmoothMarkdownView: View {
         var bold = false
         var italic = false
         var strike = false
+        var highlighted = false
+        var script: MarkdownHTMLScript?
         var link: URL?
     }
 
@@ -1315,13 +1322,21 @@ public struct SmoothMarkdownView: View {
         case image(SafeHTML.ImageSpec)
         case math(String)
         case plugin(any InlineParserPlugin, InlinePluginMatch)
+        case details(DetailsSyntax.Block)
         case lineBreak
     }
 
     private func inlineView(_ node: Markup) -> AnyView {
         let runs = InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
-                                      hasCustomBuilder: builderRegistry == nil ? nil : { child in hasCustomBuilder(child) })
-        let hasCustom = runs.contains { if case .custom = $0 { return true }; return false }
+                                      hasCustomBuilder: builderRegistry == nil ? nil : { child in hasCustomBuilder(child) },
+                                      hasCustomPluginBuilder: hasCustomPluginBuilder)
+        let hasCustom = runs.contains { run in
+            if case .custom = run { return true }
+            if case let .plugin(plugin, match) = run {
+                return hasCustomPluginBuilder(MarkdownPluginNode(plugin: plugin, match: match))
+            }
+            return false
+        }
         #if os(iOS)
         if !hasCustom, runs.contains(where: { run in
             if case let .text(_, _, tags, _) = run { return tags.contains(where: { $0.name == "kbd" }) }
@@ -1339,6 +1354,7 @@ public struct SmoothMarkdownView: View {
         let hasFootnote = runs.contains { if case .footnote = $0 { return true }; return false }
         let hasMath = runs.contains { if case .math = $0 { return true }; return false }
         let hasPlugin = runs.contains { if case .plugin = $0 { return true }; return false }
+        let hasDetails = runs.contains { if case .details = $0 { return true }; return false }
         let hasCustomFootnote = runs.contains { run in
             if case let .footnote(label) = run {
                 return extensionBuilder(.footnoteReference(label)) != nil
@@ -1349,17 +1365,17 @@ public struct SmoothMarkdownView: View {
             if case let .text(value, _, tags, _) = run { return htmlStyleNode(value, tags: tags) != nil }
             return false
         }
-        if !hasImage && !hasFootnote && !hasMath && !hasPlugin && !hasCustom && !hasCustomHTMLStyle {
+        if !hasImage && !hasFootnote && !hasMath && !hasPlugin && !hasDetails && !hasCustom && !hasCustomHTMLStyle {
             return AnyView(inline(runs))
         }
-        if !hasImage && !hasMath && !hasPlugin && !hasCustom && !hasCustomFootnote && !hasCustomHTMLStyle {
+        if !hasImage && !hasMath && !hasPlugin && !hasDetails && !hasCustom && !hasCustomFootnote && !hasCustomHTMLStyle {
             var result = SwiftUI.Text("")
             for run in runs {
                 switch run {
                 case let .text(value, sourceStyle, tags, code):
                     result = result + segment(value, style: inlineStyle(sourceStyle), tags: tags, code: code)
                 case let .footnote(label): result = result + footnoteReference(label)
-                case .image, .math, .plugin, .custom: break
+                case .image, .math, .plugin, .custom, .details: break
                 }
             }
             return AnyView(result)
@@ -1377,6 +1393,7 @@ public struct SmoothMarkdownView: View {
                 pieces.append(.math(latex))
             case let .plugin(plugin, match):
                 pieces.append(.plugin(plugin, match))
+            case let .details(details, _): pieces.append(.details(details))
             case let .custom(node, style):
                 pieces.append(.custom(node, style))
             case let .text(value, sourceStyle, tags, code):
@@ -1416,6 +1433,9 @@ public struct SmoothMarkdownView: View {
                         .layoutValue(key: InlineMathKey.self, value: true)
                 case let .plugin(plugin, match):
                     pluginView(plugin, match).fixedSize()
+                case let .details(details):
+                    detailsSection(.details(details))
+                        .layoutValue(key: InlineBlockKey.self, value: true)
                 case .lineBreak:
                     Color.clear.frame(width: 0, height: 0)
                         .layoutValue(key: InlineBreakKey.self, value: true)
@@ -1425,7 +1445,7 @@ public struct SmoothMarkdownView: View {
     }
 
     private func inlineStyle(_ source: InlineContent.Style) -> InlineStyle {
-        InlineStyle(bold: source.bold, italic: source.italic, strike: source.strike, link: source.link)
+        InlineStyle(bold: source.bold, italic: source.italic, strike: source.strike, highlighted: source.highlighted, script: source.script, link: source.link)
     }
 
     private func footnoteReference(_ label: String) -> SwiftUI.Text {
@@ -1471,9 +1491,10 @@ public struct SmoothMarkdownView: View {
         var italic = style.italic
         var strike = style.strike
         var htmlUnderline = false
-        var htmlHighlight = false
+        let htmlSmall = enableHTML && tags.contains { $0.name == "small" }
+        var htmlHighlight = style.highlighted
         var htmlCode = false
-        let script = enableHTML ? MarkdownHTMLScript.active(in: tags) : nil
+        let script = style.script ?? (enableHTML ? MarkdownHTMLScript.active(in: tags) : nil)
         var htmlForeground: Color?
         var htmlBackground: Color?
         var htmlFontSize: CGFloat?
@@ -1505,7 +1526,7 @@ public struct SmoothMarkdownView: View {
             styleSheet.resolvedInlineStyle(bold: bold, italic: italic, strike: strike,
                                            link: link != nil, code: code || htmlCode,
                                            script: script),
-            underline: htmlUnderline, highlight: htmlHighlight)
+            underline: htmlUnderline, highlight: htmlHighlight, small: htmlSmall)
         var attributed = AttributedString(value)
         if let background = htmlBackground ?? inlineStyle.backgroundColor { attributed.backgroundColor = background }
         if let link { attributed.link = link }

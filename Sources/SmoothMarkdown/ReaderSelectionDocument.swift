@@ -15,6 +15,7 @@ struct ReaderSelectionDocument {
         var formula: String? = nil
         var keycap = false
         var htmlUnderline = false
+        var htmlSmall = false
         var highlighted = false
         var pluginAccent = false
         /// Rendered `[label]` from a Markdown `[^label]` reference.
@@ -268,10 +269,11 @@ struct ReaderSelectionDocument {
                     guard tags.allSatisfy({ $0.name == "kbd" }), !code else { return nil }
                     output.append(.init(text: value, style: style, code: false, keycap: true))
                 } else {
-                    guard tags.allSatisfy({ ["u", "ins", "mark"].contains($0.name) }) else { return nil }
+                    guard tags.allSatisfy({ ["u", "ins", "mark", "small"].contains($0.name) }) else { return nil }
                     output.append(.init(text: value, style: style, code: code,
                                         htmlUnderline: tags.contains { $0.name == "u" || $0.name == "ins" },
-                                        highlighted: tags.contains { $0.name == "mark" }))
+                                        htmlSmall: tags.contains { $0.name == "small" },
+                                        highlighted: style.highlighted || tags.contains { $0.name == "mark" }))
                 }
             case let .footnote(label):
                 output.append(.init(text: "[\(label)]", style: .init(), code: false,
@@ -288,7 +290,7 @@ struct ReaderSelectionDocument {
                 guard plugin is MentionPlugin || plugin is HashtagPlugin || plugin is EmojiPlugin else { return nil }
                 output.append(.init(text: match.text, style: .init(), code: false,
                                     pluginAccent: plugin is MentionPlugin || plugin is HashtagPlugin))
-            case .custom: return nil
+            case .custom, .details: return nil
             }
         }
         let keycapRunCount = output.filter(\.keycap).count

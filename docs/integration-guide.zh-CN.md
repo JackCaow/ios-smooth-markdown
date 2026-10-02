@@ -4,15 +4,14 @@
 
 ## 1 选择安装版本
 
-截至 2026-10-01：
+发布版本：`0.3.5`。
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 已发布版本 | SwiftPM `0.3.2`，或公共 CocoaPods `0.3.2` |
-| 最新增量和后台流式优化 | 固定 Git revision `043093bc1f38beac6832ec37b448f0f27eb3c7bf` |
-| CocoaPods Trunk | `0.3.2` 已进入公共 Specs；支持直接按 Pod 名安装 |
+| 稳定版本 | SwiftPM Exact Version `0.3.5`，或公共 CocoaPods `0.3.5` |
+| 团队与 CI 固定依赖 | 提交 `Package.resolved` 或 `Podfile.lock` |
 
-`0.3.1` 包含自有 Rust 解析器、独立 Core、分组配置和 Design Token，以及原生增量传输、后台调度和完成时序修复。新接入可直接使用 `0.3.2` tag；第 10 节保留同一实现的固定提交接入方式。
+`0.3.5` 包含原有自有 Rust 解析、后台流式调度与非滚动阅读器完整高度修复，并新增可选高亮、上下标语法、小字样式和列表内折叠块。默认解析规则与既有接口不变。
 
 项目地址：[ios-smooth-markdown](https://github.com/JackCaow/ios-smooth-markdown)。
 
@@ -25,14 +24,14 @@
 在 Xcode 选择 **File → Add Package Dependencies**：
 
 1. 地址填 `https://github.com/JackCaow/ios-smooth-markdown`。
-2. 需要确定版本时选择 Exact Version `0.3.2`。
+2. 需要确定版本时选择 Exact Version `0.3.5`。
 3. 将 **SmoothMarkdown** product 加到应用 target。
 4. 源码中 `import SmoothMarkdown`。
 
 Swift package 的依赖声明：
 
 ```swift
-.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.3.2")
+.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.3.5")
 ```
 
 应用 target 的 dependencies：
@@ -49,7 +48,7 @@ Swift package 的依赖声明：
 platform :ios, '17.0'
 
 target 'YourApp' do
-  pod 'SmoothMarkdown', '~> 0.3.2'
+  pod 'SmoothMarkdown', '~> 0.3.5'
 end
 ```
 
@@ -229,6 +228,14 @@ func makeArticlePlugins() throws -> ParserPluginRegistry {
 
 `ParserPluginRegistry` 扩展语法；`BuilderRegistry` 替换已解析节点的 UI。分组 API 使用 `MarkdownBuilders(nodes: …, code: …, image: …)` 传替换组件，代码和图片 builder 返回 `AnyView`。自定义视图可能打断完整文档的连续选择，需要自行提供语义文本或相应交互。Mermaid 支持已实现的语法子集，不等同于完整 Mermaid.js。
 
+### 可选排版扩展
+
+注册 `HighlightPlugin()`、`SuperscriptPlugin()`、`SubscriptPlugin()` 可识别 `==高亮==`、`x^2^`、`H~2~O`；这些插件不在默认 registry 中。数字下标仅支持单词内部形式，普通 GFM 删除线保持原义。使用样式表的 `highlightStyle`、`superscriptStyle`、`subscriptStyle` 定制。
+
+`enableHTML: true` 时支持 `<small>` 与段落、列表内的完整 `<details>`。`smallStyle` 配置小字；默认取当前配置字体的 80%。动态内联折叠块使用 SwiftUI 展开状态，因此不支持跨其动态正文的连续原生选区。代码中的 HTML 和扩展标记保留字面显示。
+
+完整语法边界见 [插件说明](inline-formatting-plugins.md) 与 [HTML 说明](html-readable-content.md)。
+
 ## 8 编辑器
 
 ```swift
@@ -271,14 +278,14 @@ Core 使用 Foundation 和随包提供的静态 Rust 解析器，无 SwiftUI、U
 CocoaPods 只安装 Core：
 
 ```ruby
-pod 'SmoothMarkdown/Core', '~> 0.3.2'
+pod 'SmoothMarkdown/Core', '~> 0.3.5'
 ```
 
 CocoaPods Core 的模块名是 `SmoothMarkdown`，代码应 `import SmoothMarkdown`；它与 SwiftPM 的独立 Core 模块导入名不同。
 
-## 10 接入最新固定源码提交
+## 10 历史固定源码提交示例
 
-需要固定到具体实现提交时，用以下 revision 替换第 2 节的版本声明。后台优化也已包含在 `0.3.1` tag 中。SwiftPM：
+新接入使用第 2 节的 `0.3.5` Exact Version，并提交锁文件。以下完整 SHA 是历史后台优化版本，仅用于说明 revision 安装方法；它不包含后续排版与扩展语法修复。SwiftPM：
 
 ```swift
 .package(
@@ -295,7 +302,7 @@ CocoaPods：
 pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :commit => '043093bc1f38beac6832ec37b448f0f27eb3c7bf'
 ```
 
-安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；一般 SwiftPM 接入可直接使用 `0.3.2` tag，后续升级继续按业务流程固定版本。
+安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；当前 SwiftPM 接入使用 `0.3.5` tag，后续升级继续按业务流程固定版本。
 
 ## 11 常见问题和验收
 

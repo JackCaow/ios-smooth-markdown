@@ -38,7 +38,14 @@ enum HTMLCodeLiteralSyntax {
                 }
                 return sourceText(for: part, bytes: bytes, lineStarts: lineStarts) ?? part.format()
             }.joined()
-            result.append(InlineCode(content))
+            // Keep the authored HTML span when replacing its inline children.
+            // Code rendering consumes `code`; source-aware projections must not
+            // reconstruct this node as a synthetic Markdown backtick span.
+            let last = close.map { children[$0] } ?? children.last!
+            let range = child.range.flatMap { first in last.range.map { first.lowerBound..<$0.upperBound } }
+            let original = range.flatMap { sourceText(in: $0, bytes: bytes, lineStarts: lineStarts) }
+                ?? children[index..<(end + (close == nil ? 0 : 1))].map { $0.format() }.joined()
+            result.append(InlineCode(content, range: range, source: original))
             index = end + (close == nil ? 0 : 1)
         }
         return changed ? node.withUncheckedChildren(result) : node
@@ -59,8 +66,12 @@ enum HTMLCodeLiteralSyntax {
     }
 
     private static func sourceText(for node: Markup, bytes: [UInt8], lineStarts: [Int]) -> String? {
-        guard let range = node.range,
-              let start = offset(range.lowerBound, bytes: bytes, lineStarts: lineStarts),
+        guard let range = node.range else { return nil }
+        return sourceText(in: range, bytes: bytes, lineStarts: lineStarts)
+    }
+
+    private static func sourceText(in range: Range<SourceLocation>, bytes: [UInt8], lineStarts: [Int]) -> String? {
+        guard let start = offset(range.lowerBound, bytes: bytes, lineStarts: lineStarts),
               let end = offset(range.upperBound, bytes: bytes, lineStarts: lineStarts),
               start <= end else { return nil }
         return String(decoding: bytes[start..<end], as: UTF8.self)

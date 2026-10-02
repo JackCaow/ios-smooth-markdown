@@ -275,7 +275,7 @@ struct ReaderWholeDocumentSelectionContainer: View {
 
     private var disclosureDefaults: [String: Bool] {
         let ids = projection.document.segments.filter { $0.kind == .detailsSummary }.map(\.id)
-        let blocks = DetailsSyntax.sections(sourceView.markdown).compactMap { section -> DetailsSyntax.Block? in
+        let blocks = DetailsSyntax.sections(sourceView.markdown, enableInlineHTML: sourceView.enableHTML).compactMap { section -> DetailsSyntax.Block? in
             if case let .details(block) = section { return block }
             return nil
         }
