@@ -175,13 +175,25 @@ public struct SmoothMarkdownView: View {
     }
 
     private var legacyRenderedBlocks: some View {
-        LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
-            ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
-                detailsSection(section)
+        Group {
+            if scrollable {
+                LazyVStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
+                    legacyBlockContent
+                }
+            } else {
+                VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
+                    legacyBlockContent
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(styleSheet.contentPadding)
+    }
+
+    private var legacyBlockContent: some View {
+        ForEach(Array(DetailsSyntax.sections(markdown).enumerated()), id: \.offset) { _, section in
+            detailsSection(section)
+        }
     }
 
     #if os(iOS)
