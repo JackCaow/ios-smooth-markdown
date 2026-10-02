@@ -8,11 +8,11 @@
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 已发布版本 | SwiftPM `0.3.1`，或公共 CocoaPods `0.3.1` |
+| 已发布版本 | SwiftPM `0.3.2`，或公共 CocoaPods `0.3.1` |
 | 最新增量和后台流式优化 | 固定 Git revision `043093bc1f38beac6832ec37b448f0f27eb3c7bf` |
 | CocoaPods Trunk | `0.3.1` 已进入公共 Specs；支持直接按 Pod 名安装 |
 
-`0.3.1` 包含自有 Rust 解析器、独立 Core、分组配置和 Design Token，以及原生增量传输、后台调度和完成时序修复。新接入可直接使用 `0.3.1` tag；第 10 节保留同一实现的固定提交接入方式。
+`0.3.1` 包含自有 Rust 解析器、独立 Core、分组配置和 Design Token，以及原生增量传输、后台调度和完成时序修复。新接入可直接使用 `0.3.2` tag；第 10 节保留同一实现的固定提交接入方式。
 
 项目地址：[ios-smooth-markdown](https://github.com/JackCaow/ios-smooth-markdown)。
 
@@ -25,14 +25,14 @@
 在 Xcode 选择 **File → Add Package Dependencies**：
 
 1. 地址填 `https://github.com/JackCaow/ios-smooth-markdown`。
-2. 需要确定版本时选择 Exact Version `0.3.1`。
+2. 需要确定版本时选择 Exact Version `0.3.2`。
 3. 将 **SmoothMarkdown** product 加到应用 target。
 4. 源码中 `import SmoothMarkdown`。
 
 Swift package 的依赖声明：
 
 ```swift
-.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.3.1")
+.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.3.2")
 ```
 
 应用 target 的 dependencies：
@@ -295,7 +295,7 @@ CocoaPods：
 pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :commit => '043093bc1f38beac6832ec37b448f0f27eb3c7bf'
 ```
 
-安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；一般接入可直接使用 `0.3.1` tag，后续升级继续按业务流程固定版本。
+安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；一般 SwiftPM 接入可直接使用 `0.3.2` tag，后续升级继续按业务流程固定版本。
 
 ## 11 常见问题和验收
 

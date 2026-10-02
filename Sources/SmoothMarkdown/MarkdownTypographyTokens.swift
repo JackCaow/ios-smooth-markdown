@@ -18,13 +18,18 @@ public struct MarkdownFontToken {
         let size = MarkdownTokenValidation.positive(self.size, fallback: 17)
         if let fontName { return .custom(fontName, size: size, relativeTo: role).weight(weight) }
         #if os(iOS)
-        let name = monospaced ? UIFont.monospacedSystemFont(ofSize: size, weight: uiWeight).fontName : UIFont.systemFont(ofSize: size, weight: uiWeight).fontName
-        return .custom(name, size: size, relativeTo: role)
+        return font(relativeTo: role, traits: UITraitCollection.current)
         #else
         return .system(size: size, weight: weight, design: monospaced ? .monospaced : .default)
         #endif
     }
     #if os(iOS)
+    /// The renderer supplies its SwiftUI environment traits rather than the process category.
+    func font(relativeTo role: Font.TextStyle, traits: UITraitCollection) -> Font {
+        if fontName != nil { return font(relativeTo: role) }
+        return .system(size: uiFont(textStyle: role, traits: traits).pointSize,
+                       weight: weight, design: monospaced ? .monospaced : .default)
+    }
     var uiWeight: UIFont.Weight {
         switch weight {
         case .ultraLight: .ultraLight

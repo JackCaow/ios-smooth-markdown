@@ -825,13 +825,13 @@ public struct SmoothMarkdownView: View {
                                             useEnhancedComponents: useEnhancedComponents)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph?.font(relativeTo: styleSheet.readerParagraphTextStyle) ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing())
+                    inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph.map { tokenFont($0, relativeTo: styleSheet.readerParagraphTextStyle) } ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing())
                         .multilineTextAlignment(alignment ?? .leading)
                         .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                         .markdownTextSelection(selectable)
                 }
                 #else
-                inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph?.font(relativeTo: styleSheet.readerParagraphTextStyle) ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing()).multilineTextAlignment(alignment ?? .leading)
+                inlineView(paragraph).font(styleSheet.designTokens.typography.paragraph.map { tokenFont($0, relativeTo: styleSheet.readerParagraphTextStyle) } ?? styleSheet.paragraphFont ?? .body).lineSpacing(tokenLineSpacing()).multilineTextAlignment(alignment ?? .leading)
                     .frame(maxWidth: .infinity, alignment: frameAlignment(alignment))
                     .markdownTextSelection(selectable)
                 #endif
@@ -905,12 +905,20 @@ public struct SmoothMarkdownView: View {
         #endif
     }
 
+    private func tokenFont(_ token: MarkdownFontToken, relativeTo role: Font.TextStyle) -> Font {
+        #if os(iOS)
+        return token.font(relativeTo: role, traits: MarkdownTypography.traits(for: dynamicTypeSize))
+        #else
+        return token.font(relativeTo: role)
+        #endif
+    }
+
     private func resolvedHeadingFont(_ level: Int) -> Font {
         let index = level - 1
         let semantic = styleSheet.readerHeadingTextStyles.indices.contains(index)
             ? styleSheet.readerHeadingTextStyles[index] : .headline
         if let tokens = styleSheet.designTokens.typography.headings, tokens.indices.contains(index) {
-            return tokens[index].font(relativeTo: semantic)
+            return tokenFont(tokens[index], relativeTo: semantic)
         }
         if let fonts = styleSheet.headingFonts, fonts.indices.contains(index) { return fonts[index] }
         return headingFont(level)
@@ -983,7 +991,7 @@ public struct SmoothMarkdownView: View {
                 HStack(alignment: .top, spacing: tokens.showIcon ? tokens.iconSpacing : 0) {
                     if tokens.showIcon {
                         Image(systemName: "text.quote")
-                            .font(tokens.iconTypography?.font(relativeTo: .body) ?? tokens.iconFont ?? .system(size: tokens.iconSize))
+                            .font(tokens.iconTypography.map { tokenFont($0, relativeTo: .body) } ?? tokens.iconFont ?? .system(size: tokens.iconSize))
                             .foregroundStyle(tokens.iconColor ?? Color.accentColor.opacity(tokens.iconAlpha))
                             .accessibilityHidden(true)
                     }
@@ -1037,7 +1045,8 @@ public struct SmoothMarkdownView: View {
                             SwiftUI.Text(listMarker(item, index: index, start: start))
                                 .font(styleSheet.listBulletFont)
                                 .foregroundColor(styleSheet.listBulletColor)
-                                .frame(width: styleSheet.listIndent, alignment: .leading)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .frame(minWidth: styleSheet.listIndent, alignment: .leading)
                             VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
                                 ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
                                     block(blockNode)

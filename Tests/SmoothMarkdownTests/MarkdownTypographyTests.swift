@@ -5,6 +5,61 @@ import XCTest
 #if os(iOS)
 @MainActor
 final class MarkdownTypographyTests: XCTestCase {
+
+    func testSystemTokenFontsUseTheSuppliedEnvironmentTraitsForEachRole() {
+        let normal = MarkdownTypography.traits(for: .large)
+        let accessible = MarkdownTypography.traits(for: .accessibility3)
+        for role: Font.TextStyle in [.body, .title, .footnote] {
+            for monospaced in [false, true] {
+                let token = MarkdownFontToken(size: 17, weight: .semibold, monospaced: monospaced)
+                let uiNormal = token.uiFont(textStyle: role, traits: normal)
+                let uiAccessible = token.uiFont(textStyle: role, traits: accessible)
+                XCTAssertGreaterThan(uiAccessible.pointSize, uiNormal.pointSize)
+                XCTAssertEqual(token.font(relativeTo: role, traits: normal), .system(size: uiNormal.pointSize, weight: .semibold, design: monospaced ? .monospaced : .default))
+                XCTAssertEqual(token.font(relativeTo: role, traits: accessible), .system(size: uiAccessible.pointSize, weight: .semibold, design: monospaced ? .monospaced : .default))
+                XCTAssertNotEqual(token.font(relativeTo: role, traits: normal), token.font(relativeTo: role, traits: accessible))
+            }
+        }
+        let custom = MarkdownFontToken(fontName: "Helvetica", size: 17)
+        XCTAssertEqual(custom.font(relativeTo: .body, traits: accessible), custom.font(relativeTo: .body))
+    }
+
+    func testPublicSwiftUIReaderSystemTokensRespectLocalDynamicTypeOverride() {
+        var sheet = MarkdownStyleSheet.light()
+        sheet.contentPadding = 0
+        sheet.designTokens.typography.paragraph = .init(size: 17)
+        sheet.designTokens.typography.headings = (0..<6).map { _ in .init(size: 22, weight: .semibold) }
+        for source in ["Body", "# Heading"] {
+            func height(_ size: DynamicTypeSize) -> CGFloat {
+                let view = SmoothMarkdownView(markdown: source, styleSheet: sheet, selectable: false,
+                    enableCrossBlockSelection: false, scrollable: false).environment(\.dynamicTypeSize, size)
+                let host = UIHostingController(rootView: view)
+                return host.sizeThatFits(in: CGSize(width: 1000, height: 1000)).height
+            }
+            XCTAssertGreaterThan(height(.accessibility3), height(.large) * 1.5, source)
+        }
+    }
+
+    func testOrderedListMarkersKeepOneLineAtAccessibilitySizes() {
+        var sheet = MarkdownStyleSheet.light()
+        sheet.contentPadding = 0
+        sheet.listIndent = 16
+        for size: DynamicTypeSize in [.large, .accessibility2, .accessibility3] {
+            func height(_ marker: Int) -> CGFloat {
+                let view = SmoothMarkdownView(markdown: "\(marker). Item", styleSheet: sheet,
+                    selectable: false, enableCrossBlockSelection: false, scrollable: false)
+                    .environment(\.dynamicTypeSize, size)
+                let host = UIHostingController(rootView: view)
+                return host.sizeThatFits(in: CGSize(width: 1000, height: 1000)).height
+            }
+            let singleDigit = height(1)
+            for marker in [14, 100, 999_999_999] {
+                XCTAssertEqual(height(marker), singleDigit, accuracy: 1,
+                    "Marker \(marker) must not add wrapped marker lines at \(size)")
+            }
+        }
+    }
+
     func testSemanticReaderFontsFollowDynamicType() {
         let normal = MarkdownTypography.traits(for: .large)
         let accessible = MarkdownTypography.traits(for: .accessibility2)

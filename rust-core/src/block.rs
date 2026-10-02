@@ -17,6 +17,28 @@ impl Line {
         self.text.bytes().all(horizontal)
     }
 }
+// A completed ordinary escaped bracket on the opener line is prose. An
+// explicit math close, a standalone opener, and an unfinished payload remain
+// math, so streaming can keep its existing mutable tail contract.
+fn backslash_math_open(text: &str) -> bool {
+    let body = text.trim_start();
+    if !body.starts_with(r"\[") { return false; }
+    let payload = &body[2..];
+    if inline::math_closing(payload, r"\]").is_some() { return true; }
+    let mut depth = 0usize;
+    let mut escaped = false;
+    for ch in payload.chars() {
+        if escaped { escaped = false; continue; }
+        match ch {
+            '\\' => escaped = true,
+            '[' => depth += 1,
+            ']' if depth == 0 => return false,
+            ']' => depth -= 1,
+            _ => {}
+        }
+    }
+    true
+}
 fn horizontal(c: u8) -> bool {
     c == b' ' || c == b'\t'
 }
@@ -783,22 +805,40 @@ impl Scanner<'_> {
                     continue;
                 }
             }
-            if self.options.extensions && text.trim_start().starts_with("$$") {
+            if self.options.extensions && indent(text) < 4
+                && (text.trim_start().starts_with("$$") || backslash_math_open(text))
+            {
+                let closing = if text.trim_start().starts_with("$$") { "$$" } else { r"\]" };
                 index += 1;
-                if !text.trim_start()[2..].contains("$$") {
-                    while index < lines.len() && !lines[index].text.contains("$$") {
-                        index += 1
-                    }
-                    if index < lines.len() {
-                        index += 1
-                    }
+                let mut body = lines[first].text.trim_start()[2..].to_owned();
+                // Keep an unclosed streaming block in the mutable tail.
+                while inline::math_closing(&body, closing).is_none() && index < lines.len() {
+                    body.push('\n');
+                    body.push_str(&lines[index].text);
+                    index += 1;
                 }
                 let mut node = self.node(Kind::BlockMath, lines, first, index);
-                let mut body = lines[first].text.trim_start()[2..].to_owned();
-                for line in &lines[first+1..index] { body.push('\n'); body.push_str(&line.text); }
-                if let Some(closing) = body.find("$$") { body.truncate(closing); }
+                let close = inline::math_closing(&body, closing);
+                let mut trailing = None;
+                if closing == r"\]" && close.is_some() {
+                    let last = &lines[index - 1];
+                    let prefix = if index == first + 1 { last.text.len() - last.text.trim_start().len() + 2 } else { 0 };
+                    let end = prefix + inline::math_closing(&last.text[prefix..], closing).unwrap() + 2;
+                    let source_end = (last.start + utf16_len(&last.text[..end])).saturating_sub(last.virtual_indent);
+                    node.source = self.spelling(node.span.start, source_end);
+                    node.span.len = source_end.saturating_sub(node.span.start);
+                    if !last.text[end..].trim().is_empty() {
+                        let line = Line { text: last.text[end..].to_owned(), raw: last.raw[end..].to_owned(),
+                            start: source_end, end: last.end, projected: last.projected, lazy: false, virtual_indent: 0 };
+                        let mut paragraph = Node::new(Kind::Paragraph, self.spelling(source_end, last.end), source_end, last.end - source_end);
+                        paragraph.children = self.paragraph(&[line], references, false);
+                        trailing = Some(paragraph);
+                    }
+                }
+                if let Some(end) = close { body.truncate(end); }
                 node.literal = Some(body.trim().to_owned());
                 result.push(node);
+                if let Some(paragraph) = trailing { result.push(paragraph); }
                 continue;
             }
             if let (Some((level, prefix, body)), _) = (heading(text), ()) {
@@ -936,7 +976,7 @@ impl Scanner<'_> {
             while index < lines.len()
                 && !lines[index].blank()
                 && !(self.options.extensions &&
-                    (lines[index].text.trim_start().starts_with("$$") || footnote(&lines[index].text).is_some()))
+                    ((indent(&lines[index].text) < 4 && (lines[index].text.trim_start().starts_with("$$") || backslash_math_open(&lines[index].text))) || footnote(&lines[index].text).is_some()))
                 && (lines[index].lazy
                     || (setext(&lines[index].text).is_none() && !self.interrupt(lines, index)))
             {

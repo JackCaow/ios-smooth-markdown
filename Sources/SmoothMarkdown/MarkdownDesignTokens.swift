@@ -152,6 +152,14 @@ public struct MarkdownSyntaxColors {
     public var comment: Color
     public var number: Color
     public var literal: Color
+    /// Optional accents inherit the code foreground when unset. Existing palette colors are preserved.
+    public var type: Color? = nil
+    public var function: Color? = nil
+    public var property: Color? = nil
+    public var `operator`: Color? = nil
+    public var punctuation: Color? = nil
+    public var diffAdd: Color? = nil
+    public var diffRemove: Color? = nil
 
     public init(
         keyword: Color = .purple,

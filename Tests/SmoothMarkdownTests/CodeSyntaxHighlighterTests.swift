@@ -40,4 +40,17 @@ final class CodeSyntaxHighlighterTests: XCTestCase {
         XCTAssertEqual(block?.code, "let n = 1\n")
         _ = SmoothMarkdownView(markdown: "```swift\nlet n = 1\n```", codeBlockOptions: .init(showCopyButton: false), onCodeCopy: { _, _ in })
     }
+    func testAllExistingLiteralsKeepTheirConfiguredColor() {
+        let source = "true false null nil None True False undefined"
+        let colors = MarkdownSyntaxColors(keyword: .red, literal: .yellow)
+        for language in ["javascript", "typescript", "python"] {
+            let tokens = CodeSyntaxHighlighter.tokenize(source, language: language)
+            XCTAssertEqual(tokens.filter { $0.kind == .literal }.map(\.text), source.split(separator: " ").map(String.init))
+            let attributed = CodeSyntaxHighlighter.attributed(source, language: language, dark: false, enabled: true, colors: colors)
+            XCTAssertEqual(String(attributed.characters), source)
+            let undefined = attributed.range(of: "undefined")!
+            XCTAssertEqual(attributed[undefined].foregroundColor, .yellow)
+        }
+    }
+
 }

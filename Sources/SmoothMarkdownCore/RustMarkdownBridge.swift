@@ -23,13 +23,13 @@ enum RustMarkdownBridge {
         return false
         #endif
     }
-    static func parse(_ source: String, enableGFM: Bool) -> NativeMarkdownNode? {
+    static func parse(_ source: String, enableGFM: Bool, enableExtensions: Bool = true) -> NativeMarkdownNode? {
         #if canImport(CSmoothMarkdownRust)
         guard isAvailable else { return nil }
         let units = Array(source.utf16)
         var output = SmrBuffer(data: nil, len: 0, owner: nil)
         let status = units.withUnsafeBufferPointer { input in
-            smr_parse_utf16(input.baseAddress, input.count, (enableGFM ? 1 : 0) | 2, &output)
+            smr_parse_utf16(input.baseAddress, input.count, (enableGFM ? 1 : 0) | (enableExtensions ? 2 : 0), &output)
         }
         defer { smr_buffer_free(&output) }
         guard status == 0, let pointer = output.data, output.len <= 64 * 1024 * 1024 else { return nil }
