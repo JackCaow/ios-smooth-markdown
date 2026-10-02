@@ -33,3 +33,7 @@ Keep one event handler per action in the new API. The old callback aliases may i
 Registry mutations are observable; remove workarounds that recreate instances solely to refresh readers. Invalid visual values are normalized at consumption. Update old tests that expected a crash for negative/NaN dimensions to assert the safe resolved value instead.
 
 See the [public library contract](public-library-contract.md) for precedence, syntax, module boundaries and release gates.
+
+## Mermaid graph additions
+
+`MermaidKind` adds `gitGraph` and `mindmap`; callers with exhaustive switches must handle these cases. `MarkdownMermaidTokens` preserves its existing initializer and adds mutable `edgeRouting`, `cornerRadius`, `strokeWidth`, `arrowSize` and `labelPadding` properties. Existing callers receive rounded graph edges by default. No external package dependency is introduced.

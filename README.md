@@ -8,11 +8,11 @@ The library is under active development. It supports common Markdown and GFM con
 
 Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. The library-owned Rust parser produces a Swift AST through a C bridge; SVG and math rendering use Apple frameworks. The static parser binary is included, so app developers do not need Rust or Cargo.
 
-In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.3.5** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.4.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.3.5")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.4.0")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -24,12 +24,12 @@ targets: [
 Add this to your `Podfile`, then run `pod install --repo-update`:
 
 ```ruby
-pod 'SmoothMarkdown', '~> 0.3.5'
+pod 'SmoothMarkdown', '~> 0.4.0'
 ```
 
-The `Demo` app is for exploration and is not required by the package. If your network cannot access the default CocoaPods CDN, use the official Git Specs source: `source 'https://github.com/CocoaPods/Specs.git'`. See the [release verification](docs/cocoapods-release-0.3.5.md).
+The `Demo` app is for exploration and is not required by the package. If your network cannot access the default CocoaPods CDN, use the official Git Specs source: `source 'https://github.com/CocoaPods/Specs.git'`. See the [release verification](docs/cocoapods-release-0.4.0.md).
 
-For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use `pod 'SmoothMarkdown/Core', '~> 0.3.5'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use `pod 'SmoothMarkdown/Core', '~> 0.4.0'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
 
 ### SVG and math
 
@@ -188,3 +188,5 @@ Licensed under [MIT](LICENSE).
 Eligible `StreamMarkdownView` streams reuse committed native AST and Markup blocks, share each published parse with the visible/selection projection, and retain stable block view identity. Plugins, formulas/footnotes, enabled HTML and details keep their full-document compatibility path; references invalidate earlier blocks. Large single containers may see no improvement. Eligible streams parse and decode on a serial background worker. Pending updates coalesce complete source prefixes; the final prefix is published before `onComplete`. Native AST state advances even when an intermediate UI update is skipped. Markup adaptation and UI publication remain on the main thread. Compatibility paths still run on the UI thread to preserve plugin behavior.
 
 See [same-input parser measurements](benchmarks/README.md) and [raw evidence](benchmarks/evidence/ios-stream-parser-performance.json). Host parse timings exclude SwiftUI layout/drawing and do not establish device frame-rate improvement.
+
+Version `0.4.0` repairs bounded Mermaid viewports, centered graph canvases, separated relationship ports, rounded/curved routes and labels. It adds basic native Git histories and mindmaps; see the [syntax reference](docs/reference.md) and [API migration notes](docs/public-api-migration.md). Existing Mermaid initializer signatures remain available.

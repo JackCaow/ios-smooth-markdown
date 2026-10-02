@@ -223,6 +223,10 @@ public extension MarkdownMermaidTokens {
         var value = self
         value.outerPadding = MarkdownTokenValidation.insets(outerPadding)
         value.maxHeight = MarkdownTokenValidation.positive(maxHeight, fallback: 420)
+        value.cornerRadius = MarkdownTokenValidation.dimension(cornerRadius)
+        value.strokeWidth = MarkdownTokenValidation.positive(strokeWidth, fallback: 1.5)
+        value.arrowSize = MarkdownTokenValidation.positive(arrowSize, fallback: 10)
+        value.labelPadding = MarkdownTokenValidation.dimension(labelPadding)
         return value
     }
 }
