@@ -71,10 +71,16 @@ private struct MarkdownMermaidFence: View {
     let theme: MermaidTheme?
     let onNodeTap: ((String) -> Void)?
     @Environment(\.markdownDesignTokens) private var tokens
+    @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
     var body: some View {
-        MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap, style: tokens.mermaid)
-            .frame(maxHeight: tokens.mermaid.maxHeight)
-            .padding(tokens.mermaid.outerPadding)
+        let contentHeight = max(MermaidLayout.compute(diagram).size.height, 100) * max(1, diagramScale)
+        ScrollView([.horizontal, .vertical]) {
+            MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap,
+                               scrollable: false, style: tokens.mermaid)
+        }
+        .frame(height: min(contentHeight, tokens.mermaid.maxHeight))
+        .clipped()
+        .padding(tokens.mermaid.outerPadding)
     }
 }
 

@@ -6,6 +6,39 @@ import XCTest
 
 @available(iOS 17.0, *)
 final class ReaderDocumentSelectionHostTests: XCTestCase {
+    @MainActor
+    func testHeadingMermaidAndParagraphReserveAttachmentBaselineGeometry() throws {
+        let source = "# Heading before diagram\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\nParagraph after diagram."
+        let reader = SmoothMarkdownView(markdown: source, plugins: .builtIns(), selectable: true)
+        let candidate = try XCTUnwrap(reader.wholeDocumentSelection)
+        let attachment = try XCTUnwrap(candidate.projection.attachments.first)
+        let renderer = ReaderSelectionTextView(document: candidate.selection, styleSheet: .light(),
+            onLinkTap: nil, onTextLongPress: nil, selectable: true, onCharacterTap: nil)
+        let styled = renderer.attributedContent(traits: UITraitCollection(preferredContentSizeCategory: .large)).text
+        for height: CGFloat in [60, 180, 400] {
+            let text = ReaderDocumentSelectionTextView()
+            let card = UIView()
+            XCTAssertTrue(text.apply(candidate.projection, availableWidth: 300,
+                measuredAttachments: [attachment.id: CGSize(width: 300, height: height)],
+                hostedViews: [attachment.id: card], styledText: styled))
+            text.frame = CGRect(x: 0, y: 0, width: 300, height: 1000)
+            text.layoutIfNeeded()
+            let manager = text.layoutManager
+            let glyph = manager.glyphIndexForCharacter(at: attachment.range.location)
+            let line = manager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            let location = manager.location(forGlyphAt: glyph)
+            let heading = try XCTUnwrap(candidate.projection.document.segments.first)
+            let paragraph = try XCTUnwrap(candidate.projection.document.segments.last)
+            let headingRect = manager.boundingRect(forGlyphRange: manager.glyphRange(forCharacterRange: heading.range, actualCharacterRange: nil), in: text.textContainer)
+            let paragraphRect = manager.boundingRect(forGlyphRange: manager.glyphRange(forCharacterRange: paragraph.range, actualCharacterRange: nil), in: text.textContainer)
+            print("Attachment geometry height=\(height) card=\(card.frame) line=\(line) location=\(location) heading=\(headingRect) paragraph=\(paragraphRect)")
+            XCTAssertEqual(card.frame.minY, line.minY + location.y - height, accuracy: 0.5,
+                "Hosted block top must use the attachment baseline, not the line's glyph bounding box")
+            XCTAssertGreaterThanOrEqual(card.frame.minY, headingRect.maxY)
+            XCTAssertLessThanOrEqual(card.frame.maxY, paragraphRect.minY)
+        }
+    }
+
     func testInlineMathDetailsAndFootnoteShareContinuousHostAndCurrentCopyState() throws {
         let source = try String(contentsOf: XCTUnwrap(Bundle.module.url(
             forResource: "ReaderRichHost", withExtension: "md")), encoding: .utf8)
