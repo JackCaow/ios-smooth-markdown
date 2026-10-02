@@ -96,3 +96,14 @@ fn nested_array_on_opening_line_remains_math_closed_or_streaming() {
         assert_eq!(root.children[0].literal.as_deref(), Some(literal));
     }
 }
+
+#[test]
+fn indented_math_delimiters_remain_code() {
+    let continued = parse("prose\n    \\[x\\]", Options::default());
+    assert_eq!(continued.children.len(), 1);
+    assert_eq!(continued.children[0].kind, Kind::Paragraph);
+    for source in ["    \\[\\]\n", "\t\\[x\\]", "    $$x$$"] {
+        let root = parse(source, Options::default());
+        assert_eq!(root.children[0].kind, Kind::IndentedCode);
+    }
+}

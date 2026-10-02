@@ -1045,7 +1045,8 @@ public struct SmoothMarkdownView: View {
                             SwiftUI.Text(listMarker(item, index: index, start: start))
                                 .font(styleSheet.listBulletFont)
                                 .foregroundColor(styleSheet.listBulletColor)
-                                .frame(width: styleSheet.listIndent, alignment: .leading)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .frame(minWidth: styleSheet.listIndent, alignment: .leading)
                             VStack(alignment: .leading, spacing: styleSheet.listSpacing) {
                                 ForEach(Array(item.children.enumerated()), id: \.offset) { _, blockNode in
                                     block(blockNode)

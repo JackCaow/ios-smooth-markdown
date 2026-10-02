@@ -148,7 +148,7 @@ public struct NativeMarkdownASTParser {
                 continue
             }
             let trimmed = text.trimmingCharacters(in: .whitespaces)
-            if enableNativeExtensions, trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) {
+            if enableNativeExtensions, indentation(text) < 4, trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) {
                 let closing = trimmed.hasPrefix("$$") ? "$$" : "\\]"
                 var body = String(trimmed.dropFirst(2))
                 index += 1
@@ -268,7 +268,7 @@ public struct NativeMarkdownASTParser {
             }
             index += 1
             while index < lines.count, !lines[index].isBlank,
-                  !(enableNativeExtensions && (lines[index].text.trimmingCharacters(in: .whitespaces).hasPrefix("$$") || backslashMathOpen(lines[index].text.trimmingCharacters(in: .whitespaces)))),
+                  !(enableNativeExtensions && indentation(lines[index].text) < 4 && (lines[index].text.trimmingCharacters(in: .whitespaces).hasPrefix("$$") || backslashMathOpen(lines[index].text.trimmingCharacters(in: .whitespaces)))),
                   (lines[index].lazyContinuation ||
                    (setextLevel(lines[index].text) == nil &&
                     !interruptsParagraph(at: index, lines: lines))) { index += 1 }

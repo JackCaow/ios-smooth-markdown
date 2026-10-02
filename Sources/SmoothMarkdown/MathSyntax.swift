@@ -64,7 +64,10 @@ enum MathSyntax {
                 index += 1
                 continue
             }
-            guard trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) else {
+            let indentation = line.prefix { $0 == " " || $0 == "\t" }.reduce(0) { width, ch in
+                ch == "\t" ? width + 4 - width % 4 : width + 1
+            }
+            guard indentation < 4, trimmed.hasPrefix("$$") || backslashMathOpen(trimmed) else {
                 ordinary.append(line)
                 index += 1
                 continue

@@ -19,7 +19,9 @@ final class MarkdownParseCache {
     private let lock = NSLock()
     private let maxSize: Int
     private struct Key: Hashable {
-        let source: String
+        // String equality canonicalizes Unicode; source identity must retain
+        // the exact UTF-16 units used by node literals and source ranges.
+        let source: [UInt16]
         let enableHTML: Bool
         var sharedExtensions = false
         var pluginIdentity: ObjectIdentifier? = nil
@@ -41,7 +43,7 @@ final class MarkdownParseCache {
     func parse(_ source: String, enableHTML: Bool = false) -> Document {
         lock.lock()
         defer { lock.unlock() }
-        let key = Key(source: source, enableHTML: enableHTML)
+        let key = Key(source: Array(source.utf16), enableHTML: enableHTML)
         if let document = documents[key] {
             hitCount += 1
             usage.removeAll { $0 == key }
@@ -62,7 +64,7 @@ final class MarkdownParseCache {
     /// Host plugin callbacks execute outside the cache lock because they may
     /// query library state. Cache identity includes the live registry revision.
     func parseShared(_ source: String, plugins: ParserPluginRegistry?, enableHTML: Bool) -> Document? {
-        let key = Key(source: source, enableHTML: enableHTML, sharedExtensions: true,
+        let key = Key(source: Array(source.utf16), enableHTML: enableHTML, sharedExtensions: true,
                       pluginIdentity: plugins.map(ObjectIdentifier.init), pluginRevision: plugins?.revision ?? 0)
         lock.lock()
         if let document = documents[key] {

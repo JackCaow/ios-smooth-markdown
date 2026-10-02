@@ -40,6 +40,26 @@ final class MarkdownTypographyTests: XCTestCase {
         }
     }
 
+    func testOrderedListMarkersKeepOneLineAtAccessibilitySizes() {
+        var sheet = MarkdownStyleSheet.light()
+        sheet.contentPadding = 0
+        sheet.listIndent = 16
+        for size: DynamicTypeSize in [.large, .accessibility2, .accessibility3] {
+            func height(_ marker: Int) -> CGFloat {
+                let view = SmoothMarkdownView(markdown: "\(marker). Item", styleSheet: sheet,
+                    selectable: false, enableCrossBlockSelection: false, scrollable: false)
+                    .environment(\.dynamicTypeSize, size)
+                let host = UIHostingController(rootView: view)
+                return host.sizeThatFits(in: CGSize(width: 1000, height: 1000)).height
+            }
+            let singleDigit = height(1)
+            for marker in [14, 100, 999_999_999] {
+                XCTAssertEqual(height(marker), singleDigit, accuracy: 1,
+                    "Marker \(marker) must not add wrapped marker lines at \(size)")
+            }
+        }
+    }
+
     func testSemanticReaderFontsFollowDynamicType() {
         let normal = MarkdownTypography.traits(for: .large)
         let accessible = MarkdownTypography.traits(for: .accessibility2)

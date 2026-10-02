@@ -805,7 +805,7 @@ impl Scanner<'_> {
                     continue;
                 }
             }
-            if self.options.extensions
+            if self.options.extensions && indent(text) < 4
                 && (text.trim_start().starts_with("$$") || backslash_math_open(text))
             {
                 let closing = if text.trim_start().starts_with("$$") { "$$" } else { r"\]" };
@@ -976,7 +976,7 @@ impl Scanner<'_> {
             while index < lines.len()
                 && !lines[index].blank()
                 && !(self.options.extensions &&
-                    (lines[index].text.trim_start().starts_with("$$") || backslash_math_open(&lines[index].text) || footnote(&lines[index].text).is_some()))
+                    ((indent(&lines[index].text) < 4 && (lines[index].text.trim_start().starts_with("$$") || backslash_math_open(&lines[index].text))) || footnote(&lines[index].text).is_some()))
                 && (lines[index].lazy
                     || (setext(&lines[index].text).is_none() && !self.interrupt(lines, index)))
             {

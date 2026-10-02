@@ -39,6 +39,15 @@ final class BackslashMathTests: XCTestCase {
         XCTAssertEqual(MathSyntax.sections("```\n\\[x\\]\n```", useNativeProjection: false), [.markdown("```\n\\[x\\]\n```")])
     }
 
+    func testIndentedMathSourceRemainsCodeInNativeAndFallbackReaderProjection() {
+        for source in ["    \\[\\]\n", "\t\\[x\\]", "    $$x$$"] {
+            XCTAssertEqual(MarkdownCoreParser().parse(source).children[0].kind, .indentedCode)
+            for native in [true, false] {
+                XCTAssertEqual(MathSyntax.sections(source, useNativeProjection: native), [.markdown(source)])
+            }
+        }
+    }
+
     func testDisplayLiteralAndTrailingProseKeepSeparateSourceRanges() {
         for source in [#"\[x\] trailing"#, "\\[\nx\n\\] trailing"] {
             let nodes = MarkdownCoreParser().parse(source).children
