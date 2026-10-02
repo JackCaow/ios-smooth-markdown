@@ -15,11 +15,13 @@ extension MermaidDiagram {
         case .kanban: "Kanban board"
         case .radar: "Radar chart"
         case .xyChart: "XY chart"
+        case .gitGraph: "Git commit graph"
+        case .mindmap: "Mind map"
         }
         var parts = [type]
         if let title, !title.isEmpty { parts.append(title) }
         switch kind {
-        case .flowchart, .sequence, .classDiagram, .stateDiagram, .erDiagram:
+        case .flowchart, .sequence, .classDiagram, .stateDiagram, .erDiagram, .gitGraph, .mindmap:
             if !subgraphs.isEmpty { parts.append("Groups: \(spokenList(subgraphs.map(\.label)))") }
             let names = nodes.filter { $0.shape != .stateStart && $0.shape != .stateEnd }
                 .map(\.label).filter { !$0.isEmpty }

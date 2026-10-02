@@ -10,6 +10,7 @@ public struct InteractiveMermaidDiagramView: View {
     public let minScale: CGFloat
     public let maxScale: CGFloat
     public let onNodeTap: ((String) -> Void)?
+    @Environment(\.markdownDesignTokens) private var designTokens
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
 
     public init(diagram: MermaidDiagram, theme: MermaidTheme? = nil,
@@ -23,11 +24,12 @@ public struct InteractiveMermaidDiagramView: View {
     }
 
     public var body: some View {
-        let layout = MermaidLayout.compute(diagram)
+        let style = designTokens.mermaid.normalized()
+        let layout = MermaidLayout.compute(diagram, style: style)
         let scale = max(1, diagramScale)
         let size = CGSize(width: max(layout.size.width, 180) * scale,
                           height: max(layout.size.height, 100) * scale)
-        MermaidZoomHost(diagram: diagram, theme: theme, onNodeTap: onNodeTap,
+        MermaidZoomHost(diagram: diagram, theme: theme, style: style, onNodeTap: onNodeTap,
                         layout: layout, contentScale: scale, contentSize: size,
                         minScale: minScale, maxScale: maxScale)
             .accessibilityIdentifier("mermaid-interactive-viewport")
@@ -37,6 +39,7 @@ public struct InteractiveMermaidDiagramView: View {
 private struct MermaidZoomHost: UIViewControllerRepresentable {
     let diagram: MermaidDiagram
     let theme: MermaidTheme?
+    let style: MarkdownMermaidTokens
     let onNodeTap: ((String) -> Void)?
     let layout: MermaidLayoutResult
     let contentScale: CGFloat
@@ -63,7 +66,7 @@ private final class MermaidZoomController: UIViewController, UIScrollViewDelegat
     init(_ host: MermaidZoomHost) {
         self.host = host
         hostingController = UIHostingController(rootView: MermaidDiagramView(
-            diagram: host.diagram, theme: host.theme, onNodeTap: host.onNodeTap, scrollable: false))
+            diagram: host.diagram, theme: host.theme, onNodeTap: host.onNodeTap, scrollable: false, style: host.style))
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -119,7 +122,7 @@ private final class MermaidZoomController: UIViewController, UIScrollViewDelegat
             host.minScale != next.minScale || host.maxScale != next.maxScale
         host = next
         hostingController.rootView = MermaidDiagramView(
-            diagram: next.diagram, theme: next.theme, onNodeTap: next.onNodeTap, scrollable: false)
+            diagram: next.diagram, theme: next.theme, onNodeTap: next.onNodeTap, scrollable: false, style: next.style)
         if shouldFit {
             scrollView.setZoomScale(1, animated: false)
             hostingController.view.frame = CGRect(origin: .zero, size: next.contentSize)

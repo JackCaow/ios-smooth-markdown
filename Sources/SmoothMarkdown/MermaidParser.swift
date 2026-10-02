@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart, classDiagram, stateDiagram, erDiagram }
+public enum MermaidKind: Equatable { case flowchart, sequence, pie, timeline, gantt, kanban, radar, xyChart, classDiagram, stateDiagram, erDiagram, gitGraph, mindmap }
 public enum MermaidDirection: Equatable { case topToBottom, bottomToTop, leftToRight, rightToLeft }
 public enum MermaidShape: Equatable {
     case rectangle, rounded, stadium, diamond, hexagon, circle, subroutine, cylinder, asymmetric
@@ -176,9 +176,13 @@ public enum MermaidParser {
             return flowchart(Array(lines.dropFirst()), direction: direction)
         }
         if header.lowercased() == "sequencediagram" { return sequence(Array(lines.dropFirst())) }
-        if header.lowercased() == "pie" || header.lowercased() == "pie showdata" {
-            return pie(Array(lines.dropFirst()), showData: header.lowercased().contains("showdata"))
+        if let match = RegexCapture.first(#"^pie(?:\s+(showData))?(?:\s+title\s+(.+))?$"#, in: header, options: [.caseInsensitive]) {
+            var body = Array(lines.dropFirst())
+            if !match[2].isEmpty { body.insert("title " + match[2], at: 0) }
+            return pie(body, showData: !match[1].isEmpty)
         }
+        if header.lowercased().hasPrefix("gitgraph") { return MermaidNativeTreeParser.gitGraph(rawLines) }
+        if header.lowercased() == "mindmap" { return MermaidNativeTreeParser.mindmap(rawLines) }
         if header.lowercased() == "timeline" { return timeline(Array(lines.dropFirst())) }
         if header.lowercased() == "gantt" { return MermaidExtendedParser.gantt(lines) }
         if header.lowercased() == "kanban" { return MermaidExtendedParser.kanban(rawLines) }
@@ -354,17 +358,19 @@ public enum MermaidParser {
         RegexCapture.first(#"^([\p{L}_][\p{L}\p{N}_]*)"#, in: source)?[1]
     }
 
-    private static func sequence(_ lines: [String]) -> MermaidDiagram {
+    private static func sequence(_ lines: [String]) -> MermaidDiagram? {
+        guard lines.count <= 500, lines.joined(separator: "\n").utf16.count <= 50_000 else { return nil }
         var nodes: [MermaidNode] = []
         var edges: [MermaidEdge] = []
         for line in lines {
-            if let groups = RegexCapture.first(#"^(participant|actor)\s+([A-Za-z_]\w*)(?:\s+as\s+(.+))?$"#, in: line, options: [.caseInsensitive]) {
+            if let groups = RegexCapture.first(#"^(participant|actor)\s+([\p{L}_][\p{L}\p{M}\p{N}_]*)(?:\s+as\s+(.+))?$"#, in: line, options: [.caseInsensitive]) {
                 let node = MermaidNode(id: groups[2], label: groups[3].isEmpty ? groups[2] : groups[3],
                                        participantType: groups[1].lowercased() == "actor" ? .actor : .participant)
-                save(node, in: &nodes)
+                if let existing = nodes.firstIndex(where: { $0.id == node.id }) { nodes[existing] = node }
+                else { nodes.append(node) }
                 continue
             }
-            guard let groups = RegexCapture.first(#"^([A-Za-z_]\w*)(-->>|->>|-->|->|--x|-x|--\)|-\))([A-Za-z_]\w*)(?::\s*(.*))?$"#, in: line) else { continue }
+            guard let groups = RegexCapture.first(#"^([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*(-->>|->>|-->|->|--x|-x|--\)|-\))\s*([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*(?::\s*(.*))?$"#, in: line) else { return nil }
             let from = groups[1], token = groups[2], to = groups[3]
             save(.init(id: from, label: from), in: &nodes)
             save(.init(id: to, label: to), in: &nodes)
@@ -372,6 +378,7 @@ public enum MermaidParser {
                                line: token.hasPrefix("--") ? .dotted : .solid,
                                arrow: token.hasSuffix("x") ? .cross : token.hasSuffix(">>") || token.hasSuffix(")") ? .arrow : .none))
         }
+        guard !nodes.isEmpty else { return nil }
         return .init(kind: .sequence, direction: .leftToRight, nodes: nodes, edges: edges)
     }
 }

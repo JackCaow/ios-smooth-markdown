@@ -73,10 +73,13 @@ private struct MarkdownMermaidFence: View {
     @Environment(\.markdownDesignTokens) private var tokens
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
     var body: some View {
-        let contentHeight = max(MermaidLayout.compute(diagram).size.height, 100) * max(1, diagramScale)
-        ScrollView([.horizontal, .vertical]) {
-            MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap,
-                               scrollable: false, style: tokens.mermaid)
+        let contentHeight = max(MermaidLayout.compute(diagram, style: tokens.mermaid).size.height, 100) * max(1, diagramScale)
+        GeometryReader { viewport in
+            ScrollView([.horizontal, .vertical]) {
+                MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap,
+                                   scrollable: false, style: tokens.mermaid)
+                    .frame(minWidth: viewport.size.width, alignment: .center)
+            }
         }
         .frame(height: min(contentHeight, tokens.mermaid.maxHeight))
         .clipped()

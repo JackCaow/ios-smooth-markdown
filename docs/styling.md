@@ -96,7 +96,19 @@ let plugins = ParserPluginRegistry()
 try plugins.register(MermaidPlugin())
 ```
 
-Custom palette tokens take precedence over named fence themes. Standalone `MermaidDiagramView` also accepts `style: MarkdownMermaidTokens`. The `maxHeight` and `outerPadding` values configure fences; standalone hosts provide their own viewport modifiers. Graph layout geometry and some specialty chart series/status palettes remain diagram-specific.
+Flowchart, class, state, ER and mindmap edges use rounded bends by default. Git branch connections use cubic curves for rounded/curved modes; straight mode remains direct. Configure routing and line details through the same tokens:
+
+```swift
+style.designTokens.mermaid.edgeRouting = .curved // .rounded or .straight
+style.designTokens.mermaid.cornerRadius = 12
+style.designTokens.mermaid.strokeWidth = 1.5
+style.designTokens.mermaid.arrowSize = 10
+style.designTokens.mermaid.labelPadding = 4
+```
+
+Fences reserve their measured viewport height and clip their own painting. Short diagrams are centered; diagrams larger than the viewport remain reachable by scrolling on both axes. Padding separates the fence from surrounding prose.
+
+Custom palette tokens take precedence over named fence themes. Standalone `MermaidDiagramView` also accepts `style: MarkdownMermaidTokens`. The `maxHeight` and `outerPadding` values configure fences; standalone hosts provide their own viewport modifiers. Graph layout geometry and some specialty chart series/status palettes remain diagram-specific. The existing `font` override changes drawn text; native geometry uses the documented default font metrics, so oversized custom fonts require visual validation and can exceed node bounds.
 
 ## Editor appearance
 

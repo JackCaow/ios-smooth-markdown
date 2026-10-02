@@ -6,9 +6,17 @@ struct MermaidPlacedEdge {
     let start: CGPoint
     let end: CGPoint
     let selfLoop: MermaidPlacedSelfLoop?
+    let route: [CGPoint]
+    let labelFrame: CGRect?
+    let sourceLabelFrame: CGRect?
+    let targetLabelFrame: CGRect?
 
-    init(edge: MermaidEdge, start: CGPoint, end: CGPoint, selfLoop: MermaidPlacedSelfLoop? = nil) {
+    init(edge: MermaidEdge, start: CGPoint, end: CGPoint, selfLoop: MermaidPlacedSelfLoop? = nil,
+         route: [CGPoint]? = nil, labelFrame: CGRect? = nil,
+         sourceLabelFrame: CGRect? = nil, targetLabelFrame: CGRect? = nil) {
         self.edge = edge; self.start = start; self.end = end; self.selfLoop = selfLoop
+        self.route = route ?? [start, end]; self.labelFrame = labelFrame
+        self.sourceLabelFrame = sourceLabelFrame; self.targetLabelFrame = targetLabelFrame
     }
 }
 
@@ -40,9 +48,9 @@ struct GanttTimelineTick: Equatable {
 
 /// Deterministic layered placement for the native Mermaid subset.
 enum MermaidLayout {
-    static func compute(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+    static func compute(_ diagram: MermaidDiagram, style: MarkdownMermaidTokens? = nil) -> MermaidLayoutResult {
         switch diagram.kind {
-        case .flowchart, .classDiagram, .stateDiagram, .erDiagram: flowchart(diagram)
+        case .flowchart, .classDiagram, .stateDiagram, .erDiagram: flowchart(diagram, style: (style ?? .init()).normalized())
         case .sequence: sequence(diagram)
         case .pie: pie(diagram)
         case .timeline: timeline(diagram)
@@ -50,6 +58,8 @@ enum MermaidLayout {
         case .kanban: kanban(diagram)
         case .radar: radar(diagram)
         case .xyChart: xyChart(diagram)
+        case .gitGraph: MermaidReviewDiagramLayout.gitGraph(diagram)
+        case .mindmap: MermaidReviewDiagramLayout.mindmap(diagram)
         }
     }
 
@@ -205,11 +215,11 @@ enum MermaidLayout {
         return CGRect(x: 56, y: 54, width: size.width - 86, height: 220)
     }
 
-    private static func flowchart(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
+    private static func flowchart(_ diagram: MermaidDiagram, style: MarkdownMermaidTokens) -> MermaidLayoutResult {
         guard !diagram.nodes.isEmpty else { return .init(size: .zero, nodes: [:], edges: []) }
         let ids = Set(diagram.nodes.map(\.id))
-        var outgoing = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, [String]()) })
-        var indegree = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, 0) })
+        var outgoing = diagram.nodes.reduce(into: [String: [String]]()) { $0[$1.id] = [] }
+        var indegree = diagram.nodes.reduce(into: [String: Int]()) { $0[$1.id] = 0 }
         func members(_ endpoint: String) -> [String] {
             if ids.contains(endpoint) { return [endpoint] }
             return diagram.subgraphs.first { $0.id == endpoint }?.nodeIDs.filter { ids.contains($0) } ?? []
@@ -222,7 +232,7 @@ enum MermaidLayout {
                 }
             }
         }
-        var rank = Dictionary(uniqueKeysWithValues: diagram.nodes.map { ($0.id, 0) })
+        var rank = diagram.nodes.reduce(into: [String: Int]()) { $0[$1.id] = 0 }
         var queue = diagram.nodes.filter { indegree[$0.id] == 0 }.map(\.id)
         var cursor = 0
         while cursor < queue.count {
@@ -234,7 +244,23 @@ enum MermaidLayout {
                 if indegree[to] == 0 { queue.append(to) }
             }
         }
-        // Nodes left in a cycle retain their initial layer, so layout terminates.
+        // Assign remaining cyclic nodes once from the already placed frontier.
+        // Back edges never increase ranks again, so a state cycle terminates.
+        var unresolved = Set(diagram.nodes.filter { indegree[$0.id, default: 0] > 0 }.map(\.id))
+        var frontier = queue
+        while !unresolved.isEmpty {
+            if frontier.isEmpty, let seed = diagram.nodes.first(where: { unresolved.contains($0.id) }) {
+                unresolved.remove(seed.id); frontier.append(seed.id)
+            }
+            var next: [String] = []
+            for from in frontier {
+                for to in outgoing[from] ?? [] where unresolved.remove(to) != nil {
+                    rank[to] = max(rank[to] ?? 0, (rank[from] ?? 0) + 1)
+                    next.append(to)
+                }
+            }
+            frontier = next
+        }
         let grouped = Dictionary(grouping: diagram.nodes) { rank[$0.id] ?? 0 }
         let layers = grouped.keys.sorted().compactMap { grouped[$0] }
         let horizontal = diagram.direction == .leftToRight || diagram.direction == .rightToLeft
@@ -317,7 +343,7 @@ enum MermaidLayout {
                     control2 = .init(x: end.x + 25, y: end.y - 45)
                     labelFrame = edge.label.map { label in
                         CGRect(x: from.midX - labelWidth(label) / 2, y: from.minY - 78,
-                               width: labelWidth(label), height: 18)
+                               width: labelWidth(label) + style.labelPadding * 2, height: 16 + style.labelPadding * 2)
                     }
                 } else {
                     start = .init(x: from.maxX, y: from.midY - 10)
@@ -326,7 +352,7 @@ enum MermaidLayout {
                     control2 = .init(x: end.x + 45, y: end.y + 25)
                     labelFrame = edge.label.map { label in
                         CGRect(x: from.maxX + 62, y: from.midY - 9,
-                               width: labelWidth(label), height: 18)
+                               width: labelWidth(label) + style.labelPadding * 2, height: 16 + style.labelPadding * 2)
                     }
                 }
                 return .init(edge: edge, start: start, end: end,
@@ -345,7 +371,8 @@ enum MermaidLayout {
             }
             return .init(edge: edge, start: start, end: end)
         }
-        return .init(size: size, nodes: positions, edges: placed, subgraphs: groupFrames)
+        return MermaidGraphRouting.layout(diagram: diagram, nodes: positions, groups: groupFrames,
+                                          edges: placed, style: style)
     }
 
     private static func sequence(_ diagram: MermaidDiagram) -> MermaidLayoutResult {
@@ -389,9 +416,10 @@ enum MermaidLayout {
 
     private static func nodeHeight(_ node: MermaidNode) -> CGFloat {
         if node.shape == .stateStart || node.shape == .stateEnd { return 28 }
-        if !node.compartments.isEmpty {
-            let rows = node.compartments.reduce(0) { $0 + $1.count }
-            return CGFloat(48 + rows * 20 + node.compartments.count * 10)
+        let sections = node.compartments.filter { !$0.isEmpty }
+        if !sections.isEmpty {
+            let rows = sections.reduce(0) { $0 + $1.count }
+            return CGFloat(48 + rows * 20 + sections.count * 13)
         }
         switch node.shape {
         case .diamond, .circle: return 76

@@ -456,10 +456,15 @@ s:14SmoothMarkdown0B13HeadingValuesV5levelxSi_tcip | subscript(level level: Int)
 s:14SmoothMarkdown0B13HeadingValuesV6valuesSayxGvp | var values: [Value] { get }
 s:14SmoothMarkdown0B13MermaidTokensV | struct MarkdownMermaidTokens
 s:14SmoothMarkdown0B13MermaidTokensV10normalizedACyF | func normalized() -> MarkdownMermaidTokens
+s:14SmoothMarkdown0B13MermaidTokensV11edgeRoutingAA0c4EdgeF0Ovp | var edgeRouting: MermaidEdgeRouting
+s:14SmoothMarkdown0B13MermaidTokensV11strokeWidth14CoreFoundation7CGFloatVvp | var strokeWidth: CGFloat
+s:14SmoothMarkdown0B13MermaidTokensV12cornerRadius14CoreFoundation7CGFloatVvp | var cornerRadius: CGFloat
+s:14SmoothMarkdown0B13MermaidTokensV12labelPadding14CoreFoundation7CGFloatVvp | var labelPadding: CGFloat
 s:14SmoothMarkdown0B13MermaidTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
 s:14SmoothMarkdown0B13MermaidTokensV4font7SwiftUI4FontVSgvp | var font: Font?
 s:14SmoothMarkdown0B13MermaidTokensV6colors4font12outerPadding9maxHeightAcA0C7PaletteVSg_7SwiftUI4FontVSgAK10EdgeInsetsV14CoreFoundation7CGFloatVtcfc | init(colors: MermaidPalette? = nil, font: Font? = nil, outerPadding: EdgeInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0), maxHeight: CGFloat = 420)
 s:14SmoothMarkdown0B13MermaidTokensV6colorsAA0C7PaletteVSgvp | var colors: MermaidPalette?
+s:14SmoothMarkdown0B13MermaidTokensV9arrowSize14CoreFoundation7CGFloatVvp | var arrowSize: CGFloat
 s:14SmoothMarkdown0B13MermaidTokensV9maxHeight14CoreFoundation7CGFloatVvp | var maxHeight: CGFloat
 s:14SmoothMarkdown0B13RenderContextV | struct MarkdownRenderContext
 s:14SmoothMarkdown0B13RenderContextV06renderB07SwiftUI7AnyViewVSScSgvp | let renderMarkdown: ((String) -> AnyView)?
@@ -1012,7 +1017,9 @@ s:14SmoothMarkdown11MermaidKindO3pieyA2CmF | case pie
 s:14SmoothMarkdown11MermaidKindO5ganttyA2CmF | case gantt
 s:14SmoothMarkdown11MermaidKindO5radaryA2CmF | case radar
 s:14SmoothMarkdown11MermaidKindO6kanbanyA2CmF | case kanban
+s:14SmoothMarkdown11MermaidKindO7mindmapyA2CmF | case mindmap
 s:14SmoothMarkdown11MermaidKindO7xyChartyA2CmF | case xyChart
+s:14SmoothMarkdown11MermaidKindO8gitGraphyA2CmF | case gitGraph
 s:14SmoothMarkdown11MermaidKindO8sequenceyA2CmF | case sequence
 s:14SmoothMarkdown11MermaidKindO8timelineyA2CmF | case timeline
 s:14SmoothMarkdown11MermaidKindO9erDiagramyA2CmF | case erDiagram
@@ -1358,6 +1365,10 @@ s:14SmoothMarkdown18MermaidDiagramViewV5themeAA0C5ThemeOSgvp | @MainActor let th
 s:14SmoothMarkdown18MermaidDiagramViewV7diagram5theme9onNodeTap10scrollable5styleAcA0cD0V_AA0C5ThemeOSgySScSgSbAA0bC6TokensVSgtcfc | @MainActor init(diagram: MermaidDiagram, theme: MermaidTheme? = nil, onNodeTap: ((String) -> Void)? = nil, scrollable: Bool = true, style: MarkdownMermaidTokens? = nil)
 s:14SmoothMarkdown18MermaidDiagramViewV7diagramAA0cD0Vvp | @MainActor let diagram: MermaidDiagram
 s:14SmoothMarkdown18MermaidDiagramViewV9onNodeTapySScSgvp | @MainActor let onNodeTap: ((String) -> Void)?
+s:14SmoothMarkdown18MermaidEdgeRoutingO | enum MermaidEdgeRouting
+s:14SmoothMarkdown18MermaidEdgeRoutingO6curvedyA2CmF | case curved
+s:14SmoothMarkdown18MermaidEdgeRoutingO7roundedyA2CmF | case rounded
+s:14SmoothMarkdown18MermaidEdgeRoutingO8straightyA2CmF | case straight
 s:14SmoothMarkdown18MermaidGanttStatusO | enum MermaidGanttStatus
 s:14SmoothMarkdown18MermaidGanttStatusO4doneyA2CmF | case done
 s:14SmoothMarkdown18MermaidGanttStatusO6activeyA2CmF | case active
