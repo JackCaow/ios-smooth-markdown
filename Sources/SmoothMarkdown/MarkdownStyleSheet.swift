@@ -123,6 +123,9 @@ public struct MarkdownStyleSheet {
     public var underlineStyle: MarkdownInlineTextStyle?
     /// HTML `<mark>` foreground and background. Explicit values override `highlightColor`.
     public var highlightStyle: MarkdownInlineTextStyle?
+    /// HTML `<small>` style. Nil uses 80% of the configured paragraph typography;
+    /// explicit values layer over surrounding inline marks.
+    public var smallStyle: MarkdownInlineTextStyle? = nil
     public var quoteBarColor: Color?
     public var quoteBackground: Color?
     /// Overrides the legacy quote colors and left border width when provided.
@@ -400,8 +403,12 @@ public struct MarkdownStyleSheet {
     /// `highlightColor` remains the background fallback when no explicit
     /// `highlightStyle.backgroundColor` was supplied.
     internal func resolvedHTMLStyle(_ base: MarkdownInlineTextStyle,
-                                    underline: Bool, highlight: Bool) -> MarkdownInlineTextStyle {
+                                    underline: Bool, highlight: Bool, small: Bool = false) -> MarkdownInlineTextStyle {
         var result = base
+        if small {
+            result.fontSize = (result.fontSize ?? designTokens.typography.paragraph?.size ?? MarkdownHTMLScript.bodyPointSize) * 0.8
+            result.apply(smallStyle)
+        }
         if underline {
             result.apply(.init(underline: true))
             result.apply(underlineStyle)

@@ -156,7 +156,7 @@ struct ReaderVisibleDocumentProjection {
         }
 
         mutating func appendDetailsSections(_ source: String) {
-            for section in DetailsSyntax.sections(source) {
+            for section in DetailsSyntax.sections(source, enableInlineHTML: enableHTML) {
                 switch section {
                 case let .markdown(markdown): appendPluginSections(markdown)
                 case let .details(details):
@@ -338,11 +338,16 @@ struct ReaderVisibleDocumentProjection {
         private func inlineAtoms(_ node: Markup) -> [Atom] {
             var atoms: [Atom] = []
             for run in InlineContent.runs(in: node, enableHTML: enableHTML, plugins: plugins,
-                                          hasCustomBuilder: { builderRegistry?.findBuilder($0) != nil }) {
+                                          hasCustomBuilder: { builderRegistry?.findBuilder($0) != nil },
+                                          hasCustomPluginBuilder: { builderRegistry?.findBuilder($0) != nil }) {
                 switch run {
                 case let .text(value, _, _, _): atoms.append(.text(value))
                 case let .image(spec): atoms.append(.image(spec))
                 case .custom: atoms.append(.attachment)
+                // Private SwiftUI expansion cannot advertise a continuous visible
+                // range. Whole-atom fallback Copy retains the exact authored source.
+                case let .details(_, source):
+                    atoms.append(.init(kind: .opaque, text: ReaderVisibleDocumentProjection.attachment, copyText: source))
                 case let .math(latex):
                     atoms.append(builderRegistry?.findBuilder(.inlineMath(latex)) == nil
                                  ? .formula(latex) : .attachment)

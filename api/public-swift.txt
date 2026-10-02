@@ -171,6 +171,7 @@ s:14SmoothMarkdown0B10StyleSheetV019readerParagraphTextC07SwiftUI4FontV0gC0Ovp |
 s:14SmoothMarkdown0B10StyleSheetV03kbdC0AA0b10InlineTextC0VSgvp | var kbdStyle: MarkdownInlineTextStyle?
 s:14SmoothMarkdown0B10StyleSheetV04boldC0AA0b10InlineTextC0VSgvp | var boldStyle: MarkdownInlineTextStyle?
 s:14SmoothMarkdown0B10StyleSheetV04linkC0AA0b10InlineTextC0VSgvp | var linkStyle: MarkdownInlineTextStyle?
+s:14SmoothMarkdown0B10StyleSheetV05smallC0AA0b10InlineTextC0VSgvp | var smallStyle: MarkdownInlineTextStyle?
 s:14SmoothMarkdown0B10StyleSheetV06italicC0AA0b10InlineTextC0VSgvp | var italicStyle: MarkdownInlineTextStyle?
 s:14SmoothMarkdown0B10StyleSheetV09highlightC0AA0b10InlineTextC0VSgvp | var highlightStyle: MarkdownInlineTextStyle?
 s:14SmoothMarkdown0B10StyleSheetV09subscriptC0AA0b10InlineTextC0VSgvp | var subscriptStyle: MarkdownInlineTextStyle?
@@ -1242,6 +1243,15 @@ s:14SmoothMarkdown15BuilderRegistryC8nodeType3forSSAA6MarkupC_tFZ | static func 
 s:14SmoothMarkdown15BuilderRegistryC8register_7builderySS_AA0b6WidgetC0_ptF | func register(_ nodeType: String, builder: any MarkdownWidgetBuilder)
 s:14SmoothMarkdown15BuilderRegistryC8revisions6UInt64Vvp | @Published var revision: UInt64 { get set }
 s:14SmoothMarkdown15BuilderRegistryCACycfc | init()
+s:14SmoothMarkdown15HighlightPluginV | struct HighlightPlugin
+s:14SmoothMarkdown15HighlightPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown15HighlightPluginV2idSSvp | let id: String
+s:14SmoothMarkdown15HighlightPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown15HighlightPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown15HighlightPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown15HighlightPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown15HighlightPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown15HighlightPluginVACycfc | init()
 s:14SmoothMarkdown15MermaidPieSliceV | struct MermaidPieSlice
 s:14SmoothMarkdown15MermaidPieSliceV5label5valueACSS_Sdtcfc | init(label: String, value: Double)
 s:14SmoothMarkdown15MermaidPieSliceV5labelSSvp | let label: String
@@ -1257,6 +1267,15 @@ s:14SmoothMarkdown15MermaidXYSeriesV4type6valuesAcA0cD4TypeO_SaySdGtcfc | init(t
 s:14SmoothMarkdown15MermaidXYSeriesV4typeAA0cD4TypeOvp | let type: MermaidXYSeriesType
 s:14SmoothMarkdown15MermaidXYSeriesV6valuesSaySdGvp | let values: [Double]
 s:14SmoothMarkdown15NativeCodeBlocka | typealias NativeCodeBlock = CodeBlock
+s:14SmoothMarkdown15SubscriptPluginV | struct SubscriptPlugin
+s:14SmoothMarkdown15SubscriptPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown15SubscriptPluginV2idSSvp | let id: String
+s:14SmoothMarkdown15SubscriptPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown15SubscriptPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown15SubscriptPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown15SubscriptPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown15SubscriptPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown15SubscriptPluginVACycfc | init()
 s:14SmoothMarkdown16AdmonitionPluginV | struct AdmonitionPlugin
 s:14SmoothMarkdown16AdmonitionPluginV2idSSvp | let id: String
 s:14SmoothMarkdown16AdmonitionPluginV4nameSSvp | let name: String
@@ -1316,6 +1335,15 @@ s:14SmoothMarkdown17MermaidRadarCurveV2id5label6valuesACSS_SSSaySdGtcfc | init(i
 s:14SmoothMarkdown17MermaidRadarCurveV2idSSvp | let id: String
 s:14SmoothMarkdown17MermaidRadarCurveV5labelSSvp | let label: String
 s:14SmoothMarkdown17MermaidRadarCurveV6valuesSaySdGvp | let values: [Double]
+s:14SmoothMarkdown17SuperscriptPluginV | struct SuperscriptPlugin
+s:14SmoothMarkdown17SuperscriptPluginV16triggerCharacterSJvp | let triggerCharacter: Character
+s:14SmoothMarkdown17SuperscriptPluginV2idSSvp | let id: String
+s:14SmoothMarkdown17SuperscriptPluginV4nameSSvp | let name: String
+s:14SmoothMarkdown17SuperscriptPluginV5parse_2atAA06InlineD5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
+s:14SmoothMarkdown17SuperscriptPluginV6rendery7SwiftUI7AnyViewVAA06InlineD5MatchVF | func render(_ match: InlinePluginMatch) -> AnyView
+s:14SmoothMarkdown17SuperscriptPluginV8canParse_2atSbSS_SS5IndexVtF | func canParse(_ text: String, at index: String.Index) -> Bool
+s:14SmoothMarkdown17SuperscriptPluginV8prioritySivp | let priority: Int
+s:14SmoothMarkdown17SuperscriptPluginVACycfc | init()
 s:14SmoothMarkdown18InlineParserPluginP | protocol InlineParserPlugin : ParserPlugin
 s:14SmoothMarkdown18InlineParserPluginP16triggerCharacterSJvp | var triggerCharacter: Character { get }
 s:14SmoothMarkdown18InlineParserPluginP5parse_2atAA0cE5MatchVSgSS_SS5IndexVtF | func parse(_ text: String, at index: String.Index) -> InlinePluginMatch?
