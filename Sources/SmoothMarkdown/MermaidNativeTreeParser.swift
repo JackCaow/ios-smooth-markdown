@@ -30,7 +30,7 @@ extension MermaidDiagram {
 enum MermaidNativeTreeParser {
     static func gitGraph(_ lines: [String]) -> MermaidDiagram? {
         guard bounded(lines), let header = lines.first,
-              let declaration = capture(#"^gitGraph(?:\s+(LR|TB|BT))?\s*:?$"#, header.trimmingCharacters(in: .whitespaces), insensitive: true) else { return nil }
+              let declaration = capture(#"^gitGraph(?:\s+(LR|TB|BT))?\s*:?$"#, header.trimmingCharacters(in: .whitespacesAndNewlines), insensitive: true) else { return nil }
         let direction: MermaidDirection = switch declaration[1].uppercased() {
         case "TB": .topToBottom
         case "BT": .bottomToTop
@@ -97,7 +97,7 @@ enum MermaidNativeTreeParser {
     }
 
     static func mindmap(_ lines: [String]) -> MermaidDiagram? {
-        guard bounded(lines), lines.first?.trimmingCharacters(in: .whitespaces).lowercased() == "mindmap" else { return nil }
+        guard bounded(lines), lines.first?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "mindmap" else { return nil }
         var nodes: [MermaidNode] = []
         var edges: [MermaidEdge] = []
         var ancestors: [(indent: Int, id: String)] = []

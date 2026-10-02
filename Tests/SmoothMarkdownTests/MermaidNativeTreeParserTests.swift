@@ -70,6 +70,7 @@ final class MermaidNativeTreeParserTests: XCTestCase {
         XCTAssertEqual(diagram.gitCommits.map(\.branch), ["main", "feature", "main"])
         XCTAssertEqual(diagram.gitCommits.map(\.parents), [[], ["初始化"], ["初始化", "新功能"]])
         XCTAssertEqual(diagram, MermaidParser.parse(source))
+        XCTAssertEqual(diagram, MermaidParser.parse(source.replacingOccurrences(of: "\n", with: "\r\n")))
         let positions = Dictionary(uniqueKeysWithValues: diagram.nodes.enumerated().map { ($0.element.id, $0.offset) })
         for edge in diagram.edges {
             XCTAssertLessThan(try XCTUnwrap(positions[edge.from]), try XCTUnwrap(positions[edge.to]), "Parents must precede commits; no cycle may be synthesized")
@@ -109,6 +110,7 @@ final class MermaidNativeTreeParserTests: XCTestCase {
               数据库
         """))
         XCTAssertEqual(diagram.kind, .mindmap)
+        XCTAssertEqual(MermaidParser.parse("mindmap\r\n  root((项目))\r\n    前端\r\n")?.nodes.map(\.label), ["项目", "前端"])
         XCTAssertEqual(diagram.nodes.map(\.label), ["项目", "前端", "页面", "组件", "后端", "API", "数据库"])
         XCTAssertEqual(diagram.nodes.first?.id, "root")
         XCTAssertEqual(diagram.nodes.first?.shape, .circle)
