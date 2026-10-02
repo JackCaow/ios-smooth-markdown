@@ -26,3 +26,7 @@ source 'https://github.com/CocoaPods/Specs.git'
 ```
 
 随后执行 `pod install --repo-update`。库源码不需要 `:git`、`:path` 或本地 podspec。
+
+## 独立使用者
+
+新工程只声明 `pod 'SmoothMarkdown', '0.3.2'`，从上述官方 Git Specs 安装成功。锁文件仅包含库自身 Core/UI 0.3.2，没有 `EXTERNAL SOURCES`、`CHECKOUT OPTIONS` 或第三方 Pod。公开 reader、stream、editor 接口的 iOS Simulator 构建通过；这是安装与编译验收，不额外宣称真机性能结果。
