@@ -8,9 +8,9 @@
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 已发布版本 | SwiftPM `0.3.2`，或公共 CocoaPods `0.3.1` |
+| 已发布版本 | SwiftPM `0.3.2`，或公共 CocoaPods `0.3.2` |
 | 最新增量和后台流式优化 | 固定 Git revision `043093bc1f38beac6832ec37b448f0f27eb3c7bf` |
-| CocoaPods Trunk | `0.3.1` 已进入公共 Specs；支持直接按 Pod 名安装 |
+| CocoaPods Trunk | `0.3.2` 已进入公共 Specs；支持直接按 Pod 名安装 |
 
 `0.3.1` 包含自有 Rust 解析器、独立 Core、分组配置和 Design Token，以及原生增量传输、后台调度和完成时序修复。新接入可直接使用 `0.3.2` tag；第 10 节保留同一实现的固定提交接入方式。
 
@@ -49,7 +49,7 @@ Swift package 的依赖声明：
 platform :ios, '17.0'
 
 target 'YourApp' do
-  pod 'SmoothMarkdown', '~> 0.3.1'
+  pod 'SmoothMarkdown', '~> 0.3.2'
 end
 ```
 
@@ -271,7 +271,7 @@ Core 使用 Foundation 和随包提供的静态 Rust 解析器，无 SwiftUI、U
 CocoaPods 只安装 Core：
 
 ```ruby
-pod 'SmoothMarkdown/Core', '~> 0.3.1'
+pod 'SmoothMarkdown/Core', '~> 0.3.2'
 ```
 
 CocoaPods Core 的模块名是 `SmoothMarkdown`，代码应 `import SmoothMarkdown`；它与 SwiftPM 的独立 Core 模块导入名不同。
