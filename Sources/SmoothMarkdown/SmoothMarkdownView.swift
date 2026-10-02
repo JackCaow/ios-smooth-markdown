@@ -184,6 +184,7 @@ public struct SmoothMarkdownView: View {
                 VStack(alignment: .leading, spacing: styleSheet.blockSpacing) {
                     legacyBlockContent
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

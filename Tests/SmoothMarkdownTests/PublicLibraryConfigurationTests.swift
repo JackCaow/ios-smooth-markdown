@@ -4,6 +4,29 @@ import XCTest
 @testable import SmoothMarkdown
 
 final class PublicLibraryConfigurationTests: XCTestCase {
+    #if os(iOS)
+    @MainActor
+    func testNonScrollableReaderKeepsWrappedIntrinsicHeightUnderCompressedProposal() {
+        let text = "A long paragraph must wrap at phone width and keep every line visible when the hosting cell initially proposes a very small height. Its measured height must include the complete reader content."
+        func height(_ source: String, proposalHeight: CGFloat) -> CGFloat {
+            let reader = SmoothMarkdownView(markdown: source, enableCache: false,
+                selectable: false, enableCrossBlockSelection: false, scrollable: false)
+            let host = UIHostingController(rootView: reader)
+            return host.sizeThatFits(in: CGSize(width: 300, height: proposalHeight)).height
+        }
+        let singleLine = height("Short", proposalHeight: 2000)
+        for marker in ["", "2. ", "14. ", "100. ", "- ", "- [ ] "] {
+            let source = marker + text
+            // Use separate first-measure hosts so earlier full measurement cannot
+            // conceal a compressed initial proposal.
+            let compressed = height(source, proposalHeight: 1)
+            let complete = height(source, proposalHeight: 2000)
+            XCTAssertEqual(compressed, complete, accuracy: 1, "marker: \(marker)")
+            XCTAssertGreaterThan(complete, singleLine * 1.5, "Content must actually wrap: \(marker)")
+        }
+    }
+    #endif
+
     func testInvalidTokenConstructionDoesNotTrapAndUsesUnifiedPolicy() {
         let tokens = MarkdownDesignTokens(
             heading: .init(decoratedThroughLevel: 100, barWidth: -.infinity, barEndAlpha: 2),
