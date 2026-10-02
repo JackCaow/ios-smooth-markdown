@@ -9,6 +9,7 @@ public struct MermaidDiagramView: View {
     /// Keep the inline reader's horizontal scrolling; interactive hosts manage both axes themselves.
     public let scrollable: Bool
     public let style: MarkdownMermaidTokens?
+    private var decoratesContainer = true
     @Environment(\.markdownDesignTokens) private var designTokens
     var resolvedTokens: MarkdownMermaidTokens { (style ?? designTokens.mermaid).normalized() }
     var resolvedPalette: MermaidPalette { resolvedTokens.colors ?? resolvedTheme.palette }
@@ -22,6 +23,14 @@ public struct MermaidDiagramView: View {
         self.onNodeTap = onNodeTap
         self.scrollable = scrollable
         self.style = style
+    }
+
+    /// Inline fences own decoration on their bounded viewport, while standalone
+    /// diagrams keep decorating their natural scroll container.
+    func withoutContainerDecoration() -> Self {
+        var view = self
+        view.decoratesContainer = false
+        return view
     }
 
     private var resolvedTheme: MermaidTheme { theme ?? (colorScheme == .dark ? .dark : .light) }
@@ -144,8 +153,16 @@ public struct MermaidDiagramView: View {
                 content
             }
         }
-        .background(palette.backgroundColor, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3)))
+        .background {
+            if decoratesContainer {
+                RoundedRectangle(cornerRadius: 8).fill(palette.backgroundColor)
+            }
+        }
+        .overlay {
+            if decoratesContainer {
+                RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3))
+            }
+        }
         .modifier(MermaidDiagramAccessibility(interactive: onNodeTap != nil,
                                               summary: diagram.voiceOverSummary))
     }

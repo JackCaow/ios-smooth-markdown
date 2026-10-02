@@ -71,19 +71,25 @@ private struct MarkdownMermaidFence: View {
     let theme: MermaidTheme?
     let onNodeTap: ((String) -> Void)?
     @Environment(\.markdownDesignTokens) private var tokens
+    @Environment(\.colorScheme) private var colorScheme
     @ScaledMetric(relativeTo: .body) private var diagramScale: CGFloat = 1
     var body: some View {
-        let contentHeight = max(MermaidLayout.compute(diagram, style: tokens.mermaid).size.height, 100) * max(1, diagramScale)
+        let style = tokens.mermaid.normalized()
+        let palette = style.colors ?? (theme ?? (colorScheme == .dark ? .dark : .light)).palette
+        let contentHeight = max(MermaidLayout.compute(diagram, style: style).size.height, 100) * max(1, diagramScale)
         GeometryReader { viewport in
             ScrollView([.horizontal, .vertical]) {
                 MermaidDiagramView(diagram: diagram, theme: theme, onNodeTap: onNodeTap,
-                                   scrollable: false, style: tokens.mermaid)
+                                   scrollable: false, style: style)
+                    .withoutContainerDecoration()
                     .frame(minWidth: viewport.size.width, alignment: .center)
             }
         }
-        .frame(height: min(contentHeight, tokens.mermaid.maxHeight))
-        .clipped()
-        .padding(tokens.mermaid.outerPadding)
+        .frame(height: min(contentHeight, style.maxHeight))
+        .background(palette.backgroundColor)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(palette.nodeStrokeColor.opacity(0.3)))
+        .padding(style.outerPadding)
     }
 }
 
