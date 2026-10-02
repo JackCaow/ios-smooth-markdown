@@ -44,6 +44,20 @@ final class HTMLReadableFlowTests: XCTestCase {
         XCTAssertEqual(details.content, "Body `</details>` and <small>small</small>")
         XCTAssertTrue(details.isOpen)
         XCTAssertEqual(sections.last, .markdown(" after\n\nlast"))
+        for body in ["Body ` unmatched", "Body `` unmatched", "Body ` unmatched `` longer", "Body `` unmatched ``` longer"] {
+            let disclosure = "<details><summary>S</summary>" + body + "</details>"
+            let block = try XCTUnwrap(DetailsSyntax.sections(disclosure, enableInlineHTML: true).compactMap { section -> DetailsSyntax.Block? in
+                if case let .details(value) = section { return value }; return nil
+            }.first)
+            XCTAssertEqual(block.content, body)
+        }
+        for body in ["Body `</details>` tail", "Body ``</details>`` tail", "Body ``one ` </details> three ``` end`` tail"] {
+            let disclosure = "<details><summary>S</summary>" + body + "</details>"
+            let block = try XCTUnwrap(DetailsSyntax.sections(disclosure, enableInlineHTML: true).compactMap { section -> DetailsSyntax.Block? in
+                if case let .details(value) = section { return value }; return nil
+            }.first)
+            XCTAssertEqual(block.content, body, "Only a full equal-length run closes the code span")
+        }
         let sourceDocument = Document(parsing: source)
         XCTAssertEqual(Array(sourceDocument.format().utf16), Array(source.utf16))
         let fenced = "```html\n<details><summary>literal</summary>body</details>\n```"

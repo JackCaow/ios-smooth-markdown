@@ -118,7 +118,11 @@ enum DetailsSyntax {
                 var end = cursor + 1
                 while end < source.length, source.character(at: end) == 96 { end += 1 }
                 let run = end - cursor
-                if codeRun == 0 { codeRun = run } else if codeRun == run { codeRun = 0 }
+                if codeRun == 0 {
+                    // Unmatched backticks are ordinary Markdown text. A longer
+                    // run cannot supply a same-length closing substring.
+                    if hasClosingBacktick(in: source, after: end, length: run) { codeRun = run }
+                } else if codeRun == run { codeRun = 0 }
                 cursor = end
                 continue
             }
@@ -146,6 +150,17 @@ enum DetailsSyntax {
             }
         }
         return nil
+    }
+
+    private static func hasClosingBacktick(in source: NSString, after start: Int, length: Int) -> Bool {
+        var cursor = start
+        while cursor < source.length {
+            if source.character(at: cursor) != 96 { cursor += 1; continue }
+            let first = cursor
+            while cursor < source.length, source.character(at: cursor) == 96 { cursor += 1 }
+            if cursor - first == length { return true }
+        }
+        return false
     }
 
     private static func block(lines: [String], startingAt start: Int, isOpen: Bool) -> (block: Block, nextIndex: Int) {

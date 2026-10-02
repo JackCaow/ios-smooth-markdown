@@ -4,7 +4,7 @@ Pass `enableHTML: true` to the reader or streaming reader to enable supported HT
 
 ## Small text
 
-`<small>` uses 80% of the surrounding configured text size, including paragraph typography tokens. Configure its appearance with the existing public style system:
+`<small>` uses 80% of the resolved inline font size, falling back to the configured paragraph typography token (or the native body default). Configure its appearance with the existing public style system:
 
 ```swift
 var style = MarkdownStyleSheet.default()

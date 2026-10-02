@@ -13,7 +13,9 @@ Rust、静态 XCFramework 与外部依赖列表均未变。公开符号仅新增
 
 候选版本的独立插件源码 review 未发现阻断。2026-10-02，UIKit 最终 11 项全部通过：冻结生产源码的同批测试中插件 6 项、HTML 4 项通过；剩余 1 项纠正测试对普通 Copy fallback 与段首空格的期待后单独运行通过。该重跑没有修改生产源码。最终证据为 10+1，未宣称一次批次全绿。
 
-生产源码摘要 SHA256：`30b90b32301e58f0163a44b8b537768c971a957c7ebf1b83a5e73b5da7c4c343`。公开 API 仅增加 28 个符号，无既有符号删除或声明变化。
+上述 UIKit 证据对应的生产源码摘要 SHA256：`30b90b32301e58f0163a44b8b537768c971a957c7ebf1b83a5e73b5da7c4c343`。公开 API 仅增加 28 个符号，无既有符号删除或声明变化。
+
+独立复审另发现未配对反引号被当作代码 span、阻止完整 disclosure 闭合的边界。追加修复只在存在完整等长 closing run 时启用代码保护，避免从更长 run 内误取子串。原受影响 HTML 方法增加 unmatched/matching 7 组边界并单独运行通过。追加后的 Sources 摘要为 `1611f862a88290b83e0e3605aa97813ce87503c4d2f6bf33634813f56199d22e`；最终公共 CI 与消费端 gate 使用该版本。
 
 消费端聊天列表截图验收在独立候选 checkout 上运行，记录 original SHA、dirty diff/source hash 与新增文件 manifest，并在测试后还原。发布前还需完成消费端 gate 与公共 CI。
 
