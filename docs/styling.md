@@ -108,7 +108,7 @@ style.designTokens.mermaid.labelPadding = 4
 
 Fences reserve their measured viewport height and clip their own painting. Short diagrams are centered; diagrams larger than the viewport remain reachable by scrolling on both axes. Padding separates the fence from surrounding prose.
 
-Custom palette tokens take precedence over named fence themes. Standalone `MermaidDiagramView` also accepts `style: MarkdownMermaidTokens`. The `maxHeight` and `outerPadding` values configure fences; standalone hosts provide their own viewport modifiers. Graph layout geometry and some specialty chart series/status palettes remain diagram-specific. The existing `font` override changes drawn text; native geometry uses the documented default font metrics, so oversized custom fonts require visual validation and can exceed node bounds.
+Custom palette tokens take precedence over named fence themes. Standalone `MermaidDiagramView` also accepts `style: MarkdownMermaidTokens`. The `maxHeight` and `outerPadding` values configure fences; standalone hosts provide their own viewport modifiers. Graph layout algorithms remain diagram-specific; specialty chart series/status palettes and decoration are configurable through `charts`. The existing `font` override changes drawn text; native geometry uses the documented default font metrics, so oversized custom fonts require visual validation and can exceed node bounds.
 
 ## Editor appearance
 
@@ -128,3 +128,8 @@ SmoothMarkdownEditor(
 ```
 
 Alternatively apply `.markdownEditorTheme(editorTheme)` to an enclosing view. A reader stylesheet is not an editor theme. See the editor API for available source, toolbar, block, table and selection appearance fields.
+
+## Specialty charts and complete custom component example
+
+See [customization](customization.md) for chart series/status palettes, decoration tokens,
+normalization rules, and a compilable custom heading with selection, Copy and accessibility.

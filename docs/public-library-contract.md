@@ -36,7 +36,7 @@ Credentials must not be forwarded across origins on redirects. Transport overrid
 
 CommonMark 0.31.2 is the base language. GFM tables, task lists, strikethrough, autolinks and tag filtering are separately tested. Footnotes, math, safe HTML and plugin syntax are extensions. HTML is opt-in. Parser conformance, visual rendering coverage and formatted-editor support are separate guarantees.
 
-The parser preserves source ranges. Unsupported math, SVG, Mermaid and editor operations follow the documented fallback or rejection behavior rather than implying unlimited syntax support. Advanced Mermaid layouts and some specialty series/status colors remain component-specific; custom diagram builders provide a replacement path.
+The parser preserves source ranges. Unsupported math, SVG, Mermaid and editor operations follow the documented fallback or rejection behavior rather than implying unlimited syntax support. Advanced Mermaid layout algorithms remain component-specific; chart series/status colors and decoration use `MarkdownMermaidTokens.charts`; custom diagram builders provide a replacement path.
 
 ## Compatibility and release gates
 
@@ -51,3 +51,5 @@ The source-built package does not promise binary ABI compatibility between compi
 Document selection uses the native complete-document host on iOS. Block selection is an iOS-specific mode. On macOS, declarative text selection follows the platform capabilities; the iOS editor is unavailable. Shared explicit typography, heading padding, quote icon typography and quote shadows are applied to both iOS reader paths. Legacy opaque SwiftUI `Font` cannot provide UIKit metrics.
 
 Build verification: `swift test`, `swift run --package-path Consumers/Smoke CoreConsumer`, `swift run --package-path Consumers/Smoke ReaderConsumer`, then `python3 tools/check_public_api.py`. Run the Demo simulator rendering suites before release.
+
+Custom component and chart appearance contracts are documented in [customization](customization.md).
