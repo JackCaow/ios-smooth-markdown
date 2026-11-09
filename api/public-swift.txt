@@ -462,6 +462,7 @@ s:14SmoothMarkdown0B13MermaidTokensV12cornerRadius14CoreFoundation7CGFloatVvp | 
 s:14SmoothMarkdown0B13MermaidTokensV12labelPadding14CoreFoundation7CGFloatVvp | var labelPadding: CGFloat
 s:14SmoothMarkdown0B13MermaidTokensV12outerPadding7SwiftUI10EdgeInsetsVvp | var outerPadding: EdgeInsets
 s:14SmoothMarkdown0B13MermaidTokensV4font7SwiftUI4FontVSgvp | var font: Font?
+s:14SmoothMarkdown0B13MermaidTokensV6chartsAA0bc5ChartD0Vvp | var charts: MarkdownMermaidChartTokens
 s:14SmoothMarkdown0B13MermaidTokensV6colors4font12outerPadding9maxHeightAcA0C7PaletteVSg_7SwiftUI4FontVSgAK10EdgeInsetsV14CoreFoundation7CGFloatVtcfc | init(colors: MermaidPalette? = nil, font: Font? = nil, outerPadding: EdgeInsets = EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0), maxHeight: CGFloat = 420)
 s:14SmoothMarkdown0B13MermaidTokensV6colorsAA0C7PaletteVSgvp | var colors: MermaidPalette?
 s:14SmoothMarkdown0B13MermaidTokensV9arrowSize14CoreFoundation7CGFloatVvp | var arrowSize: CGFloat
@@ -780,6 +781,32 @@ s:14SmoothMarkdown0B18EditorSlashCommandV10searchTextSSvp | let searchText: Stri
 s:14SmoothMarkdown0B18EditorSlashCommandV5title10searchText8markdown10onSelectedACSS_S2SSgAHSSYacSgtcfc | init(title: String, searchText: String, markdown: String? = nil, onSelected: ((String) async -> String?)? = nil)
 s:14SmoothMarkdown0B18EditorSlashCommandV5titleSSvp | let title: String
 s:14SmoothMarkdown0B18EditorSlashCommandV8markdownSSSgvp | let markdown: String?
+s:14SmoothMarkdown0B18MermaidChartTokensV | struct MarkdownMermaidChartTokens
+s:14SmoothMarkdown0B18MermaidChartTokensV10normalizedACyF | func normalized() -> MarkdownMermaidChartTokens
+s:14SmoothMarkdown0B18MermaidChartTokensV10todayColor7SwiftUI0G0VSgvp | var todayColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV11fillOpacitySdSgvp | var fillOpacity: Double?
+s:14SmoothMarkdown0B18MermaidChartTokensV11pointRadius14CoreFoundation7CGFloatVSgvp | var pointRadius: CGFloat?
+s:14SmoothMarkdown0B18MermaidChartTokensV12atLimitColor7SwiftUI0H0VSgvp | var atLimitColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV12seriesColorsSay7SwiftUI5ColorVGvp | var seriesColors: [Color]
+s:14SmoothMarkdown0B18MermaidChartTokensV14cardBackground7SwiftUI5ColorVSgvp | var cardBackground: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV14overLimitColor7SwiftUI0H0VSgvp | var overLimitColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV14todayLineWidth14CoreFoundation7CGFloatVvp | var todayLineWidth: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV15barCornerRadius14CoreFoundation7CGFloatVvp | var barCornerRadius: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV15belowLimitColor7SwiftUI0H0VSgvp | var belowLimitColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV15seriesLineWidth14CoreFoundation7CGFloatVSgvp | var seriesLineWidth: CGFloat?
+s:14SmoothMarkdown0B18MermaidChartTokensV16cardCornerRadius14CoreFoundation7CGFloatVvp | var cardCornerRadius: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV16columnBackground7SwiftUI5ColorVSgvp | var columnBackground: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV16taskCornerRadius14CoreFoundation7CGFloatVvp | var taskCornerRadius: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV17ganttStatusColorsSDyAA0c5GanttG0O7SwiftUI5ColorVGvp | var ganttStatusColors: [MermaidGanttStatus : Color]
+s:14SmoothMarkdown0B18MermaidChartTokensV17sectorBorderColor7SwiftUI0H0VSgvp | var sectorBorderColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV17sectorBorderWidth14CoreFoundation7CGFloatVSgvp | var sectorBorderWidth: CGFloat?
+s:14SmoothMarkdown0B18MermaidChartTokensV18columnCornerRadius14CoreFoundation7CGFloatVvp | var columnCornerRadius: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV19priorityStripeWidth14CoreFoundation7CGFloatVvp | var priorityStripeWidth: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensV20kanbanPriorityColorsSDyAA0c6KanbanG0O7SwiftUI5ColorVGvp | var kanbanPriorityColors: [MermaidKanbanPriority : Color]
+s:14SmoothMarkdown0B18MermaidChartTokensV9gridColor7SwiftUI0G0VSgvp | var gridColor: Color?
+s:14SmoothMarkdown0B18MermaidChartTokensV9gridWidth14CoreFoundation7CGFloatVvp | var gridWidth: CGFloat
+s:14SmoothMarkdown0B18MermaidChartTokensVACycfc | init()
 s:14SmoothMarkdown0B19CodeBlockDecorationV | struct MarkdownCodeBlockDecoration
 s:14SmoothMarkdown0B19CodeBlockDecorationV11borderColor7SwiftUI0G0VSgvp | var borderColor: Color?
 s:14SmoothMarkdown0B19CodeBlockDecorationV11borderWidth14CoreFoundation7CGFloatVvp | var borderWidth: CGFloat
