@@ -8,11 +8,11 @@ The library is under active development. It supports common Markdown and GFM con
 
 Requires **iOS 17+** and Swift 5.9+. The package has **no third-party dependencies**. The library-owned Rust parser produces a Swift AST through a C bridge; SVG and math rendering use Apple frameworks. The static parser binary is included, so app developers do not need Rust or Cargo.
 
-In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.4.0** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
+In Xcode, use **File → Add Package Dependencies**, enter `https://github.com/JackCaow/ios-smooth-markdown`, choose **0.4.1** or later, and add the **SmoothMarkdown** product to your app target. For a `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.4.0")
+    .package(url: "https://github.com/JackCaow/ios-smooth-markdown", from: "0.4.1")
 ],
 targets: [
     .target(name: "YourApp", dependencies: [
@@ -24,12 +24,12 @@ targets: [
 Add this to your `Podfile`, then run `pod install --repo-update`:
 
 ```ruby
-pod 'SmoothMarkdown', '~> 0.4.0'
+pod 'SmoothMarkdown', '~> 0.4.1'
 ```
 
-The `Demo` app is for exploration and is not required by the package. If your network cannot access the default CocoaPods CDN, use the official Git Specs source: `source 'https://github.com/CocoaPods/Specs.git'`. See the [release verification](docs/cocoapods-release-0.4.0.md).
+The `Demo` app is for exploration and is not required by the package. If your network cannot access the default CocoaPods CDN, use the official Git Specs source: `source 'https://github.com/CocoaPods/Specs.git'`. See the [release verification](docs/cocoapods-release-0.4.1.md).
 
-For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use `pod 'SmoothMarkdown/Core', '~> 0.4.0'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
+For parsing and HTML export without UI frameworks, choose the `SmoothMarkdownCore` SwiftPM product and `import SmoothMarkdownCore`. For CocoaPods, use `pod 'SmoothMarkdown/Core', '~> 0.4.1'` and `import SmoothMarkdown`. The default pod subspec includes UI and its Core dependency. Both distributions include the owned static XCFramework; neither downloads an external parser dependency. CocoaPods supports iOS 17+. For macOS 14+, use SwiftPM, which includes both Apple Silicon and Intel slices.
 
 ### SVG and math
 
@@ -50,6 +50,8 @@ Version `0.3.3` measures non-scrollable readers eagerly so their first mounted h
 Version `0.3.4` keeps the non-scrollable reader’s full intrinsic height when its host proposes a compressed height.
 
 Version `0.3.5` adds opt-in [highlight, superscript and numeric subscript plugins](docs/inline-formatting-plugins.md), configurable [HTML small text and inline/list disclosures](docs/html-readable-content.md). Existing custom plugin builders retain priority; code literals and original source remain preserved.
+
+Version `0.4.1` fixes Xcode 27.2 callback compilation. Public APIs and parser behavior remain unchanged.
 
 ## Quick start
 
