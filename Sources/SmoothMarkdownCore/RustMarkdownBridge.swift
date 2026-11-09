@@ -52,10 +52,14 @@ enum RustMarkdownBridge {
         let context = RustMarkdownHookContext(inline: inline, block: block)
         var hooks = SmrHooks()
         hooks.context = Unmanaged.passUnretained(context).toOpaque()
-        hooks.inline_callback = inline == nil ? nil : rustInlineCallback
-        hooks.block_callback = block == nil ? nil : rustBlockCallback
-        hooks.inline_context = inline == nil ? nil : rustInlineContext
-        hooks.block_context = block == nil ? nil : rustBlockContext
+        if inline != nil {
+            hooks.inline_callback = rustInlineCallback
+            hooks.inline_context = rustInlineContext
+        }
+        if block != nil {
+            hooks.block_callback = rustBlockCallback
+            hooks.block_context = rustBlockContext
+        }
         let units = Array(source.utf16)
         var output = SmrBuffer(data: nil, len: 0, owner: nil)
         let status: Int32

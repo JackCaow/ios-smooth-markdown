@@ -8,7 +8,7 @@ final class InlineFormattingPluginTests: XCTestCase {
         try registry.registerAll([HighlightPlugin(), SuperscriptPlugin(), SubscriptPlugin()])
         return registry
     }
-    private func document(_ source: String, plugins: ParserPluginRegistry) throws -> Document {
+    private func document(_ source: String, plugins: ParserPluginRegistry) throws -> SmoothMarkdown.Document {
         try XCTUnwrap(PluginSharedSyntax.document(source, registry: plugins, enableHTML: false))
     }
     private func text(_ document: Markup, plugins: ParserPluginRegistry) -> String {
