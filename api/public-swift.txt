@@ -350,9 +350,11 @@ s:14SmoothMarkdown0B12SyntaxColorsV | struct MarkdownSyntaxColors
 s:14SmoothMarkdown0B12SyntaxColorsV10diffRemove7SwiftUI5ColorVSgvp | var diffRemove: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV10normalizedACyF | func normalized() -> MarkdownSyntaxColors
 s:14SmoothMarkdown0B12SyntaxColorsV11punctuation7SwiftUI5ColorVSgvp | var punctuation: Color?
+s:14SmoothMarkdown0B12SyntaxColorsV3tag7SwiftUI5ColorVSgvp | var tag: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV4darkACyFZ | static func dark() -> MarkdownSyntaxColors
 s:14SmoothMarkdown0B12SyntaxColorsV4type7SwiftUI5ColorVSgvp | var type: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV5lightACyFZ | static func light() -> MarkdownSyntaxColors
+s:14SmoothMarkdown0B12SyntaxColorsV6escape7SwiftUI5ColorVSgvp | var escape: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV6number7SwiftUI5ColorVvp | var number: Color
 s:14SmoothMarkdown0B12SyntaxColorsV6string7SwiftUI5ColorVvp | var string: Color
 s:14SmoothMarkdown0B12SyntaxColorsV7comment7SwiftUI5ColorVvp | var comment: Color
@@ -360,9 +362,12 @@ s:14SmoothMarkdown0B12SyntaxColorsV7diffAdd7SwiftUI5ColorVSgvp | var diffAdd: Co
 s:14SmoothMarkdown0B12SyntaxColorsV7keyword6string7comment6number7literalAC7SwiftUI5ColorV_A4Ktcfc | init(keyword: Color = .purple, string: Color = .red, comment: Color = .green, number: Color = .blue, literal: Color = .teal)
 s:14SmoothMarkdown0B12SyntaxColorsV7keyword7SwiftUI5ColorVvp | var keyword: Color
 s:14SmoothMarkdown0B12SyntaxColorsV7literal7SwiftUI5ColorVvp | var literal: Color
+s:14SmoothMarkdown0B12SyntaxColorsV8constant7SwiftUI5ColorVSgvp | var constant: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV8function7SwiftUI5ColorVSgvp | var function: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV8operator7SwiftUI5ColorVSgvp | var `operator`: Color?
 s:14SmoothMarkdown0B12SyntaxColorsV8property7SwiftUI5ColorVSgvp | var property: Color?
+s:14SmoothMarkdown0B12SyntaxColorsV9attribute7SwiftUI5ColorVSgvp | var attribute: Color?
+s:14SmoothMarkdown0B12SyntaxColorsV9parameter7SwiftUI5ColorVSgvp | var parameter: Color?
 s:14SmoothMarkdown0B13DetailsTokensV | struct MarkdownDetailsTokens
 s:14SmoothMarkdown0B13DetailsTokensV10normalizedACyF | func normalized() -> MarkdownDetailsTokens
 s:14SmoothMarkdown0B13DetailsTokensV11bodyPadding7SwiftUI10EdgeInsetsVvp | var bodyPadding: EdgeInsets
@@ -987,6 +992,19 @@ s:14SmoothMarkdown10InlineCodeC_5range6sourceACSS_SnyAA14SourceLocationVGSgSSSgt
 s:14SmoothMarkdown10InlineHTMLC | final class InlineHTML
 s:14SmoothMarkdown10InlineHTMLC03rawD0SSvp | let rawHTML: String
 s:14SmoothMarkdown10InlineHTMLC_5range6sourceACSS_SnyAA14SourceLocationVGSgSSSgtcfc | init(_ rawHTML: String, range: Range<SourceLocation>? = nil, source: String? = nil)
+s:14SmoothMarkdown11CodeDiffRowV | struct CodeDiffRow
+s:14SmoothMarkdown11CodeDiffRowV10lineNumberSiSgvp | let lineNumber: Int?
+s:14SmoothMarkdown11CodeDiffRowV2idSivp | let id: Int
+s:14SmoothMarkdown11CodeDiffRowV4KindO | enum Kind
+s:14SmoothMarkdown11CodeDiffRowV4KindO4hunkyA2EmF | case hunk
+s:14SmoothMarkdown11CodeDiffRowV4KindO4noteyA2EmF | case note
+s:14SmoothMarkdown11CodeDiffRowV4KindO5addedyA2EmF | case added
+s:14SmoothMarkdown11CodeDiffRowV4KindO7contextyA2EmF | case context
+s:14SmoothMarkdown11CodeDiffRowV4KindO7removedyA2EmF | case removed
+s:14SmoothMarkdown11CodeDiffRowV4KindO8rawValueAESgs5UInt8V_tcfc | init?(rawValue: UInt8)
+s:14SmoothMarkdown11CodeDiffRowV4kindAC4KindOvp | let kind: CodeDiffRow.Kind
+s:14SmoothMarkdown11CodeDiffRowV4text10Foundation16AttributedStringVvp | let text: AttributedString
+s:14SmoothMarkdown11CodeDiffRowV7changedSny10Foundation16AttributedStringV5IndexVGSgvp | let changed: Range<AttributedString.Index>?
 s:14SmoothMarkdown11EmojiPluginV | struct EmojiPlugin
 s:14SmoothMarkdown11EmojiPluginV12customEmojisACSDyS2SG_tcfc | init(customEmojis: [String : String] = [:])
 s:14SmoothMarkdown11EmojiPluginV12customEmojisSDyS2SGvp | let customEmojis: [String : String]
@@ -1415,7 +1433,9 @@ s:14SmoothMarkdown20ParserPluginRegistryC8revisions6UInt64Vvp | @Published var r
 s:14SmoothMarkdown20ParserPluginRegistryCACycfc | init()
 s:14SmoothMarkdown21CodeSyntaxHighlighterO | enum CodeSyntaxHighlighter
 s:14SmoothMarkdown21CodeSyntaxHighlighterO10attributed_8language4dark7enabled6colors10Foundation16AttributedStringVSS_SSSgS2bAA0bD6ColorsVSgtFZ | static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool, colors: MarkdownSyntaxColors? = nil) -> AttributedString
+s:14SmoothMarkdown21CodeSyntaxHighlighterO16highlightedLines_8language4dark6colors8tabWidthSay10Foundation16AttributedStringVGSS_SSSgSbAA0bD6ColorsVSgSitFZ | static func highlightedLines(_ code: String, language: String?, dark: Bool, colors: MarkdownSyntaxColors? = nil, tabWidth: Int = 4) -> [AttributedString]
 s:14SmoothMarkdown21CodeSyntaxHighlighterO18normalizedLanguageySSSgAEFZ | static func normalizedLanguage(_ language: String?) -> String?
+s:14SmoothMarkdown21CodeSyntaxHighlighterO8diffRows_8language4dark6colors8tabWidthSayAA0C7DiffRowVGSS_SSSgSbAA0bD6ColorsVSgSitFZ | static func diffRows(_ patch: String, language: String?, dark: Bool, colors: MarkdownSyntaxColors? = nil, tabWidth: Int = 4) -> [CodeDiffRow]
 s:14SmoothMarkdown21MermaidKanbanPriorityO | enum MermaidKanbanPriority
 s:14SmoothMarkdown21MermaidKanbanPriorityO3lowyA2CmF | case low
 s:14SmoothMarkdown21MermaidKanbanPriorityO4highyA2CmF | case high

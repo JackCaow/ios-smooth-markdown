@@ -135,6 +135,119 @@ pub unsafe extern "C" fn smr_buffer_free(buffer: *mut SmrBuffer) {
     }
     *buffer = SmrBuffer::default();
 }
+fn owned(bytes: Vec<u8>) -> SmrBuffer {
+    let owner = Box::new(bytes);
+    SmrBuffer { data: owner.as_ptr(), len: owner.len(), owner: Box::into_raw(owner).cast() }
+}
+
+/// Highlights UTF-16 `source` written in `language` (UTF-8 fence tag, extension
+/// or file name). The result is `SMH1`, a token count and `(start, length, kind)`
+/// little-endian u32 records in UTF-16 units. Unknown languages return zero tokens.
+#[no_mangle]
+pub unsafe extern "C" fn smr_highlight_utf16(
+    source: *const u16, length: usize, language: *const u8, language_length: usize, result: *mut SmrBuffer,
+) -> i32 {
+    if result.is_null() { return 1 }
+    *result = SmrBuffer::default();
+    if (length != 0 && source.is_null()) || (language_length != 0 && language.is_null()) { return 1 }
+    if length > MAX_UNITS { return 2 }
+    let attempt = catch_unwind(AssertUnwindSafe(|| {
+        let units = if length == 0 { &[][..] } else { std::slice::from_raw_parts(source, length) };
+        let name = if language_length == 0 { &[][..] } else { std::slice::from_raw_parts(language, language_length) };
+        let tokens = crate::highlight::highlight(units, std::str::from_utf8(name).unwrap_or(""));
+        let mut bytes = Vec::with_capacity(8 + tokens.len() * 12);
+        bytes.extend_from_slice(b"SMH1");
+        word(&mut bytes, tokens.len() as u32);
+        for token in tokens {
+            word(&mut bytes, token.start);
+            word(&mut bytes, token.len);
+            word(&mut bytes, token.kind as u32);
+        }
+        bytes
+    }));
+    match attempt {
+        Ok(bytes) => { *result = owned(bytes); 0 }
+        Err(_) => 3,
+    }
+}
+
+/// Canonical UTF-8 language name for a fence tag, extension or file name; an
+/// empty buffer when the highlighter does not support it.
+#[no_mangle]
+pub unsafe extern "C" fn smr_highlight_language(language: *const u8, language_length: usize, result: *mut SmrBuffer) -> i32 {
+    if result.is_null() { return 1 }
+    *result = SmrBuffer::default();
+    if language_length != 0 && language.is_null() { return 1 }
+    let name = if language_length == 0 { &[][..] } else { std::slice::from_raw_parts(language, language_length) };
+    match crate::highlight::normalize_language(std::str::from_utf8(name).unwrap_or("")) {
+        Some(canonical) => { *result = owned(canonical.as_bytes().to_vec()); 0 }
+        None => 0,
+    }
+}
+
+fn encode_line(bytes: &mut Vec<u8>, line: &crate::highlight::Line) {
+    word(bytes, line.text.len() as u32);
+    for unit in &line.text { bytes.extend_from_slice(&unit.to_le_bytes()) }
+    word(bytes, line.tokens.len() as u32);
+    for token in &line.tokens { word(bytes, token.start); word(bytes, token.len); word(bytes, token.kind as u32) }
+}
+
+unsafe fn highlight_call(source: *const u16, length: usize, language: *const u8, language_length: usize, result: *mut SmrBuffer,
+                         encode: impl FnOnce(&[u16], &str) -> Vec<u8>) -> i32 {
+    if result.is_null() { return 1 }
+    *result = SmrBuffer::default();
+    if (length != 0 && source.is_null()) || (language_length != 0 && language.is_null()) { return 1 }
+    if length > MAX_UNITS { return 2 }
+    let units = if length == 0 { &[][..] } else { std::slice::from_raw_parts(source, length) };
+    let name = if language_length == 0 { &[][..] } else { std::slice::from_raw_parts(language, language_length) };
+    let name = std::str::from_utf8(name).unwrap_or("");
+    match catch_unwind(AssertUnwindSafe(|| encode(units, name))) {
+        Ok(bytes) if bytes.len() <= MAX_WIRE_BYTES => { *result = owned(bytes); 0 }
+        Ok(_) => 2,
+        Err(_) => 3,
+    }
+}
+
+/// Highlights `source` as one text and splits it into display lines with tabs expanded to
+/// `tab_width` spaces (0 keeps tabs). Result: `SML1`, u32 line count, then per line
+/// u32 length, UTF-16 units, u32 token count and `(start, length, kind)` u32 records.
+#[no_mangle]
+pub unsafe extern "C" fn smr_highlight_lines_utf16(
+    source: *const u16, length: usize, language: *const u8, language_length: usize, tab_width: u32, result: *mut SmrBuffer,
+) -> i32 {
+    highlight_call(source, length, language, language_length, result, |units, name| {
+        let lines = crate::highlight::highlight_lines(units, name, tab_width.min(16) as usize);
+        let mut bytes = b"SML1".to_vec();
+        word(&mut bytes, lines.len() as u32);
+        for line in &lines { encode_line(&mut bytes, line) }
+        bytes
+    })
+}
+
+/// Parses a unified diff for display and highlights each hunk side in `language`.
+/// Result: `SMD1`, u32 row count, then per row u32 kind (0 hunk, 1 context, 2 added,
+/// 3 removed, 4 note), u32 line number, u32 changed start, u32 changed length
+/// (0xffffffff when absent) and the line encoding of `smr_highlight_lines_utf16`.
+#[no_mangle]
+pub unsafe extern "C" fn smr_diff_utf16(
+    patch: *const u16, length: usize, language: *const u8, language_length: usize, tab_width: u32, result: *mut SmrBuffer,
+) -> i32 {
+    highlight_call(patch, length, language, language_length, result, |units, name| {
+        let rows = crate::highlight::parse_diff(units, name, tab_width.min(16) as usize);
+        let mut bytes = b"SMD1".to_vec();
+        word(&mut bytes, rows.len() as u32);
+        for row in &rows {
+            word(&mut bytes, row.kind as u32);
+            word(&mut bytes, row.number.unwrap_or(u32::MAX));
+            let (start, len) = row.changed.unwrap_or((u32::MAX, u32::MAX));
+            word(&mut bytes, start);
+            word(&mut bytes, len);
+            encode_line(&mut bytes, &row.line);
+        }
+        bytes
+    })
+}
+
 fn word(out: &mut Vec<u8>, n: u32) {
     out.extend_from_slice(&n.to_le_bytes());
 }

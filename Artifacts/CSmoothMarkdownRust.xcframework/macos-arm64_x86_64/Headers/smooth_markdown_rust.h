@@ -45,6 +45,18 @@ int32_t smr_parse_inline_utf16(const uint16_t *,size_t,uint32_t,const uint8_t *,
 int32_t smr_render_ast_utf16(const uint8_t *,size_t,uint32_t,SmrBuffer *);
 int32_t smr_export_html_utf16(const uint16_t *,size_t,uint32_t,SmrBuffer *);
 void smr_buffer_free(SmrBuffer *buffer);
+/* Syntax highlighting. Language is a UTF-8 fence tag, extension or file name.
+   Result: "SMH1", u32 count, then count x (u32 start, u32 length, u32 kind) in UTF16 units. */
+int32_t smr_highlight_utf16(const uint16_t *source, size_t length, const uint8_t *language, size_t language_length, SmrBuffer *result);
+/* Canonical UTF-8 language name, or an empty buffer when unsupported. */
+int32_t smr_highlight_language(const uint8_t *language, size_t language_length, SmrBuffer *result);
+/* Whole-input highlighting split into display lines; tabs expand to tab_width spaces (0 keeps them).
+   Result: "SML1", u32 lines, per line: u32 length, u16 units, u32 tokens, tokens x (u32 start, u32 length, u32 kind). */
+int32_t smr_highlight_lines_utf16(const uint16_t *source, size_t length, const uint8_t *language, size_t language_length, uint32_t tab_width, SmrBuffer *result);
+/* Unified diff rows with per-side highlighting and word changes.
+   Result: "SMD1", u32 rows, per row: u32 kind (0 hunk, 1 context, 2 added, 3 removed, 4 note),
+   u32 line number, u32 changed start, u32 changed length (0xffffffff when absent), then a line as above. */
+int32_t smr_diff_utf16(const uint16_t *patch, size_t length, const uint8_t *language, size_t language_length, uint32_t tab_width, SmrBuffer *result);
 #ifdef __cplusplus
 }
 #endif

@@ -30,6 +30,7 @@ jobs:
         working-directory: ios-smooth-markdown/rust-core
         run: |
           shasum -a 256 --check SOURCE.sha256
+          ../tools/sync-rust-core.sh --verify
           cargo test --locked
           python3 ../tools/build-rust-parser.py --verify
       - name: Download pinned CommonMark 0.31.2 examples
