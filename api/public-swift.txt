@@ -1413,6 +1413,9 @@ s:14SmoothMarkdown20ParserPluginRegistryC8registeryyAA06InlinecD0_pKF | func reg
 s:14SmoothMarkdown20ParserPluginRegistryC8registeryyAA0cD0_pKF | func register(_ plugin: any ParserPlugin) throws
 s:14SmoothMarkdown20ParserPluginRegistryC8revisions6UInt64Vvp | @Published var revision: UInt64 { get set }
 s:14SmoothMarkdown20ParserPluginRegistryCACycfc | init()
+s:14SmoothMarkdown21CodeSyntaxHighlighterO | enum CodeSyntaxHighlighter
+s:14SmoothMarkdown21CodeSyntaxHighlighterO10attributed_8language4dark7enabled6colors10Foundation16AttributedStringVSS_SSSgS2bAA0bD6ColorsVSgtFZ | static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool, colors: MarkdownSyntaxColors? = nil) -> AttributedString
+s:14SmoothMarkdown21CodeSyntaxHighlighterO18normalizedLanguageySSSgAEFZ | static func normalizedLanguage(_ language: String?) -> String?
 s:14SmoothMarkdown21MermaidKanbanPriorityO | enum MermaidKanbanPriority
 s:14SmoothMarkdown21MermaidKanbanPriorityO3lowyA2CmF | case low
 s:14SmoothMarkdown21MermaidKanbanPriorityO4highyA2CmF | case high
