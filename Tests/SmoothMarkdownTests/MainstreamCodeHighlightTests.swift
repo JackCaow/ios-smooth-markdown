@@ -16,34 +16,32 @@ final class MainstreamCodeHighlightTests: XCTestCase {
             ("shell", "if true; then echo ok; fi"), ("lua", "function run() return true end"),
             ("r", "function(x) { return(x) } # ok"), ("objectivec", "@interface Box : NSObject @end"),
             ("json", "{\"name\": 1}"), ("yaml", "name: true"), ("html", "<!-- comment -->"),
-            ("css", "@media screen { color: red; }"), ("markdown", "TODO"), ("diff", "+added\n-removed")
+            ("css", "@media screen { color: red; }"), ("markdown", "# TODO"), ("diff", "+added\n-removed")
         ]
         for (language, code) in cases {
-            let tokens = CodeSyntaxHighlighter.tokenize(code, language: language)
-            XCTAssertEqual(tokens.map(\.text).joined(), code, language)
-            XCTAssertTrue(tokens.contains { $0.kind != .plain }, language)
+            XCTAssertFalse(CodeSyntaxHighlighter.tokens(code, language: language).isEmpty, language)
+            XCTAssertEqual(String(CodeSyntaxHighlighter.attributed(code, language: language, dark: false, enabled: true).characters), code, language)
         }
     }
     func testAliasesAndFenceMetadata() {
-        let cases = ["tsx": "typescript", "node": "javascript", "h": "c", "c++": "cpp", "c#": "csharp", "golang": "go", "rs": "rust", "phtml": "php", "rb": "ruby", "sc": "scala", "postgresql": "sql", "objective-c": "objectivec", "ps1": "shell", "jsonc": "json", "yml": "yaml", "svg": "markup", "scss": "css", "patch": "diff"]
+        let cases = ["tsx": "tsx", "node": "javascript", "h": "c", "c++": "cpp", "c#": "csharp", "golang": "go", "rs": "rust", "phtml": "php", "rb": "ruby", "sc": "scala", "postgresql": "sql", "objective-c": "objectivec", "zsh": "shell", "jsonc": "json", "yml": "yaml", "svg": "xml", "scss": "scss", "patch": "diff", "build.gradle.kts": "kotlin"]
         for (alias, language) in cases { XCTAssertEqual(CodeSyntaxHighlighter.normalizedLanguage(alias + "\tlineNumbers"), language) }
         XCTAssertEqual(CodeSyntaxHighlighter.normalizedLanguage("typescript\nmeta"), "typescript")
         XCTAssertEqual(CodeSyntaxHighlighter.normalizedLanguage("json,meta"), "json")
     }
     func testTokenKindsDiffHeadersAndUnicodeStayExact() {
         let code = "🙂 const 名称 = run(\"值\"); Box"
-        let tokens = CodeSyntaxHighlighter.tokenize(code, language: "typescript")
-        XCTAssertEqual(tokens.map(\.text).joined(), code)
-        XCTAssertTrue(tokens.contains(.init(text: "run", kind: .function)))
-        XCTAssertTrue(tokens.contains(.init(text: "Box", kind: .type)))
-        XCTAssertTrue(tokens.contains(.init(text: "=", kind: .operator)))
-        XCTAssertTrue(tokens.contains(.init(text: ";", kind: .punctuation)))
-        XCTAssertTrue(CodeSyntaxHighlighter.tokenize("{\"count\": 2}", language: "json").contains(.init(text: "\"count\"", kind: .property)))
+        let tokens = CodeSyntaxHighlighter.tokens(code, language: "typescript")
+        XCTAssertEqual(String(CodeSyntaxHighlighter.attributed(code, language: "typescript", dark: false, enabled: true).characters), code)
+        XCTAssertTrue(hasToken(tokens, "run", CoreKind.function))
+        XCTAssertTrue(hasToken(tokens, "Box", CoreKind.type))
+        XCTAssertTrue(hasToken(tokens, "=", CoreKind.operatorKind))
+        XCTAssertTrue(hasToken(tokens, ";", CoreKind.punctuationDelimiter))
+        XCTAssertTrue(hasToken(CodeSyntaxHighlighter.tokens("{\"count\": 2}", language: "json"), "\"count\"", CoreKind.propertyKey))
         let diff = "--- a/file\n+++ b/file\n-old\n+new\n@@ range @@"
-        let diffTokens = CodeSyntaxHighlighter.tokenize(diff, language: "diff")
-        XCTAssertEqual(diffTokens.filter { $0.kind == .diffRemove }.map(\.text), ["-old"])
-        XCTAssertEqual(diffTokens.filter { $0.kind == .diffAdd }.map(\.text), ["+new"])
-        XCTAssertEqual(diffTokens.map(\.text).joined(), diff)
+        let diffTokens = CodeSyntaxHighlighter.tokens(diff, language: "diff")
+        XCTAssertEqual(diffTokens.filter { $0.kind == CoreKind.diffMinus }.map(\.text), ["-old"])
+        XCTAssertEqual(diffTokens.filter { $0.kind == CoreKind.diffPlus }.map(\.text), ["+new"])
     }
     func testOptionalColorsAndMermaidLocalization() {
         var colors = MarkdownSyntaxColors.light()

@@ -1,6 +1,7 @@
 pub mod ast;
 pub mod block;
 pub mod ffi;
+pub mod highlight;
 pub mod hooks;
 pub mod html;
 pub mod inline;

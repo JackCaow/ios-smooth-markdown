@@ -160,6 +160,16 @@ public struct MarkdownSyntaxColors {
     public var punctuation: Color? = nil
     public var diffAdd: Color? = nil
     public var diffRemove: Color? = nil
+    /// Function parameters; unset keeps the code foreground.
+    public var parameter: Color? = nil
+    /// Annotations, decorators and markup attributes; unset uses `type`.
+    public var attribute: Color? = nil
+    /// Markup and JSX tags; unset uses `keyword`.
+    public var tag: Color? = nil
+    /// Named constants (`MAX_SIZE`, enum cases); unset uses `literal`.
+    public var constant: Color? = nil
+    /// Escape sequences and interpolation delimiters; unset uses `number` / `keyword`.
+    public var escape: Color? = nil
 
     public init(
         keyword: Color = .purple,

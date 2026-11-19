@@ -1,5 +1,7 @@
 # Smooth Markdown Rust core
 
+Shared Rust core of [ios-smooth-markdown](https://github.com/JackCaow/ios-smooth-markdown) and [android-smooth-markdown](https://github.com/JackCaow/android-smooth-markdown). This repository is the source of truth; each library vendors a tagged snapshot in its `rust-core/` directory (see the library's `tools/sync-rust-core.sh`) and records the upstream commit in `rust-core/UPSTREAM`.
+
 Owned CommonMark/GFM AST parser for the native Smooth Markdown libraries. The crate has **no Cargo dependencies**. Android uses a small C JNI shim; Apple platforms use the same C ABI in a static XCFramework. Both bindings preserve the existing public Kotlin and Swift API.
 
 ## Verify
@@ -41,3 +43,18 @@ The Rust benchmark includes C input copying, parsing, serialization and freeing;
 Any `]:` sequence conservatively invalidates the full tree because reference definitions can change earlier inline nodes. Non-append edits reset the retained prefix. Failed updates also invalidate session state. Node and cumulative wire limits match the batch parser, even when each individual delta is small. Platform adapters preserve their existing whole-document hook paths for unsupported incremental features.
 
 Run `cargo test --locked` for every-character prefix equality against all CommonMark/GFM fixtures. Run `cargo test --locked --release --test stream_benchmark -- --ignored --nocapture` for observational same-input FFI comparisons. In the 2026-10-01 arm64 macOS host run, 58,500 UTF-16 units across 115 publications took 251.137 ms batch versus 4.955 ms incremental, with aggregate wire bytes reduced from 34,508,720 to 653,666. A single 60,000-unit paragraph and an early global definition showed no improvement. These timings exclude host AST adaptation and UI layout/drawing; full-prefix identity checks still have linear cost.
+
+## Syntax highlighting
+
+`smr_highlight_utf16(source, length, language, language_length, result)` highlights UTF-16 source. `language` is a UTF-8 fence tag, file extension or file name (`kt`, `App.tsx`, `Dockerfile`, `build.gradle.kts`). The result buffer is `SMH1`, a u32 token count and `(start, length, kind)` u32 records in UTF-16 units, sorted and non-overlapping; uncovered text is plain. Unknown languages return zero tokens. `smr_highlight_language` returns the canonical language name, or an empty buffer when unsupported. Both use the same allocation/free contract as the parser.
+
+Highlighting runs in two stateful layers over the whole input, never line by line:
+
+1. A lexer with a mode stack: string interpolation (`${}`, `$name`, `\()`, `{}`, `#{}`), nested and documentation comments, raw strings, heredocs, regular expressions, JSX, annotations/attributes and embedded languages (Markdown fences, HTML `<script>`/`<style>`, Vue and Svelte templates, YAML front matter).
+2. A structural pass that classifies identifiers by position: function definitions, calls and methods, parameters, type positions (annotations, return types, generics, supertypes, casts), declared types, members, object keys, import paths, constants and constructors.
+
+Token kinds follow Zed-style highlight names (`keyword.control`, `function.definition`, `variable.parameter`, `type.builtin`, `string.escape`, `tag.component.jsx`, `property.json_key`, …); the numeric values are listed in `src/highlight/mod.rs` and are part of the ABI. Supported languages: JavaScript/JSX, TypeScript/TSX, Kotlin, Swift, Java, Groovy/Gradle, Scala, C, C++, Objective-C, C#, Go, Rust, Python, Ruby, PHP, Dart, Lua, R, SQL, GraphQL, Protocol Buffers, Zig, JSON(C), YAML, TOML, INI/.env/properties, Markdown, HTML, XML, Vue, Svelte, CSS, SCSS, Less, shell, Dockerfile, Makefile and diff.
+
+`smr_highlight_lines_utf16` highlights a whole file once and returns display lines (tabs expanded to `tab_width` spaces) with per-line tokens, so viewers never re-lex line by line. `smr_diff_utf16` turns a unified diff into display rows: hunk headers, context/added/removed lines with old/new line numbers, notes for binary/symlink/missing-newline facts; Git metadata lines are dropped. Each hunk's new side (context + added) and old side (context + removed) is highlighted as continuous text, and paired removed/added lines carry the differing middle as a word-level change range. Platform bindings only map kinds to styles.
+
+Run `tools/update-source-hashes.sh` after changing vendored files.

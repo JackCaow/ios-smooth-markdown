@@ -4,14 +4,14 @@
 
 ## 1 选择安装版本
 
-发布版本：`0.5.0`。
+发布版本：`0.6.0`。
 
 | 接入目标 | 使用方式 |
 | --- | --- |
-| 稳定版本 | SwiftPM Exact Version `0.5.0`，或公共 CocoaPods `0.5.0` |
+| 稳定版本 | SwiftPM Exact Version `0.6.0`，或公共 CocoaPods `0.6.0` |
 | 团队与 CI 固定依赖 | 提交 `Package.resolved` 或 `Podfile.lock` |
 
-`0.5.0` 公开 `CodeSyntaxHighlighter.attributed(_:language:dark:enabled:colors:)` 与 `normalizedLanguage(_:)`，供源码和 diff 视图复用代码块高亮；解析行为保持不变。
+`0.6.0` 将语法高亮下沉到共享 Rust 核心（[smooth-rust-core](https://github.com/JackCaow/smooth-rust-core) 0.2.0，快照位于 `rust-core/`）：支持 40 种语言，跨行保持词法状态，并按语法位置区分定义、参数、类型、调用和成员。新增 `CodeSyntaxHighlighter.highlightedLines`（整文件高亮后按行返回）与 `diffRows`（统一 diff 的展示行，含行号、两侧高亮和行内差异）；`MarkdownSyntaxColors` 新增可选的 `parameter`、`attribute`、`tag`、`constant`、`escape` 颜色。规范语言名由核心给出，例如 `tsx`、`xml`、`scss` 各自独立。
 
 `0.4.0` 修复图表与周围文字重叠、图表边框裁切、连线及标签避让，新增基础 Git 图和思维导图。`MermaidKind` 新增枚举项，穷尽 switch 的接入方需要增加对应分支。它包含原有自有 Rust 解析、后台流式调度与非滚动阅读器完整高度修复，并新增可选高亮、上下标语法、小字样式和列表内折叠块。既有初始化接口保持原签名；未支持的 sequence 语句现在整图回退源码，不再静默丢弃。
 
@@ -26,14 +26,14 @@
 在 Xcode 选择 **File → Add Package Dependencies**：
 
 1. 地址填 `https://github.com/JackCaow/ios-smooth-markdown`。
-2. 需要确定版本时选择 Exact Version `0.5.0`。
+2. 需要确定版本时选择 Exact Version `0.6.0`。
 3. 将 **SmoothMarkdown** product 加到应用 target。
 4. 源码中 `import SmoothMarkdown`。
 
 Swift package 的依赖声明：
 
 ```swift
-.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.5.0")
+.package(url: "https://github.com/JackCaow/ios-smooth-markdown", exact: "0.6.0")
 ```
 
 应用 target 的 dependencies：
@@ -50,7 +50,7 @@ Swift package 的依赖声明：
 platform :ios, '17.0'
 
 target 'YourApp' do
-  pod 'SmoothMarkdown', '~> 0.5.0'
+  pod 'SmoothMarkdown', '~> 0.6.0'
 end
 ```
 
@@ -280,14 +280,14 @@ Core 使用 Foundation 和随包提供的静态 Rust 解析器，无 SwiftUI、U
 CocoaPods 只安装 Core：
 
 ```ruby
-pod 'SmoothMarkdown/Core', '~> 0.5.0'
+pod 'SmoothMarkdown/Core', '~> 0.6.0'
 ```
 
 CocoaPods Core 的模块名是 `SmoothMarkdown`，代码应 `import SmoothMarkdown`；它与 SwiftPM 的独立 Core 模块导入名不同。
 
 ## 10 历史固定源码提交示例
 
-新接入使用第 2 节的 `0.5.0` Exact Version，并提交锁文件。以下完整 SHA 是历史后台优化版本，仅用于说明 revision 安装方法；它不包含后续排版与扩展语法修复。SwiftPM：
+新接入使用第 2 节的 `0.6.0` Exact Version，并提交锁文件。以下完整 SHA 是历史后台优化版本，仅用于说明 revision 安装方法；它不包含后续排版与扩展语法修复。SwiftPM：
 
 ```swift
 .package(
@@ -304,7 +304,7 @@ CocoaPods：
 pod 'SmoothMarkdown', :git => 'https://github.com/JackCaow/ios-smooth-markdown.git', :commit => '043093bc1f38beac6832ec37b448f0f27eb3c7bf'
 ```
 
-安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；当前 SwiftPM 接入使用 `0.5.0` tag，后续升级继续按业务流程固定版本。
+安装后提交应用的 `Package.resolved` 或 `Podfile.lock`，让团队和 CI 使用相同 revision。不要同时保留旧 tag 的重复依赖声明。固定实现提交是源码锁定方式；当前 SwiftPM 接入使用 `0.6.0` tag，后续升级继续按业务流程固定版本。
 
 ## 11 常见问题和验收
 
