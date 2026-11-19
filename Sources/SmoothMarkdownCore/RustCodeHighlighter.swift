@@ -5,17 +5,17 @@ import CSmoothMarkdownRust
 
 /// Token stream from the shared Rust highlighter (`smr_highlight_utf16`).
 /// Offsets are UTF-16 code units; `kind` values follow the Rust `Kind` enum.
-package struct RustCodeToken: Equatable, Sendable {
-    package let start: Int
-    package let length: Int
-    package let kind: UInt8
+@_spi(ReaderInternals) public struct RustCodeToken: Equatable, Sendable {
+    @_spi(ReaderInternals) public let start: Int
+    @_spi(ReaderInternals) public let length: Int
+    @_spi(ReaderInternals) public let kind: UInt8
 }
 
-package enum RustCodeHighlighter {
-    package static var isAvailable: Bool { RustMarkdownBridge.isAvailable }
+@_spi(ReaderInternals) public enum RustCodeHighlighter {
+    @_spi(ReaderInternals) public static var isAvailable: Bool { RustMarkdownBridge.isAvailable }
 
     /// Tokens for `code`, or nil when the native highlighter is not linked.
-    package static func tokens(_ code: String, language: String) -> [RustCodeToken]? {
+    @_spi(ReaderInternals) public static func tokens(_ code: String, language: String) -> [RustCodeToken]? {
         #if canImport(CSmoothMarkdownRust)
         guard isAvailable else { return nil }
         let units = Array(code.utf16)
@@ -43,7 +43,7 @@ package enum RustCodeHighlighter {
     }
 
     /// Canonical language name, or nil when unsupported or the native core is not linked.
-    package static func normalizedLanguage(_ language: String) -> String? {
+    @_spi(ReaderInternals) public static func normalizedLanguage(_ language: String) -> String? {
         #if canImport(CSmoothMarkdownRust)
         guard isAvailable else { return nil }
         let name = Array(language.utf8)
@@ -59,23 +59,23 @@ package enum RustCodeHighlighter {
 }
 
 /// One display line from the native core: text with tabs expanded and its tokens.
-package struct RustCodeLine: Sendable {
-    package let text: String
-    package let tokens: [RustCodeToken]
+@_spi(ReaderInternals) public struct RustCodeLine: Sendable {
+    @_spi(ReaderInternals) public let text: String
+    @_spi(ReaderInternals) public let tokens: [RustCodeToken]
 }
 
 /// One unified-diff row from the native core.
-package struct RustDiffRow: Sendable {
+@_spi(ReaderInternals) public struct RustDiffRow: Sendable {
     /// 0 hunk, 1 context, 2 added, 3 removed, 4 note.
-    package let kind: UInt8
-    package let number: Int?
+    @_spi(ReaderInternals) public let kind: UInt8
+    @_spi(ReaderInternals) public let number: Int?
     /// Word-level change in UTF-16 units of `line.text`.
-    package let changed: Range<Int>?
-    package let line: RustCodeLine
+    @_spi(ReaderInternals) public let changed: Range<Int>?
+    @_spi(ReaderInternals) public let line: RustCodeLine
 }
 
-extension RustCodeHighlighter {
-    package static func lines(_ code: String, language: String, tabWidth: Int) -> [RustCodeLine]? {
+@_spi(ReaderInternals) extension RustCodeHighlighter {
+    @_spi(ReaderInternals) public static func lines(_ code: String, language: String, tabWidth: Int) -> [RustCodeLine]? {
         #if canImport(CSmoothMarkdownRust)
         return call(code, language: language) { source, count, lang, langCount, output in
             smr_highlight_lines_utf16(source, count, lang, langCount, UInt32(max(0, tabWidth)), output)
@@ -88,7 +88,7 @@ extension RustCodeHighlighter {
         #endif
     }
 
-    package static func diff(_ patch: String, language: String, tabWidth: Int) -> [RustDiffRow]? {
+    @_spi(ReaderInternals) public static func diff(_ patch: String, language: String, tabWidth: Int) -> [RustDiffRow]? {
         #if canImport(CSmoothMarkdownRust)
         return call(patch, language: language) { source, count, lang, langCount, output in
             smr_diff_utf16(source, count, lang, langCount, UInt32(max(0, tabWidth)), output)

@@ -1,5 +1,7 @@
 import SwiftUI
-import SmoothMarkdownCore
+#if canImport(SmoothMarkdownCore)
+@_spi(ReaderInternals) import SmoothMarkdownCore
+#endif
 
 /// Syntax highlighting for code blocks and source/diff viewers. Language detection and
 /// lexing run in the shared Rust core (smooth-rust-core); this type only styles tokens.
