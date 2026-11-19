@@ -1,6 +1,7 @@
 import SwiftUI
 
-enum CodeSyntaxHighlighter {
+/// Syntax highlighting used by enhanced code blocks, exposed for code and diff surfaces outside Markdown.
+public enum CodeSyntaxHighlighter {
     enum Kind: Equatable {
         case plain, keyword, string, comment, number, literal, type, function, property, `operator`, punctuation, diffAdd, diffRemove
     }
@@ -23,7 +24,8 @@ enum CodeSyntaxHighlighter {
     ]
     fileprivate static let literals: Set<String> = ["true", "false", "null", "nil", "None", "True", "False", "undefined"]
 
-    static func normalizedLanguage(_ language: String?) -> String? {
+    /// Maps a fence tag or file extension (`kt`, `tsx`, `py`, …) to the highlighter's language name.
+    public static func normalizedLanguage(_ language: String?) -> String? {
         guard let raw = language?
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -81,7 +83,8 @@ enum CodeSyntaxHighlighter {
         return result.isEmpty ? [.init(text: code, kind: .plain)] : result
     }
 
-    static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool, colors: MarkdownSyntaxColors? = nil) -> AttributedString {
+    /// Highlights `code` with the same lexer and palette as enhanced code blocks.
+    public static func attributed(_ code: String, language: String?, dark: Bool, enabled: Bool, colors: MarkdownSyntaxColors? = nil) -> AttributedString {
         guard enabled else { return AttributedString(code) }
         let palette = colors ?? (dark ? MarkdownSyntaxColors.dark() : MarkdownSyntaxColors.light())
         var result = AttributedString()
