@@ -88,7 +88,7 @@ public struct MermaidDiagramView: View {
                 }
                 for group in diagram.subgraphs {
                     guard let frame = layout.subgraphs[group.id] else { continue }
-                    let box = Path(roundedRect: frame, cornerRadius: 8)
+                    let box = Path(roundedRect: frame, cornerRadius: resolvedTokens.charts.columnCornerRadius)
                     context.fill(box, with: .color(fill.opacity(0.35)))
                     context.stroke(box, with: .color(palette.nodeStrokeColor.opacity(0.65)),
                                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 3]))
@@ -186,7 +186,7 @@ public struct MermaidDiagramView: View {
             sector.closeSubpath()
             let color = pieColor(index)
             context.fill(sector, with: .color(color))
-            context.stroke(sector, with: .color(.white.opacity(0.8)), lineWidth: 1)
+            context.stroke(sector, with: .color(resolvedTokens.charts.sectorBorderColor ?? .white.opacity(0.8)), lineWidth: resolvedTokens.charts.sectorBorderWidth ?? 1)
             start = end
             let marker = CGRect(x: 254, y: 66 + CGFloat(index) * 24, width: 12, height: 12)
             context.fill(Path(roundedRect: marker, cornerRadius: 2), with: .color(color))
@@ -250,13 +250,13 @@ public struct MermaidDiagramView: View {
         var baseline = Path()
         baseline.move(to: CGPoint(x: 180, y: 80))
         baseline.addLine(to: CGPoint(x: size.width - 20, y: 80))
-        context.stroke(baseline, with: .color(ink.opacity(0.25)), lineWidth: 1)
+        context.stroke(baseline, with: .color(ink.opacity(0.25)), lineWidth: resolvedTokens.charts.borderWidth)
         for tick in MermaidLayout.ganttTimelineTicks(diagram) {
             var grid = Path()
             grid.move(to: CGPoint(x: tick.x, y: tick.isMonth ? 48 : 64))
             grid.addLine(to: CGPoint(x: tick.x, y: gridBottom))
-            context.stroke(grid, with: .color(ink.opacity(tick.isMonth ? 0.25 : 0.12)),
-                           lineWidth: tick.isMonth ? 1.5 : 1)
+            context.stroke(grid, with: .color(resolvedTokens.charts.gridColor ?? ink.opacity(tick.isMonth ? 0.25 : 0.12)),
+                           lineWidth: resolvedTokens.charts.gridWidth * (tick.isMonth ? 1.5 : 1))
             if tick.isMonth {
                 context.draw(Text(monthFormatter.string(from: tick.date)).font(resolvedTokens.font ?? .system(size: 10, weight: .semibold))
                     .foregroundColor(ink.opacity(0.85)), at: CGPoint(x: tick.x + 4, y: 52), anchor: .leading)
@@ -273,13 +273,14 @@ public struct MermaidDiagramView: View {
         for (index, task) in diagram.ganttTasks.enumerated() {
             guard index < bars.count else { continue }
             let frame = bars[index]
-            let color: Color = switch task.status {
+            let defaultColor: Color = switch task.status {
             case .normal: .blue
             case .done: .green
             case .active: .cyan
             case .critical: .red
             case .milestone: .orange
             }
+            let color = resolvedTokens.charts.ganttStatusColors[task.status] ?? defaultColor
             let label = task.section.map { "\($0) · \(task.name)" } ?? task.name
             context.draw(Text(String(label.prefix(25))).font(resolvedTokens.font ?? .system(size: 11)).foregroundColor(ink),
                          at: CGPoint(x: 16, y: frame.midY), anchor: .leading)
@@ -292,16 +293,16 @@ public struct MermaidDiagramView: View {
                 diamond.addLine(to: CGPoint(x: frame.minX, y: frame.midY))
                 diamond.closeSubpath()
                 path = diamond
-            } else { path = Path(roundedRect: frame, cornerRadius: 4) }
+            } else { path = Path(roundedRect: frame, cornerRadius: resolvedTokens.charts.taskCornerRadius) }
             context.fill(path, with: .color(color))
-            context.stroke(path, with: .color(ink.opacity(0.35)), lineWidth: 1)
+            context.stroke(path, with: .color(ink.opacity(0.35)), lineWidth: resolvedTokens.charts.borderWidth)
         }
         if let x = MermaidLayout.ganttTodayMarkerX(diagram, today: Date()) {
-            let markerColor = Color(red: 233 / 255, green: 30 / 255, blue: 99 / 255)
+            let markerColor = resolvedTokens.charts.todayColor ?? Color(red: 233 / 255, green: 30 / 255, blue: 99 / 255)
             var marker = Path()
             marker.move(to: CGPoint(x: x, y: 82))
             marker.addLine(to: CGPoint(x: x, y: bars.last?.maxY ?? 104))
-            context.stroke(marker, with: .color(markerColor), lineWidth: 2)
+            context.stroke(marker, with: .color(markerColor), lineWidth: resolvedTokens.charts.todayLineWidth)
             context.draw(Text("Today").font(resolvedTokens.font ?? .system(size: 10, weight: .bold)).foregroundColor(markerColor),
                          at: CGPoint(x: x, y: 73))
         }
@@ -314,27 +315,28 @@ public struct MermaidDiagramView: View {
         }
         for (index, column) in diagram.kanbanColumns.enumerated() {
             let frame = MermaidLayout.kanbanColumns(diagram)[index]
-            context.fill(Path(roundedRect: frame, cornerRadius: 8),
-                         with: .color(resolvedTheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.04)))
-            context.stroke(Path(roundedRect: frame, cornerRadius: 8), with: .color(ink.opacity(0.25)), lineWidth: 1)
+            context.fill(Path(roundedRect: frame, cornerRadius: resolvedTokens.charts.columnCornerRadius),
+                         with: .color(resolvedTokens.charts.columnBackground ?? (resolvedTheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.04))))
+            context.stroke(Path(roundedRect: frame, cornerRadius: resolvedTokens.charts.columnCornerRadius), with: .color(ink.opacity(0.25)), lineWidth: resolvedTokens.charts.borderWidth)
             let heading = column.title + (column.wipLimit.map { "  \(column.tasks.count)/\($0)" } ?? "")
             context.draw(Text(String(heading.prefix(24))).font(resolvedTokens.font ?? .system(size: 13, weight: .semibold))
-                .foregroundColor(column.isOverLimit ? .red : ink),
+                .foregroundColor(column.isOverLimit ? (resolvedTokens.charts.overLimitColor ?? .red) : (column.wipLimit.map { column.tasks.count == $0 ? resolvedTokens.charts.atLimitColor : resolvedTokens.charts.belowLimitColor } ?? nil) ?? ink),
                 at: CGPoint(x: frame.minX + 12, y: frame.minY + 20), anchor: .leading)
             for (taskIndex, task) in column.tasks.enumerated() {
                 let card = CGRect(x: frame.minX + 10, y: frame.minY + 44 + CGFloat(taskIndex) * 86,
                                   width: frame.width - 20, height: 74)
-                context.fill(Path(roundedRect: card, cornerRadius: 6),
-                             with: .color(resolvedTheme == .dark ? Color.black.opacity(0.35) : .white))
-                context.stroke(Path(roundedRect: card, cornerRadius: 6), with: .color(ink.opacity(0.18)), lineWidth: 1)
-                let stripe: Color = switch task.priority {
+                context.fill(Path(roundedRect: card, cornerRadius: resolvedTokens.charts.cardCornerRadius),
+                             with: .color(resolvedTokens.charts.cardBackground ?? (resolvedTheme == .dark ? Color.black.opacity(0.35) : .white)))
+                context.stroke(Path(roundedRect: card, cornerRadius: resolvedTokens.charts.cardCornerRadius), with: .color(ink.opacity(0.18)), lineWidth: resolvedTokens.charts.borderWidth)
+                let defaultStripe: Color = switch task.priority {
                 case .veryHigh: .red
                 case .high: .orange
                 case .normal: .gray
                 case .low: .blue
                 case .veryLow: .green
                 }
-                context.fill(Path(CGRect(x: card.minX + 1, y: card.minY + 5, width: 4, height: card.height - 10)), with: .color(stripe))
+                let stripe = resolvedTokens.charts.kanbanPriorityColors[task.priority] ?? defaultStripe
+                context.fill(Path(CGRect(x: card.minX + 1, y: card.minY + 5, width: resolvedTokens.charts.priorityStripeWidth, height: card.height - 10)), with: .color(stripe))
                 context.draw(Text(String(task.description.prefix(23))).font(resolvedTokens.font ?? .system(size: 12, weight: .medium)).foregroundColor(ink),
                              at: CGPoint(x: card.minX + 14, y: card.minY + 22), anchor: .leading)
                 let detail = [task.assigned, task.ticket].compactMap { $0 }.joined(separator: " · ")
@@ -361,7 +363,7 @@ public struct MermaidDiagramView: View {
             let r = radius * CGFloat(tick) / CGFloat(max(1, diagram.radarTicks))
             if diagram.radarGraticule == .circle {
                 context.stroke(Path(ellipseIn: CGRect(x: 210 - r, y: 200 - r, width: 2 * r, height: 2 * r)),
-                               with: .color(ink.opacity(0.20)), lineWidth: 1)
+                               with: .color(resolvedTokens.charts.gridColor ?? ink.opacity(0.20)), lineWidth: resolvedTokens.charts.gridWidth)
             } else {
                 var ring = Path()
                 for index in 0..<count {
@@ -369,29 +371,36 @@ public struct MermaidDiagramView: View {
                     if index == 0 { ring.move(to: point) } else { ring.addLine(to: point) }
                 }
                 ring.closeSubpath()
-                context.stroke(ring, with: .color(ink.opacity(0.20)), lineWidth: 1)
+                context.stroke(ring, with: .color(resolvedTokens.charts.gridColor ?? ink.opacity(0.20)), lineWidth: resolvedTokens.charts.gridWidth)
             }
         }
         for (index, axis) in diagram.radarAxes.enumerated() {
             let end = MermaidLayout.radarPoint(index: index, count: count, radius: radius)
             var spoke = Path()
             spoke.move(to: CGPoint(x: 210, y: 200)); spoke.addLine(to: end)
-            context.stroke(spoke, with: .color(ink.opacity(0.35)), lineWidth: 1)
+            context.stroke(spoke, with: .color(resolvedTokens.charts.gridColor ?? ink.opacity(0.35)), lineWidth: resolvedTokens.charts.gridWidth)
             let label = MermaidLayout.radarPoint(index: index, count: count, radius: radius + 25)
             context.draw(Text(String(axis.label.prefix(14))).font(resolvedTokens.font ?? .system(size: 11)).foregroundColor(ink), at: label)
         }
         for (curveIndex, curve) in diagram.radarCurves.enumerated() {
             let color = pieColor(curveIndex)
             var shape = Path()
+            var markers: [CGPoint] = []
             for index in 0..<count {
                 let value = index < curve.values.count ? curve.values[index] : minimum
                 let fraction = min(1, max(0, CGFloat((value - minimum) / (maximum - minimum))))
                 let point = MermaidLayout.radarPoint(index: index, count: count, radius: radius * fraction)
+                markers.append(point)
                 if index == 0 { shape.move(to: point) } else { shape.addLine(to: point) }
             }
             shape.closeSubpath()
-            context.fill(shape, with: .color(color.opacity(0.18)))
-            context.stroke(shape, with: .color(color), lineWidth: 2)
+            context.fill(shape, with: .color(color.opacity(resolvedTokens.charts.fillOpacity ?? 0.18)))
+            context.stroke(shape, with: .color(color), lineWidth: resolvedTokens.charts.seriesLineWidth ?? 2)
+            if let radius = resolvedTokens.charts.pointRadius, radius > 0 {
+                for point in markers {
+                    context.fill(Path(ellipseIn: CGRect(x: point.x - radius, y: point.y - radius, width: 2 * radius, height: 2 * radius)), with: .color(color))
+                }
+            }
             if diagram.radarShowLegend {
                 let y = CGFloat(370 + curveIndex * 22)
                 context.fill(Path(ellipseIn: CGRect(x: 86, y: y - 5, width: 10, height: 10)), with: .color(color))
@@ -433,7 +442,7 @@ public struct MermaidDiagramView: View {
             } else {
                 grid.move(to: CGPoint(x: plot.minX, y: point.y)); grid.addLine(to: CGPoint(x: plot.maxX, y: point.y))
             }
-            context.stroke(grid, with: .color(ink.opacity(0.12)), lineWidth: 1)
+            context.stroke(grid, with: .color(resolvedTokens.charts.gridColor ?? ink.opacity(0.12)), lineWidth: resolvedTokens.charts.gridWidth)
             context.draw(Text((minimum + span * Double(fraction)).formatted(.number.precision(.fractionLength(0)))).font(resolvedTokens.font ?? .system(size: 11)).foregroundColor(ink),
                          at: horizontal ? CGPoint(x: point.x, y: plot.maxY + 14) : CGPoint(x: plot.minX - 10, y: point.y),
                          anchor: horizontal ? .center : .trailing)
@@ -461,13 +470,13 @@ public struct MermaidDiagramView: View {
                                  width: max(1, abs(point.x - zero)), height: thickness)
                         : CGRect(x: point.x + offset - thickness / 2, y: min(zero, point.y),
                                  width: thickness, height: max(1, abs(point.y - zero)))
-                    context.fill(Path(roundedRect: frame, cornerRadius: 3), with: .color(color.opacity(0.85)))
+                    context.fill(Path(roundedRect: frame, cornerRadius: resolvedTokens.charts.barCornerRadius), with: .color(color.opacity(resolvedTokens.charts.fillOpacity ?? 0.85)))
                 } else {
                     if index == 0 { line.move(to: point) } else { line.addLine(to: point) }
-                    context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(color))
+                    context.fill(Path(ellipseIn: CGRect(x: point.x - (resolvedTokens.charts.pointRadius ?? 3), y: point.y - (resolvedTokens.charts.pointRadius ?? 3), width: 2 * (resolvedTokens.charts.pointRadius ?? 3), height: 2 * (resolvedTokens.charts.pointRadius ?? 3))), with: .color(color))
                 }
             }
-            if series.type == .line { context.stroke(line, with: .color(color), lineWidth: 2) }
+            if series.type == .line { context.stroke(line, with: .color(color), lineWidth: resolvedTokens.charts.seriesLineWidth ?? 2) }
         }
         for index in 0..<count {
             let label = index < diagram.xyCategories.count ? diagram.xyCategories[index] : "\(index + 1)"
@@ -484,8 +493,8 @@ public struct MermaidDiagramView: View {
     }
 
     private func pieColor(_ index: Int) -> Color {
-        Color(hue: Double((index * 7) % 17) / 17.0, saturation: 0.65,
-              brightness: resolvedTheme == .dark ? 0.88 : 0.72)
+        resolvedTokens.charts.seriesColor(index, fallback: Color(hue: Double((index * 7) % 17) / 17.0, saturation: 0.65,
+              brightness: resolvedTheme == .dark ? 0.88 : 0.72))
     }
 
     func drawEdge(_ placed: MermaidPlacedEdge, in context: GraphicsContext, ink: Color, background: Color) {

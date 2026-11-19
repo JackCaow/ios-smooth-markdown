@@ -6,9 +6,10 @@ public enum MermaidEdgeRouting: Equatable {
 }
 
 /// Mermaid palette, label font and fence viewport. Custom colors override named fence themes;
-/// nil font/colors preserve platform defaults. Graph layout and specialty status/series palettes
-/// remain diagram-specific. Standalone views retain their caller's viewport modifiers.
+/// nil font/colors preserve platform defaults. Specialty chart appearance uses `charts`;
+/// graph layout algorithms remain diagram-specific. Standalone views retain their caller's viewport modifiers.
 public struct MarkdownMermaidTokens {
+    public var charts = MarkdownMermaidChartTokens()
     public var colors: MermaidPalette?
     public var font: Font?
     public var outerPadding: EdgeInsets

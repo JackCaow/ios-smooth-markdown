@@ -227,6 +227,7 @@ public extension MarkdownMermaidTokens {
         value.strokeWidth = MarkdownTokenValidation.positive(strokeWidth, fallback: 1.5)
         value.arrowSize = MarkdownTokenValidation.positive(arrowSize, fallback: 10)
         value.labelPadding = MarkdownTokenValidation.dimension(labelPadding)
+        value.charts = charts.normalized()
         return value
     }
 }

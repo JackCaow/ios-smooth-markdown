@@ -1,6 +1,6 @@
 import Foundation
 
-public enum MermaidGanttStatus: Equatable { case normal, done, active, critical, milestone }
+public enum MermaidGanttStatus: Hashable { case normal, done, active, critical, milestone }
 
 public struct MermaidGanttTask: Equatable {
     public let id: String
@@ -18,7 +18,7 @@ public struct MermaidGanttTask: Equatable {
     }
 }
 
-public enum MermaidKanbanPriority: Equatable { case veryHigh, high, normal, low, veryLow }
+public enum MermaidKanbanPriority: Hashable { case veryHigh, high, normal, low, veryLow }
 
 public struct MermaidKanbanTask: Equatable {
     public let id: String
