@@ -1,15 +1,15 @@
 {
   "artifact": {
-    "Info.plist": "85f3cd6e981748d1d1f64e1864ce916cf61d1cfd1ef59dea740d9b9891f3d06b",
+    "Info.plist": "37153a0bff3d2f36407ae92397976d7da7803225eaeada1a2d063388b7301172",
     "ios-arm64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "ios-arm64/Headers/smooth_markdown_rust.h": "4662705689e5cd219248946888132ebc3f6a68ee460c043baf3e6c5eccb69941",
-    "ios-arm64/libsmooth_markdown_rust.a": "85ff82560d7348a24f4dc803f3cd2cfdafea141cabba35b7fc153339adae17ac",
+    "ios-arm64/libsmooth_markdown_rust.a": "a4c8c876865185c6f9aa297cb4a6964ef50785a9383acdb9016e69a8e06d3583",
     "ios-arm64_x86_64-simulator/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "ios-arm64_x86_64-simulator/Headers/smooth_markdown_rust.h": "4662705689e5cd219248946888132ebc3f6a68ee460c043baf3e6c5eccb69941",
-    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "ab33ffcf04432c4b4dae10fe16b0891ccfe2523e254bb506276115e61901290e",
+    "ios-arm64_x86_64-simulator/libsmooth_markdown_rust.a": "ede2fc3214009f619ce71f9afa3071de27417cd879fa9608abc5b489119f4b5b",
     "macos-arm64_x86_64/Headers/module.modulemap": "2a20ae450da1434ffe485c0432b936246f08d0836b87c96e1c48983c57339cb5",
     "macos-arm64_x86_64/Headers/smooth_markdown_rust.h": "4662705689e5cd219248946888132ebc3f6a68ee460c043baf3e6c5eccb69941",
-    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "b247393d77ae093d92b387f9445ff0b585add06f11e75c3e44bb126668712bf1"
+    "macos-arm64_x86_64/libsmooth_markdown_rust.a": "76622dbc00f113c135aa63a4f843b009742acd09374c1b1be8a9c379da456879"
   },
   "rustc": "rustc 1.96.0 (ac68faa20 2026-05-25)",
   "sources": {
@@ -22,13 +22,13 @@
     "src/ffi.rs": "494d46efd779d5ea41c087aa86a3abb6636f4d6cb47d984eda40bde7d2c1f2fd",
     "src/highlight/clike.rs": "880866c33022e255377c0f51d786a17c29a049b6aa7e64a652879f60840381e5",
     "src/highlight/data.rs": "5cd93c7a3f43f6bfcd4737a4c2bd4650cd83dfe5e03eb0848afa5b15dd869229",
-    "src/highlight/lines.rs": "adf5b3e00df59968923be21527336a56dd0e86c325a0be8f656cf6d0d5a16db5",
+    "src/highlight/lines.rs": "35df7780c7a14188a7a2c226a3a82700b549df45a234ca4becfc44fb9f409001",
     "src/highlight/markdown.rs": "43eb94a520403aed8244ad6805b5e2f3ffa4ede294f253fc58ff671d839cdf8a",
     "src/highlight/markup.rs": "82346a51208a08466b7b58802c0247fa921b86338fa8628541069c8d598f36a2",
     "src/highlight/mod.rs": "e0022726cd845327f43e34547ea25835d70963d6f553053065b6660744021d53",
     "src/highlight/shell.rs": "769d197fe47035e921a1e49417c97f43441e15bb17bd08413a21ef9beba09b80",
     "src/highlight/specs.rs": "5b3eed89efe10f79738789ae59e3f8e293c55d1094bb374d4290b46092b76f8a",
-    "src/highlight/tests.rs": "f0c3f9e2f071fd5971a5a65ad387a20a41bd116ab71b04124e9cec6b6397e2ec",
+    "src/highlight/tests.rs": "928e5cbcbc7e87170e4dfdbe454ac346d3db5cd455eb11666e8301828c64e617",
     "src/hooks.rs": "a19341a9b600f80ee2fcb71441ebeb7ec31b03883e28dadd1a8af59b027ce193",
     "src/html.rs": "3d54221900ccaa7ec5df9f9bda78411f85ba8c332b5e3205acfa3ec8ecbfa2f6",
     "src/inline.rs": "6e83b834fe746f4c28dfcf72d91064a7f591c3d16e04d67bbf8faee2769b1771",
