@@ -55,6 +55,7 @@ targets:
     platform: iOS
     sources:
       - SmoothMarkdownDemoTests
+      - ../Tests/SmoothMarkdownTests/DiffEOFMetadataTests.swift
       - ../Tests/SmoothMarkdownTests/MarkdownTypographyTests.swift
       - ../Tests/SmoothMarkdownTests/MarkdownPluginTokensTests.swift
       - ../Tests/SmoothMarkdownTests/MarkdownDesignTokensTests.swift
